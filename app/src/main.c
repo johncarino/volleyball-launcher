@@ -1,57 +1,75 @@
-// Main program to build the application
-// Has main(); does initialization and cleanup and perhaps some basic logic.
+// Main program: DC motor speed control via PWM on ZS-X11H driver board.
+// Runs on BeagleY-AI.
+// Wiring: P (signal) and G (ground) connected to GPIO12 (pin 32, PWM0).
 
 #include <stdio.h>
 #include <stdbool.h>
-#include "badmath.h"
-#include "hal/button.h"
+#include <unistd.h>
+#include <signal.h>
 
-void foo() {
-    int data[3];    
-    for (int i = 0; i <= 3; i++) {
-        data[i] = 10;
-        printf("Value: %d\n", data[i]);
-    }
+#include "hal/pwm.h"
+
+// -------------------------------------------------------
+// Configuration — adjust to match your BeagleY-AI
+// -------------------------------------------------------
+// SSH into the board and run:  ls /sys/class/pwm/
+// to find the correct pwmchip number.
+// GPIO12 (pin 32) = PWM0 channel B
+#define PWMCHIP     0
+#define PWM_CHANNEL 1       // channel B of PWM0 (GPIO12)
+
+static volatile bool s_running = true;
+
+static void signal_handler(int sig)
+{
+    (void)sig;
+    s_running = false;
 }
 
-int main()
+int main(void)
 {
-    printf("Hello world!\n");
+    printf("=== DC Motor Speed Controller (ZS-X11H) ===\n");
 
-    // Initialize all modules; HAL modules first
-    button_init();
-    badmath_init();
+    // Catch Ctrl-C for clean shutdown
+    signal(SIGINT,  signal_handler);
+    signal(SIGTERM, signal_handler);
 
-    // Main program logic:
-    for (int i = 0; i < 10; i++) {
-        printf("  -> Reading button time %d = %d\n", i, button_is_button_pressed());
+    // Initialize PWM on GPIO12 (pin 32)
+    if (pwm_init(PWMCHIP, PWM_CHANNEL) != 0) {
+        fprintf(stderr, "Failed to initialize PWM. Are you running as root?\n");
+        return 1;
     }
 
-    for (int i = 0; i <= 35; i++) {
-        int ans = badmath_factorial(i);
-        printf("%4d! = %6d\n", i, ans);
+    // Set PWM frequency to 1 kHz (board accepts 50 Hz – 20 kHz)
+    pwm_set_frequency(1000);
+
+    // Start with motor stopped
+    pwm_set_duty_cycle(0);
+    pwm_enable(true);
+
+    // Demo: ramp up, hold, ramp down
+    printf("\n--- Ramping UP (0%% -> 50%%) ---\n");
+    for (int duty = 0; duty <= 50 && s_running; duty += 5) {
+        pwm_set_duty_cycle(duty);
+        sleep(1);
     }
 
-    // Cleanup all modules (HAL modules last)
-    badmath_cleanup();
-    button_cleanup();
+    if (s_running) {
+        printf("\n--- Holding at 50%% for 3 seconds ---\n");
+        sleep(3);
+    }
 
-    printf("!!! DONE !!!\n"); 
+    printf("\n--- Ramping DOWN (50%% -> 0%%) ---\n");
+    for (int duty = 50; duty >= 0 && s_running; duty -= 5) {
+        pwm_set_duty_cycle(duty);
+        sleep(1);
+    }
 
-    // Some bad code to try out and see what shows up.
-    #if 0
-        // Test your linting setup
-        //   - You should see a warning underline in VS Code
-        //   - You should see compile-time errors when building (-Wall -Werror)
-        // (Linting using clang-tidy; see )
-        int x = 0;
-        if (x = 10) {
-        }
-    #endif
-    #if 1
-        // Demonstrate -fsanitize=address (enabled in the root CMakeFiles.txt)
-        // Compile and run this code. Should see warning at compile time; error at runtime.
-        foo();
+    // Clean shutdown
+    pwm_set_duty_cycle(0);
+    pwm_enable(false);
+    pwm_cleanup();
 
-    #endif
+    printf("\n=== Motor stopped. Done. ===\n");
+    return 0;
 }
