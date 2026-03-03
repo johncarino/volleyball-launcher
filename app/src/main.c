@@ -1,6 +1,5 @@
-// Main program: DC motor speed control via PWM on ZS-X11H driver board.
+// Volleyball launcher: two DC motors controlled via PWM on ZS-X11H boards.
 // Runs on BeagleY-AI.
-// Wiring: P (signal) and G (ground) connected to GPIO12 (pin 32, PWM0).
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -8,15 +7,6 @@
 #include <signal.h>
 
 #include "hal/pwm.h"
-
-// -------------------------------------------------------
-// Configuration — adjust to match your BeagleY-AI
-// -------------------------------------------------------
-// SSH into the board and run:  ls /sys/class/pwm/
-// to find the correct pwmchip number.
-// GPIO12 (pin 32) = PWM0 channel B
-#define PWMCHIP     0
-#define PWM_CHANNEL 1       // channel B of PWM0 (GPIO12)
 
 static volatile bool s_running = true;
 
@@ -28,29 +18,32 @@ static void signal_handler(int sig)
 
 int main(void)
 {
-    printf("=== DC Motor Speed Controller (ZS-X11H) ===\n");
+    printf("=== Volleyball Launcher (2x ZS-X11H) ===\n");
 
     // Catch Ctrl-C for clean shutdown
     signal(SIGINT,  signal_handler);
     signal(SIGTERM, signal_handler);
 
-    // Initialize PWM on GPIO12 (pin 32)
-    if (pwm_init(PWMCHIP, PWM_CHANNEL) != 0) {
+    // Initialize both PWM channels
+    if (pwm_init() != 0) {
         fprintf(stderr, "Failed to initialize PWM. Are you running as root?\n");
         return 1;
     }
 
-    // Set PWM frequency to 1 kHz (board accepts 50 Hz – 20 kHz)
+    // Set PWM frequency to 1 kHz (shared by both motors)
     pwm_set_frequency(1000);
 
-    // Start with motor stopped
-    pwm_set_duty_cycle(0);
-    pwm_enable(true);
+    // Start with both motors stopped
+    pwm_set_duty_cycle(PWM_MOTOR_1, 0);
+    pwm_set_duty_cycle(PWM_MOTOR_2, 0);
+    pwm_enable(PWM_MOTOR_1, true);
+    pwm_enable(PWM_MOTOR_2, true);
 
-    // Demo: ramp up, hold, ramp down
-    printf("\n--- Ramping UP (0%% -> 50%%) ---\n");
+    // Demo: ramp both motors up together
+    printf("\n--- Ramping BOTH motors UP (0%% -> 50%%) ---\n");
     for (int duty = 0; duty <= 50 && s_running; duty += 5) {
-        pwm_set_duty_cycle(duty);
+        pwm_set_duty_cycle(PWM_MOTOR_1, duty);
+        pwm_set_duty_cycle(PWM_MOTOR_2, duty);
         sleep(1);
     }
 
@@ -59,17 +52,21 @@ int main(void)
         sleep(3);
     }
 
-    printf("\n--- Ramping DOWN (50%% -> 0%%) ---\n");
+    // Ramp both motors down
+    printf("\n--- Ramping BOTH motors DOWN (50%% -> 0%%) ---\n");
     for (int duty = 50; duty >= 0 && s_running; duty -= 5) {
-        pwm_set_duty_cycle(duty);
+        pwm_set_duty_cycle(PWM_MOTOR_1, duty);
+        pwm_set_duty_cycle(PWM_MOTOR_2, duty);
         sleep(1);
     }
 
     // Clean shutdown
-    pwm_set_duty_cycle(0);
-    pwm_enable(false);
+    pwm_set_duty_cycle(PWM_MOTOR_1, 0);
+    pwm_set_duty_cycle(PWM_MOTOR_2, 0);
+    pwm_enable(PWM_MOTOR_1, false);
+    pwm_enable(PWM_MOTOR_2, false);
     pwm_cleanup();
 
-    printf("\n=== Motor stopped. Done. ===\n");
+    printf("\n=== Motors stopped. Done. ===\n");
     return 0;
 }
