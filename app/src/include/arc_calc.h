@@ -23,6 +23,8 @@ const int NUM_TEMPOS = 3;
 
 int NUM_CALCS = NUM_TARGETS * NUM_TEMPOS;
 
+int machine_position = 0; // 0 for left, 1 for center, 2 for right?
+
 float tilt_angle[NUM_CALCS];
 float tilt_output[NUM_CALCS];
 
