@@ -7,7 +7,7 @@
 /*
 * Set Mode Header
 *
-* Ooperations within Set Mode:
+* Operations within Set Mode:
 * 1. Define machine location (left, center, right)
 * 2. Set target location
 * 3. Set tempo
@@ -15,9 +15,21 @@
 * Machine position is a variable in arc_calc
 */
 
-void set_machine_position(int position);
+typedef struct {
+    float launch_speed;
+    float tilt_angle;
+    float rpm_output;
+} set_specs_t;
 
-void choose_target_location(int target);
-void choose_tempo(int tempo);
+#define NUM_SETS 4
+
+extern set_specs_t set_seq[NUM_SETS];
+
+int set_machine_position(int position);
+
+int choose_target_location(int target);
+int choose_tempo(int tempo);
+
+void save_set(int set_index, float launch_speed, float tilt_angle, float rpm_output);
 
 #endif // SET_H

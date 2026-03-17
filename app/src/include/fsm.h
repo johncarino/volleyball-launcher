@@ -2,6 +2,11 @@
 #define FSM_H
 
 #include <stdint.h>
+#include <stdio.h>
+#include <stdbool.h>
+
+#include "calibration.h"
+#include "set.h"
 
 /*
 * Finite State Machine Header

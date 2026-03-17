@@ -2,6 +2,8 @@
 #define OPERATION_H
 
 #include <stdint.h>
+#include <stdio.h>
+
 /*
 * Operation Mode Header
 *

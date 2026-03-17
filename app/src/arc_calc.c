@@ -1,6 +1,29 @@
 #include "arc_calc.h"
 
-void arc_calc_init() {
+// Global variable definitions
+int machine_position = 0;
+float machine_x[NUM_MACHINE_POSITIONS];
+const float machine_y = 1.75;
+
+int target_position = 0;
+float target_x[NUM_TARGETS];
+const float target_y = 0.0;
+
+int tempo_position = 0;
+float peak_height[NUM_TEMPOS];
+
+float tilt_angle[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+float tilt_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+
+float yaw_angle[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+float yaw_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+
+float launch_speed[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+float launch_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+
+float rpm_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+
+void arc_calc_params(float net_height, float court_width, float court_length) {
     //launch positions (metre)
     machine_x[0] = 0 + 0.5; // left target
     machine_x[1] = court_width / 2; // center target
@@ -18,11 +41,19 @@ void arc_calc_init() {
     peak_height[1] = net_height + 1.0; // tempo 2
     peak_height[2] = net_height + 1.5; // tempo 3
     peak_height[3] = net_height + 2.0; // tempo 4
+
+    //court length unused
+    (void)court_length;
+
+    calculation();
+
+    //test
+    printf("Arc calculation parameters updated based on calibration:\n");
 }
 //xf = target_x
 //xi = machine_x
 
-void calculation(float net_height, float court_width, float court_length) {
+void calculation() {
     //replace with calculation logic
 
     //x displacement
@@ -32,9 +63,11 @@ void calculation(float net_height, float court_width, float court_length) {
     //time to peak, time from peak to target, total time of flight
     float t_up, t_down, t_total;
 
+    float theta, rpm;
+
     for (int i = 0; i < NUM_MACHINE_POSITIONS; i++) {
         for (int j = 0; j < NUM_TARGETS; j++) {
-            dx = target_x[j] - machine_x[i];
+            dx = fabs(target_x[j] - machine_x[i]);
 
             for (int k = 0; k < NUM_TEMPOS; k++) {
                 //vertical launch velocity calculation
@@ -56,9 +89,11 @@ void calculation(float net_height, float court_width, float court_length) {
                 v0 = sqrt(vx0*vx0 + vy0*vy0);
 
                 //launch angle calculation
+                printf("vy0: %.2f, vx0: %.2f\n", vy0, vx0); // Debugging output
+                
                 theta = atan(vy0 / vx0);
 
-                rpm = (v0 / (2*M_PI*wheel_r)) * 60 / eff_k;
+                rpm = (v0 / (2*M_PI*WHEEL_R)) * 60 / EFF_K;
 
                 //store results
                 launch_speed[i][j][k] = v0;
@@ -70,8 +105,12 @@ void calculation(float net_height, float court_width, float court_length) {
 }
 
 float landing_position(float xi, float yi, float theta, float rpm, float yf) {
+    
+    float v0, theta_rad, vx, vy;
+    float a, b, c, discriminant, t1, t2, t_flight, xf;
+
     //convert rpm to launch speed
-    v0 = 2*M_PI*wheel_r*(rpm * eff_k / 60);
+    v0 = 2*M_PI*WHEEL_R*(rpm * EFF_K / 60);
 
     //convert angle to radians
     theta_rad = theta * M_PI / 180;
