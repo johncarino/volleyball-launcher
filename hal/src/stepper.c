@@ -1,23 +1,44 @@
-#include "stepper.h"
-#include <unistd.h>
+#include "hal/stepper.h"
 #include <stdio.h>
+#include <unistd.h> // usleep
 
+// Indices into the requested line array
+#define STEP_IDX 0
+#define DIR_IDX  1
+#define EN_IDX   2
 
-// GPIO pins
-#define STEP_PIN 16
-#define DIR_PIN  18
-
-int stepper_init(Stepper *motor, const char *chipname, unsigned int step_pin, unsigned int dir_pin) {
+int stepper_init(stepper_t *motor,
+                 const char *chipname,
+                 unsigned int step_pin,
+                 unsigned int dir_pin,
+                 unsigned int en_pin,
+                 int use_enable)
+{
     struct gpiod_line_settings *line_settings = NULL;
     struct gpiod_line_config *line_config = NULL;
     struct gpiod_request_config *request_config = NULL;
-    unsigned int offsets[2] = { step_pin, dir_pin };
+    unsigned int offsets[3];
+    size_t num_offsets;
     char chip_path[128];
 
+    motor->chip = NULL;
+    motor->request = NULL;
     motor->step_pin = step_pin;
     motor->dir_pin = dir_pin;
-    motor->request = NULL;
+    motor->en_pin = en_pin;
+    motor->use_enable = use_enable;
 
+    // Build offsets array properly
+    offsets[STEP_IDX] = step_pin;
+    offsets[DIR_IDX]  = dir_pin;
+    if (use_enable) {
+        offsets[EN_IDX] = en_pin;
+        num_offsets = 3;
+    } else {
+        num_offsets = 2;
+    }
+
+    // Open chip
     if (chipname[0] == '/') {
         motor->chip = gpiod_chip_open(chipname);
     } else {
@@ -38,25 +59,25 @@ int stepper_init(Stepper *motor, const char *chipname, unsigned int step_pin, un
     line_config = gpiod_line_config_new();
     request_config = gpiod_request_config_new();
     if (!line_settings || !line_config || !request_config) {
-        perror("Failed to create GPIO request configuration");
+        perror("Failed to create GPIO config");
         goto fail;
     }
 
     if (gpiod_line_settings_set_direction(line_settings, GPIOD_LINE_DIRECTION_OUTPUT) < 0 ||
         gpiod_line_settings_set_output_value(line_settings, GPIOD_LINE_VALUE_INACTIVE) < 0) {
-        perror("Failed to configure GPIO line settings");
+        perror("Failed to set line settings");
         goto fail;
     }
 
-    if (gpiod_line_config_add_line_settings(line_config, offsets, 2, line_settings) < 0) {
-        perror("Failed to add GPIO line settings");
+    if (gpiod_line_config_add_line_settings(line_config, offsets, num_offsets, line_settings) < 0) {
+        perror("Failed to add line settings");
         goto fail;
     }
 
     gpiod_request_config_set_consumer(request_config, "stepper");
     motor->request = gpiod_chip_request_lines(motor->chip, request_config, line_config);
     if (!motor->request) {
-        perror("Failed to request GPIO lines as output");
+        perror("Failed to request lines");
         goto fail;
     }
 
@@ -70,27 +91,59 @@ fail:
     gpiod_request_config_free(request_config);
     gpiod_line_config_free(line_config);
     gpiod_line_settings_free(line_settings);
-    stepper_cleanup(motor);
+    stepper_close(motor);
     return -1;
 }
 
-void stepper_set_direction(Stepper *motor, int direction) {
-    gpiod_line_request_set_value(
-        motor->request,
-        motor->dir_pin,
-        direction ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE);
+void stepper_set_direction(stepper_t *motor, int dir)
+{
+    if (gpiod_line_request_set_value(
+            motor->request,
+            DIR_IDX,
+            dir ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE) < 0) {
+        perror("dir set failed");
+    }
 }
 
-void stepper_step(Stepper *motor, int steps, int delay_us) {
+void stepper_enable(stepper_t *motor, int enable)
+{
+    if (!motor->use_enable) return;
+
+    // TB6600: LOW = enabled
+    if (gpiod_line_request_set_value(
+            motor->request,
+            EN_IDX,
+            enable ? GPIOD_LINE_VALUE_INACTIVE : GPIOD_LINE_VALUE_ACTIVE) < 0) {
+        perror("enable set failed");
+    }
+}
+
+void stepper_step(stepper_t *motor, int steps, int delay_us)
+{
     for (int i = 0; i < steps; i++) {
-        gpiod_line_request_set_value(motor->request, motor->step_pin, GPIOD_LINE_VALUE_ACTIVE);
+
+        if (gpiod_line_request_set_value(
+                motor->request,
+                STEP_IDX,
+                GPIOD_LINE_VALUE_ACTIVE) < 0) {
+            perror("step high failed");
+        }
+
         usleep(delay_us);
-        gpiod_line_request_set_value(motor->request, motor->step_pin, GPIOD_LINE_VALUE_INACTIVE);
+
+        if (gpiod_line_request_set_value(
+                motor->request,
+                STEP_IDX,
+                GPIOD_LINE_VALUE_INACTIVE) < 0) {
+            perror("step low failed");
+        }
+
         usleep(delay_us);
     }
 }
 
-void stepper_cleanup(Stepper *motor) {
+void stepper_close(stepper_t *motor)
+{
     if (motor->request) {
         gpiod_line_request_release(motor->request);
         motor->request = NULL;
@@ -102,30 +155,32 @@ void stepper_cleanup(Stepper *motor) {
     }
 }
 
-// Test program
-int main() {
-    Stepper motor;
+// Simple test program
+int main()
+{
+    stepper_t motor;
 
-    if (stepper_init(&motor, "gpiochip0", STEP_PIN, DIR_PIN) < 0) {
+    // Adjust these to your BeagleBone pins
+    unsigned int STEP_PIN = 60;
+    unsigned int DIR_PIN  = 50;
+    unsigned int EN_PIN   = 48;
+
+    if (stepper_init(&motor, "gpiochip0", STEP_PIN, DIR_PIN, EN_PIN, 1) < 0) {
         return -1;
     }
 
-    printf("Stepper initialized\n");
+    stepper_enable(&motor, 1);
 
-    // Forward rotation
-    printf("Rotating forward...\n");
+    printf("Forward...\n");
     stepper_set_direction(&motor, 1);
-    stepper_step(&motor, 200, 1000); // 200 steps with 1ms delay
+    stepper_step(&motor, 200, 500); // 200 steps with 500us delay
 
-    usleep(500000); // pause for 0.5 seconds
-
-    // Reverse rotation
-    printf("Rotating reverse...\n");
+    printf("Reverse...\n");
     stepper_set_direction(&motor, 0);
-    stepper_step(&motor, 200, 1000); // 200 steps with 1ms delay
+    stepper_step(&motor, 200, 500); // 200 steps with 500us delay
 
-    stepper_cleanup(&motor);
-    printf("Done\n");
+    stepper_enable(&motor, 0);
+    stepper_close(&motor);
 
     return 0;
 }
