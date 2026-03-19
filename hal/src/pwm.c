@@ -109,7 +109,7 @@ static int enable_channel(int channel, bool enable)
     snprintf(path, sizeof(path), "%s%d/pwm%d/enable", PWM_SYSFS_BASE, PWMCHIP, channel);
     return write_sysfs(path, enable ? "1" : "0");
 }
--
+
 static int unexport_channel(int channel)
 {
     char path[128];
