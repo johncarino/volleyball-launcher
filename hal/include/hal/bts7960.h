@@ -23,11 +23,13 @@ static int write_sysfs(const char *path, const char *value);
 
 static int write_long_sysfs(const char *path, long value);
 
+static void sleep_ms(long ms);
+
 static int pwm_init_one(int channel);
 
 int pwm_init();
 
-static int pwn_set_duty(int channel, int percent);
+static int pwm_set_duty(int channel, int percent);
 
 static int enable_channel(int channel, bool enable);
 
@@ -42,3 +44,5 @@ int reverse_ms(int percent, long ms);
 static int unexport_channel(int channel);
 
 void pwm_cleanup();
+
+#endif // BTS7960_H

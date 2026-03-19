@@ -6,12 +6,12 @@ CFLAGS = -Wall -Werror -Wpedantic -Wextra -std=c11 -pthread
 LDFLAGS = -pthread -lm
 
 # Source files
-#HAL_SOURCES = hal/src/pwm.c
-APP_SOURCES = app/src/main.c app/src/fsm.c app/src/calibration.c app/src/arc_calc.c app/src/operation.c app/src/set.c app/src/advanced.c
-ALL_SOURCES = $(APP_SOURCES)
+HAL_SOURCES = hal/src/bts7960.c
+#APP_SOURCES = app/src/main.c app/src/fsm.c app/src/calibration.c app/src/arc_calc.c app/src/operation.c app/src/set.c app/src/advanced.c
+ALL_SOURCES = $(HAL_SOURCES)
 
 # Include directories
-HAL_INCLUDES = -Ihal/include
+HAL_INCLUDES = -Ihal/include/hal
 APP_INCLUDES = -Iapp/src/include
 
 # Executable name

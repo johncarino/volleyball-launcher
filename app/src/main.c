@@ -1,34 +1,33 @@
-// Volleyball launcher: two DC motors controlled via PWM on ZS-X11H boards.
-// Runs on BeagleY-AI.
-
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>
 #include <signal.h>
 
-#include "include/fsm.h"
+#include "hal/bts7960.h"
 
+static volatile bool s_running = true;
 
-int main(void) {
-    printf("=== Volleyball Launcher Main Application ===\n");
+static void signal_handler(int sig)
+{
+    (void)sig;
+    s_running = false;
+}
 
-    fsm_state_t main_state;
+int main(void)
+{
+    printf("=== Volleyball Launcher (2x ZS-X11H) ===\n");
 
-    printf("init main\n");
-    fsm_init(&main_state);
+    // Catch Ctrl-C for clean shutdown
+    signal(SIGINT,  signal_handler);
+    signal(SIGTERM, signal_handler);
 
-    int user_input = 0;
-
-    while (true) {
-
-        fsm_update(&main_state);
-
-        scanf("%d", &user_input);
-
-        fsm_handle_input(&main_state, user_input);
-
-        sleep(1); // Sleep to prevent busy-waiting
+    if (pwm_init() != 0) {
+        fprintf(stderr, "Failed to initialize PWM. Are you running as root?\n");
+        return 1;
     }
 
-    return 0;
+    forward_ms(50, 1000); // Forward at 50% for 1 second
+    reverse_ms(50, 1000); // Reverse at 50% for 1 second
+
+    void pwm_cleanup();
 }

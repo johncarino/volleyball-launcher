@@ -26,6 +26,14 @@ static int write_long_sysfs(const char *path, long value)
     return write_sysfs(path, val);
 }
 
+static void sleep_ms(long ms)
+{
+    struct timespec ts;
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = (ms % 1000) * 1000000L;
+    nanosleep(&ts, NULL);
+}
+
 static int pwm_init_one(int channel) {
     char path[128];
     
@@ -41,7 +49,7 @@ static int pwm_init_one(int channel) {
     return 0;
 }
 
-static int pwm_init() {
+int pwm_init() {
     if (bts_initialized) {
         fprintf(stderr, "BTS7960 HAL: already initialized\n");
         return -1;
@@ -57,6 +65,7 @@ static int pwm_init() {
 
 static int pwm_set_duty(int channel, int percent) {
     char path[128];
+    char val[16];
     long duty;
 
     if (percent < 0 || percent > 100) {
@@ -66,8 +75,9 @@ static int pwm_set_duty(int channel, int percent) {
 
     duty = (NS_PERIOD * percent) / 100;
 
-    snprintf(path, sizeof(path), "%d/duty_cycle", channel);
-    if (write_sysfs(path, "0") < 0) { return -1; }
+    snprintf(path, sizeof(path), "%s%d/pwm%d/duty_cycle", PWM_SYSFS_BASE, PWMCHIP, channel);
+    snprintf(val, sizeof(val), "%ld", duty);
+    if (write_sysfs(path, val) < 0) { return -1; }
 
     return 0;
 }
@@ -90,17 +100,17 @@ static int reverse(int percent) {
     return enable_channel(BTS_LPWM, true);
 }
 
-static int forward_ms(int percent, long ms) {
+int forward_ms(int percent, long ms) {
     if (forward(percent) != 0) { return -1; }
     sleep_ms(ms);
-    if (enable_channel(BTS_RPWM, false) < 0) { return -1};
+    if (enable_channel(BTS_RPWM, false) < 0) { return -1; }
     return 0;
 }
 
-static int reverse_ms(int percent, long ms) {
+int reverse_ms(int percent, long ms) {
     if (reverse(percent) != 0) { return -1; }
     sleep_ms(ms);
-    if (enable_channel(BTS_LPWM, false) < 0) { return -1};
+    if (enable_channel(BTS_LPWM, false) < 0) { return -1; }
     return 0;
 }
 
@@ -116,10 +126,10 @@ void pwm_cleanup() {
     if (!bts_initialized) {return;}
 
     enable_channel(BTS_RPWM, false);
-    set_duty_ns(BTS_RPWM, 0);
+    pwm_set_duty(BTS_RPWM, 0);
     unexport_channel(BTS_RPWM);
     enable_channel(BTS_LPWM, false);
-    set_duty_ns(BTS_LPWM, 0);
+    pwm_set_duty(BTS_LPWM, 0);
     unexport_channel(BTS_LPWM);
 
     bts_initialized = false;
