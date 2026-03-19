@@ -16,9 +16,6 @@ typedef struct {
 
 int stepper_init(stepper_t *motor,
                  const char *chipname,
-                 unsigned int step_pin,
-                 unsigned int dir_pin,
-                 unsigned int en_pin,
                  int use_enable);
 
 void stepper_set_direction(stepper_t *motor, int dir);

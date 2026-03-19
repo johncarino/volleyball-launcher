@@ -7,11 +7,13 @@
 #define DIR_IDX  1
 #define EN_IDX   2
 
+// GPIO pin assignments for test program
+#define STEP_PIN 16
+#define DIR_PIN  18
+#define EN_PIN   22
+
 int stepper_init(stepper_t *motor,
                  const char *chipname,
-                 unsigned int step_pin,
-                 unsigned int dir_pin,
-                 unsigned int en_pin,
                  int use_enable)
 {
     struct gpiod_line_settings *line_settings = NULL;
@@ -23,16 +25,16 @@ int stepper_init(stepper_t *motor,
 
     motor->chip = NULL;
     motor->request = NULL;
-    motor->step_pin = step_pin;
-    motor->dir_pin = dir_pin;
-    motor->en_pin = en_pin;
+    motor->step_pin = STEP_PIN;
+    motor->dir_pin = DIR_PIN;
+    motor->en_pin = EN_PIN;
     motor->use_enable = use_enable;
 
     // Build offsets array properly
-    offsets[STEP_IDX] = step_pin;
-    offsets[DIR_IDX]  = dir_pin;
+    offsets[STEP_IDX] = STEP_PIN;
+    offsets[DIR_IDX]  = DIR_PIN;
     if (use_enable) {
-        offsets[EN_IDX] = en_pin;
+        offsets[EN_IDX] = EN_PIN;
         num_offsets = 3;
     } else {
         num_offsets = 2;
@@ -160,12 +162,7 @@ int main()
 {
     stepper_t motor;
 
-    // Adjust these to your BeagleBone pins
-    unsigned int STEP_PIN = 60;
-    unsigned int DIR_PIN  = 50;
-    unsigned int EN_PIN   = 48;
-
-    if (stepper_init(&motor, "gpiochip0", STEP_PIN, DIR_PIN, EN_PIN, 1) < 0) {
+    if (stepper_init(&motor, "gpiochip0", 1) < 0) {
         return -1;
     }
 
