@@ -1,4 +1,4 @@
-#include "bts7960.h"
+#include "hal/bts7960.h"
 
 static bool bts_initialized = false;
 
@@ -49,7 +49,7 @@ static int pwm_init_one(int channel) {
     return 0;
 }
 
-int pwm_init() {
+int bts_init() {
     if (bts_initialized) {
         fprintf(stderr, "BTS7960 HAL: already initialized\n");
         return -1;
@@ -122,7 +122,7 @@ static int unexport_channel(int channel) {
     return write_sysfs(path, val);
 }
 
-void pwm_cleanup() {
+void bts_cleanup() {
     if (!bts_initialized) {return;}
 
     enable_channel(BTS_RPWM, false);
