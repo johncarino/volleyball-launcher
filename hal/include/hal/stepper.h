@@ -7,8 +7,7 @@
 
 typedef struct {
     struct gpiod_chip *chip;
-    struct gpiod_line *step_line;
-    struct gpiod_line *dir_line;
+    struct gpiod_line_request *request;
     unsigned int step_pin;
     unsigned int dir_pin;
 } Stepper;
