@@ -1,4 +1,4 @@
-// Volleyball launcher: two DC motors controlled via PWM on ZS-X11H boards.
+// Volleyball launcher: two DC motors controlled via PWM.
 // Runs on BeagleY-AI.
 
 #include <stdio.h>
@@ -18,7 +18,7 @@ static void signal_handler(int sig)
 
 int main(void)
 {
-    printf("=== Volleyball Launcher (2x ZS-X11H) ===\n");
+    printf("=== Volleyball Launcher ===\n");
 
     // Catch Ctrl-C for clean shutdown
     signal(SIGINT,  signal_handler);

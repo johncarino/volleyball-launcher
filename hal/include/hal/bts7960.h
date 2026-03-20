@@ -1,48 +1,26 @@
 #ifndef BTS7960_H
 #define BTS7960_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
 #include <stdbool.h>
-#include <time.h>
+#include "hal/pwm.h"
 
-// Motor identifiers
-//Corresponds to the same signal
-#define BTS_RPWM  1   // GPIO12, pwmchip3/pwm1
-#define BTS_LPWM  0   // GPIO15, pwmchip3/pwm0
+// BTS7960 H-bridge channel mapping to PWM HAL motors.
+// RPWM = GPIO12 = pwmchip3/pwm1 = PWM_MOTOR_1
+// LPWM = GPIO15 = pwmchip3/pwm0 = PWM_MOTOR_2
+#define BTS_RPWM  PWM_MOTOR_1
+#define BTS_LPWM  PWM_MOTOR_2
 
-#define PWMCHIP 3
-#define PWM_SYSFS_BASE  "/sys/class/pwm/pwmchip"
-#define NS_PERIOD 1000000000
+// Initialize the BTS7960 H-bridge (sets up PWM channels).
+// Returns 0 on success, -1 on failure.
+int bts_init(void);
 
-static int write_sysfs(const char *path, const char *value);
-
-static int write_long_sysfs(const char *path, long value);
-
-static void sleep_ms(long ms);
-
-static int pwm_init_one(int channel);
-
-int pwm_init();
-
-static int pwm_set_duty(int channel, int percent);
-
-static int enable_channel(int channel, bool enable);
-
-static int forward(int percent);
-
-static int reverse(int percent);
-
+// Drive forward at given duty percentage for a duration in milliseconds.
 int forward_ms(int percent, long ms);
 
+// Drive reverse at given duty percentage for a duration in milliseconds.
 int reverse_ms(int percent, long ms);
 
-static int unexport_channel(int channel);
-
-void pwm_cleanup();
+// Clean up: disable PWM outputs.
+void bts_cleanup(void);
 
 #endif // BTS7960_H
