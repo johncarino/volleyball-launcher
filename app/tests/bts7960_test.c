@@ -1,0 +1,28 @@
+//Testbench for bts7960 linear actuator driver
+
+#include "bts7960.h"
+
+int actuator_test() {
+    if (pwm_init() != 0) {
+        fprintf(stderr, "Failed to initialize BTS7960 HAL\n");
+        return -1;
+    }
+
+    printf("Testing forward at 5%% for 2 seconds...\n");
+    if (forward_ms(5, 2000) != 0) {
+        fprintf(stderr, "Failed to run forward test\n");
+        pwm_cleanup();
+        return -1;
+    }
+
+    printf("Testing reverse at 10%% for 1 seconds...\n");
+    if (reverse_ms(10, 1000) != 0) {
+        fprintf(stderr, "Failed to run reverse test\n");
+        pwm_cleanup();
+        return -1;
+    }
+
+    pwm_cleanup();
+    printf("BTS7960 HAL test completed successfully\n");
+    return 0;
+}
