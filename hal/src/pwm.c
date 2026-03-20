@@ -20,6 +20,10 @@
 #define MOTOR1_CHANNEL  1   // pwm1 = channel B = GPIO12
 #define MOTOR2_CHANNEL  0   // pwm0 = channel A = GPIO15
 
+// USED IN BTS7960.C
+#define BTS_RPWM  2   // GPIO5, pwmchip3/pwm1
+#define BTS_LPWM  3   // GPIO14, pwmchip3/pwm0
+
 #define PWM_SYSFS_BASE  "/sys/class/pwm/pwmchip"
 #define NS_PER_SECOND   1000000000
 

@@ -15,7 +15,12 @@
 // Motor identifiers
 #define PWM_MOTOR_1  0   // GPIO12, pwmchip3/pwm1
 #define PWM_MOTOR_2  1   // GPIO15, pwmchip3/pwm0
-#define PWM_NUM_MOTORS 2
+
+// USED IN BTS7960.C
+#define BTS_RPWM  2   // GPIO5, pwmchip3/pwm1
+#define BTS_LPWM  3   // GPIO14, pwmchip3/pwm0
+
+#define PWM_NUM_MOTORS 4
 
 // Initialize both PWM channels for motor speed control.
 // Returns 0 on success, -1 on failure.
