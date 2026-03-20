@@ -21,7 +21,7 @@ int main(void)
     signal(SIGINT,  signal_handler);
     signal(SIGTERM, signal_handler);
 
-    if (bts_init() != 0) {
+    if (pwm_init() != 0) {
         fprintf(stderr, "Failed to initialize PWM. Are you running as root?\n");
         return 1;
     }
@@ -29,6 +29,6 @@ int main(void)
     forward_ms(50, 1000); // Forward at 50% for 1 second
     reverse_ms(50, 1000); // Reverse at 50% for 1 second
 
-    bts_cleanup();
+    pwm_cleanup();
     return 0;
 }
