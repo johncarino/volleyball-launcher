@@ -1,5 +1,4 @@
 // PWM HAL implementation using Linux sysfs for BeagleY-AI.
-// Controls two DC motors via ZS-X11H driver boards.
 // Both on EPWM0 (pwmchip3): channel A (pwm0) and channel B (pwm1).
 //
 // Physical wiring:
@@ -72,14 +71,12 @@ static int export_channel(int channel)
     snprintf(path, sizeof(path), "%s%d/export", PWM_SYSFS_BASE, PWMCHIP);
     snprintf(val, sizeof(val), "%d", channel);
     if (write_sysfs(path, val) != 0) {
-        fprintf(stderr, "PWM HAL: failed to export pwmchip%d channel %d\n",
-                PWMCHIP, channel);
+        fprintf(stderr, "PWM HAL: failed to export pwmchip%d channel %d\n", PWMCHIP, channel);
         return -1;
     }
     usleep(100000);
     return 0;
 }
-
 
 // set period for a channel
 static int set_period(int channel, int period_ns)
@@ -164,8 +161,7 @@ int pwm_set_frequency(int frequency_hz)
         return -1;
     }
     if (frequency_hz < 50 || frequency_hz > 20000) {
-        fprintf(stderr, "PWM HAL: frequency %d Hz out of range (50-20000)\n",
-                frequency_hz);
+        fprintf(stderr, "PWM HAL: frequency %d Hz out of range (50-20000)\n", frequency_hz);
         return -1;
     }
 
@@ -190,8 +186,7 @@ int pwm_set_duty_cycle(int motor, int duty_percent)
         return -1;
     }
     if (duty_percent < 0 || duty_percent > 100) {
-        fprintf(stderr, "PWM HAL: duty cycle %d%% out of range (0-100)\n",
-                duty_percent);
+        fprintf(stderr, "PWM HAL: duty cycle %d%% out of range (0-100)\n", duty_percent);
         return -1;
     }
 
@@ -213,24 +208,25 @@ int pwm_enable(int motor, bool enable)
     return 0;
 }
 
-int pwm_get_duty_cycle(int motor)
-{
-    if (motor < 0 || motor >= PWM_NUM_MOTORS) {return -1;}
-    return s_motors[motor].duty_percent;
-}
-
-int pwm_get_frequency(void){return s_frequency_hz;}
 
 void pwm_cleanup(void)
 {
     if (!s_initialized) {return;}
-
+    
     for (int i = 0; i < PWM_NUM_MOTORS; i++) {
         enable_channel(s_motors[i].channel, false);
         set_duty_ns(s_motors[i].channel, 0);
         unexport_channel(s_motors[i].channel);
     }
-
+    
     s_initialized = false;
     printf("PWM HAL: cleaned up (both motors)\n");
+}
+
+int pwm_get_frequency(void){return s_frequency_hz;}
+
+int pwm_get_duty_cycle(int motor)
+{
+    if (motor < 0 || motor >= PWM_NUM_MOTORS) {return -1;}
+    return s_motors[motor].duty_percent;
 }

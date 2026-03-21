@@ -1,11 +1,9 @@
-// PWM HAL module for controlling two DC motors via ZS-X11H driver boards.
-// Uses Linux sysfs PWM interface on BeagleY-AI (EPWM0 / pwmchip3).
+// PWM HAL module using Linux sysfs PWM interface on BeagleY-AI (EPWM0 / pwmchip3).
 //
 // Physical wiring:
 //   Motor 1: P + G soldered → GPIO12 (pin 32) = pwmchip3/pwm1 (channel B)
 //   Motor 2: P + G soldered → GPIO15 (pin 10) = pwmchip3/pwm0 (channel A)
-//   Both driver boards have PWM short-circuit pads enabled.
-//   On-board potentiometers turned to minimum.
+
 
 #ifndef HAL_PWM_H
 #define HAL_PWM_H

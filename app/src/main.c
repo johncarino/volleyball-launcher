@@ -1,3 +1,6 @@
+// Volleyball launcher: two DC motors controlled via PWM.
+// Runs on BeagleY-AI.
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>

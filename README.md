@@ -1,11 +1,11 @@
 # Volleyball Launcher — PWM Motor Controller
 
-Controls two DC hoverboard motors via PWM to launch a volleyball. Runs on a **BeagleY-AI** using two **ZS-X11H** motor driver boards.
+Controls two DC hoverboard motors via PWM to launch a volleyball. Runs on a **BeagleY-AI**.
 
 ## Hardware
 
 - **BeagleY-AI** (TI AM67A)
-- **2x ZS-X11H** BLDC/DC motor driver boards (6–60V, external PWM enabled)
+
 - **2x DC hoverboard motors** (36V)
 - **Power supply:** 36V DC
 
