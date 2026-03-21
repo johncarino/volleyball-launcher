@@ -8,9 +8,8 @@
 #include "hal/bts7960.h"
 
 #include <stdio.h>
-#include <time.h>
+#include <unistd.h>
 
-/*
 int bts_init() {
     if (pwm_init() != 0) {
         fprintf(stderr, "BTS7960 HAL: failed to initialize PWM HAL\n");
@@ -19,7 +18,10 @@ int bts_init() {
 
     return 0;
 }
-*/
+
+void bts_cleanup() {
+    pwm_cleanup();
+}
 
 int forward_ms(int percent, long ms) {
     if (pwm_enable(BTS_LPWM, false) != 0) { return -1; }

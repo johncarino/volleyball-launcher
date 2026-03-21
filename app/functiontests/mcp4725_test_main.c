@@ -30,6 +30,45 @@ static void pause_ms(int ms)
     usleep(ms * 1000);
 }
 
+static int init_with_fallback(int *selected_bus, uint8_t *selected_addr)
+{
+    const int buses[] = { MCP4725_I2C_BUS, 2, 1 };
+    const uint8_t addrs[] = { MCP4725_I2C_ADDR, 0x61, 0x62, 0x63 };
+
+    const int bus_count = (int)(sizeof(buses) / sizeof(buses[0]));
+    const int addr_count = (int)(sizeof(addrs) / sizeof(addrs[0]));
+
+    for (int i = 0; i < bus_count; i++) {
+        int bus = buses[i];
+
+        for (int j = 0; j < addr_count; j++) {
+            uint8_t addr = addrs[j];
+
+            // Skip duplicates caused by defaults matching fallback list.
+            bool seen_before = false;
+            for (int pi = 0; pi < i && !seen_before; pi++) {
+                if (buses[pi] != bus) { continue; }
+                for (int pj = 0; pj < addr_count; pj++) {
+                    if (addrs[pj] == addr) {
+                        seen_before = true;
+                        break;
+                    }
+                }
+            }
+            if (seen_before) { continue; }
+
+            printf("Trying MCP4725 at /dev/i2c-%d addr 0x%02x...\n", bus, addr);
+            if (mcp4725_init(bus, addr) == 0) {
+                *selected_bus = bus;
+                *selected_addr = addr;
+                return 0;
+            }
+        }
+    }
+
+    return -1;
+}
+
 // ---------------------------------------------------------------------------
 // Individual tests
 // ---------------------------------------------------------------------------
@@ -127,17 +166,23 @@ static int test_power_down(void)
 
 int main(void)
 {
+    int active_bus = -1;
+    uint8_t active_addr = 0;
+
     printf("=== MCP4725 DAC Functional Test ===\n");
-    printf("Bus: /dev/i2c-%d  Addr: 0x%02x\n", MCP4725_I2C_BUS, MCP4725_I2C_ADDR);
+    printf("Default bus/addr: /dev/i2c-%d  0x%02x\n", MCP4725_I2C_BUS, MCP4725_I2C_ADDR);
     printf("VDD: %d mV   Throttle max: %d mV\n\n", MCP4725_VDD_MV, MCP4725_THROTTLE_MAX_MV);
 
     signal(SIGINT,  signal_handler);
     signal(SIGTERM, signal_handler);
 
-    if (mcp4725_init(MCP4725_I2C_BUS, MCP4725_I2C_ADDR) != 0) {
-        fprintf(stderr, "Failed to initialize MCP4725 — is I2C enabled?\n");
+    if (init_with_fallback(&active_bus, &active_addr) != 0) {
+        fprintf(stderr, "Failed to initialize MCP4725 on tested bus/address pairs.\n");
+        fprintf(stderr, "Check wiring/power and run: i2cdetect -y 1 and i2cdetect -y 2\n");
         return -1;
     }
+
+    printf("Connected MCP4725 on /dev/i2c-%d addr 0x%02x\n", active_bus, active_addr);
 
     int rc = 0;
     if (s_running && (rc = test_raw_output())   != 0) goto done;
