@@ -9,15 +9,15 @@ int actuator_test() {
         return -1;
     }
 
-    printf("Testing forward at 5%% for 2 seconds...\n");
-    if (forward_ms(5, 2000) != 0) {
+    printf("Testing forward at 50%% for 5 seconds...\n");
+    if (forward_ms(50, 5000) != 0) {
         fprintf(stderr, "Failed to run forward test\n");
         bts_cleanup();
         return -1;
     }
 
-    printf("Testing reverse at 10%% for 1 seconds...\n");
-    if (reverse_ms(10, 1000) != 0) {
+    printf("Testing reverse at 20%% for 3 seconds...\n");
+    if (reverse_ms(20, 3000) != 0) {
         fprintf(stderr, "Failed to run reverse test\n");
         bts_cleanup();
         return -1;

@@ -98,7 +98,7 @@ fail:
 void tb6600_set_direction(tb6600_t *motor, int dir)
 {
     if (gpiod_line_request_set_value(motor->request,
-            DIR_IDX,
+            motor->dir_pin,
             dir ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE) < 0) {
         perror("dir set failed");
     }
@@ -109,7 +109,7 @@ void tb6600_enable(tb6600_t *motor, int enable)
     if (!motor->use_enable) return;
 
     // TB6600: LOW = enabled
-    if (gpiod_line_request_set_value(motor->request, EN_IDX, enable ? GPIOD_LINE_VALUE_INACTIVE : GPIOD_LINE_VALUE_ACTIVE) < 0) {
+    if (gpiod_line_request_set_value(motor->request, motor->en_pin, enable ? GPIOD_LINE_VALUE_INACTIVE : GPIOD_LINE_VALUE_ACTIVE) < 0) {
         perror("enable set failed");
     }
 }
@@ -118,13 +118,13 @@ void tb6600_step(tb6600_t *motor, int steps, int delay_us)
 {
     for (int i = 0; i < steps; i++) {
 
-        if (gpiod_line_request_set_value(motor->request, STEP_IDX, GPIOD_LINE_VALUE_ACTIVE) < 0) {
+        if (gpiod_line_request_set_value(motor->request, motor->step_pin, GPIOD_LINE_VALUE_ACTIVE) < 0) {
             perror("step high failed");
         }
 
         usleep(delay_us);
 
-        if (gpiod_line_request_set_value(motor->request, STEP_IDX, GPIOD_LINE_VALUE_INACTIVE) < 0) {
+        if (gpiod_line_request_set_value(motor->request, motor->step_pin, GPIOD_LINE_VALUE_INACTIVE) < 0) {
             perror("step low failed");
         }
         usleep(delay_us);

@@ -20,8 +20,8 @@
 #define MOTOR2_CHANNEL  0   // pwm0 = channel A = GPIO15
 
 // USED IN BTS7960.C
-#define BTS_RPWM  2   // GPIO5, pwmchip3/pwm1
-#define BTS_LPWM  3   // GPIO14, pwmchip3/pwm0
+#define BTS_RPWM_CHANNEL  2   // GPIO5, pwmchip3/pwm1
+#define BTS_LPWM_CHANNEL  3   // GPIO14, pwmchip3/pwm0
 
 #define PWM_SYSFS_BASE  "/sys/class/pwm/pwmchip"
 #define NS_PER_SECOND   1000000000
@@ -130,7 +130,7 @@ int pwm_init(void)
     // Map motors to hardware channels
     s_motors[PWM_MOTOR_1].channel = MOTOR1_CHANNEL;
     s_motors[PWM_MOTOR_2].channel = MOTOR2_CHANNEL;
-
+    
     // Export both channels
     for (int i = 0; i < PWM_NUM_MOTORS; i++) {
         if (export_channel(s_motors[i].channel) != 0) {
