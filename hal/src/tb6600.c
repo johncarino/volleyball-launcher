@@ -2,53 +2,33 @@
 #include <stdio.h>
 #include <unistd.h> // usleep
 
-// Indices into the requested line array
-#define STEP_IDX 0
-#define DIR_IDX  1
-#define EN_IDX   2
-
 // GPIO pin assignments
-#define STEP_PIN 16
-#define DIR_PIN  18
-#define EN_PIN   22
+#define STEP_PIN 4 //GPIO 9 offset 4
+#define DIR_PIN  10 //GPIO 24 offset 10
+#define EN_PIN   7 //GPIO 23 offset 7
+//#define CHIPNAME "/dev/gpiochip0"
 
-int tb6600_init(tb6600_t *motor, const char *chipname, int use_enable)
+static const unsigned int step_offset = STEP_PIN;
+static const unsigned int dir_offset = DIR_PIN;
+static const unsigned int en_offset = EN_PIN;
+
+int tb6600_init(tb6600_t *motor, int use_enable)
 {
+    const char *chipname = "/dev/gpiochip0";
+
     struct gpiod_line_settings *line_settings = NULL;
     struct gpiod_line_config *line_config = NULL;
     struct gpiod_request_config *request_config = NULL;
-    unsigned int offsets[3];
-    size_t num_offsets;
-    char chip_path[128];
 
     motor->chip = NULL;
     motor->request = NULL;
-    motor->step_pin = STEP_PIN;
-    motor->dir_pin = DIR_PIN;
-    motor->en_pin = EN_PIN;
+    motor->step_pin = step_offset;
+    motor->dir_pin = dir_offset;
+    motor->en_pin = en_offset;
     motor->use_enable = use_enable;
 
-    // Build offsets array properly
-    offsets[STEP_IDX] = STEP_PIN;
-    offsets[DIR_IDX]  = DIR_PIN;
-    if (use_enable) {
-        offsets[EN_IDX] = EN_PIN;
-        num_offsets = 3;
-    } else {
-        num_offsets = 2;
-    }
-
     // Open chip
-    if (chipname[0] == '/') {
-        motor->chip = gpiod_chip_open(chipname);
-    } else {
-        int written = snprintf(chip_path, sizeof(chip_path), "/dev/%s", chipname);
-        if (written < 0 || (size_t)written >= sizeof(chip_path)) {
-            perror("Invalid GPIO chip name");
-            return -1;
-        }
-        motor->chip = gpiod_chip_open(chip_path);
-    }
+    motor->chip = gpiod_chip_open(chipname);
 
     if (!motor->chip) {
         perror("Failed to open GPIO chip");
@@ -69,12 +49,14 @@ int tb6600_init(tb6600_t *motor, const char *chipname, int use_enable)
         goto fail;
     }
 
-    if (gpiod_line_config_add_line_settings(line_config, offsets, num_offsets, line_settings) < 0) {
+    if (gpiod_line_config_add_line_settings(line_config, &step_offset, 1, line_settings) < 0 ||
+        gpiod_line_config_add_line_settings(line_config, &dir_offset, 1, line_settings) < 0 ||
+        (use_enable && gpiod_line_config_add_line_settings(line_config, &en_offset, 1, line_settings) < 0)) {
         perror("Failed to add line settings");
         goto fail;
     }
 
-    gpiod_request_config_set_consumer(request_config, "tb6600");
+    gpiod_request_config_set_consumer(request_config, "tb6600_test");
     motor->request = gpiod_chip_request_lines(motor->chip, request_config, line_config);
     if (!motor->request) {
         perror("Failed to request lines");
@@ -88,9 +70,15 @@ int tb6600_init(tb6600_t *motor, const char *chipname, int use_enable)
     return 0;
 
 fail:
-    gpiod_request_config_free(request_config);
-    gpiod_line_config_free(line_config);
-    gpiod_line_settings_free(line_settings);
+    if (request_config) {
+        gpiod_request_config_free(request_config);
+    }
+    if (line_config) {
+        gpiod_line_config_free(line_config);
+    }
+    if (line_settings) {
+        gpiod_line_settings_free(line_settings);
+    }
     tb6600_close(motor);
     return -1;
 }
@@ -98,7 +86,7 @@ fail:
 void tb6600_set_direction(tb6600_t *motor, int dir)
 {
     if (gpiod_line_request_set_value(motor->request,
-            motor->dir_pin,
+            dir_offset,
             dir ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE) < 0) {
         perror("dir set failed");
     }
@@ -109,26 +97,32 @@ void tb6600_enable(tb6600_t *motor, int enable)
     if (!motor->use_enable) return;
 
     // TB6600: LOW = enabled
-    if (gpiod_line_request_set_value(motor->request, motor->en_pin, enable ? GPIOD_LINE_VALUE_INACTIVE : GPIOD_LINE_VALUE_ACTIVE) < 0) {
+    if (gpiod_line_request_set_value(motor->request, en_offset, enable ? GPIOD_LINE_VALUE_INACTIVE : GPIOD_LINE_VALUE_ACTIVE) < 0) {
         perror("enable set failed");
     }
 }
 
 void tb6600_step(tb6600_t *motor, int steps, int delay_us)
 {
+    printf("TB6600: stepping %d steps with %d us delay per half-cycle\n", steps, delay_us);
+    
     for (int i = 0; i < steps; i++) {
-
-        if (gpiod_line_request_set_value(motor->request, motor->step_pin, GPIOD_LINE_VALUE_ACTIVE) < 0) {
+        printf("  Step %d/%d: HIGH\n", i + 1, steps);
+        if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_ACTIVE) < 0) {
             perror("step high failed");
         }
 
         usleep(delay_us);
 
-        if (gpiod_line_request_set_value(motor->request, motor->step_pin, GPIOD_LINE_VALUE_INACTIVE) < 0) {
+        printf("  Step %d/%d: LOW\n", i + 1, steps);
+        if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_INACTIVE) < 0) {
             perror("step low failed");
         }
+        
         usleep(delay_us);
     }
+    
+    printf("TB6600: stepping complete (%d steps done)\n", steps);
 }
 
 void tb6600_close(tb6600_t *motor)

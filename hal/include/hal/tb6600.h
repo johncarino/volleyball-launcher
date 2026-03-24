@@ -14,7 +14,9 @@ typedef struct {
     int use_enable;
 } tb6600_t;
 
-int tb6600_init(tb6600_t *motor, const char *chipname, int use_enable);
+#define TB6600_CHIP "/dev/gpiochip0"
+
+int tb6600_init(tb6600_t *motor, int use_enable);
 void tb6600_set_direction(tb6600_t *motor, int dir);
 void tb6600_enable(tb6600_t *motor, int enable);
 void tb6600_step(tb6600_t *motor, int steps, int delay_us);
