@@ -6,17 +6,27 @@
 //   2. Raw 12-bit write
 //   3. Millivolt write
 //   4. Throttle percentage write
-//   5. EEPROM write
-//   6. Power-down mode
+//   5. Keyboard throttle percentage write (0–3.9 V cap)
+//   6. EEPROM write
+//   7. Power-down mode
 
 #include <stdio.h>
 #include <unistd.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <errno.h>
 
 #include "hal/mcp4725.h"
 
+#if defined(__GNUC__)
+#define MAYBE_UNUSED __attribute__((unused))
+#else
+#define MAYBE_UNUSED
+#endif
+
 static volatile bool s_running = true;
+static const uint16_t THROTTLE_KEYBOARD_MAX_MV = 3900;
 
 static void signal_handler(int sig)
 {
@@ -25,7 +35,7 @@ static void signal_handler(int sig)
 }
 
 // Helper: pause between tests so you can probe with a multimeter.
-static void pause_ms(int ms)
+static MAYBE_UNUSED void pause_ms(int ms)
 {
     usleep(ms * 1000);
 }
@@ -34,7 +44,7 @@ static void pause_ms(int ms)
 // Individual tests
 // ---------------------------------------------------------------------------
 
-static int test_raw_output(void)
+static MAYBE_UNUSED int test_raw_output(void)
 {
     printf("\n--- Test 1: Raw 12-bit output (ramp 0 → 4095) ---\n");
 
@@ -55,7 +65,7 @@ static int test_raw_output(void)
     return 0;
 }
 
-static int test_mv_output(void)
+static MAYBE_UNUSED int test_mv_output(void)
 {
     printf("\n--- Test 2: Millivolt output ---\n");
 
@@ -74,7 +84,7 @@ static int test_mv_output(void)
     return 0;
 }
 
-static int test_throttle(void)
+static MAYBE_UNUSED int test_throttle(void)
 {
     printf("\n--- Test 3: Throttle percentage (0%% → 100%%) ---\n");
 
@@ -91,9 +101,72 @@ static int test_throttle(void)
     return 0;
 }
 
-static int test_eeprom(void)
+static int test_keyboard_throttle(void)
 {
-    printf("\n--- Test 4: EEPROM write (mid-scale 2048) ---\n");
+    char input[64];
+
+    printf("\n--- Test 4: Keyboard throttle control (0-100%%, q to quit) ---\n");
+    printf("    100%% maps to %u mV (%.2f V max)\n",
+           THROTTLE_KEYBOARD_MAX_MV,
+           (float)THROTTLE_KEYBOARD_MAX_MV / 1000.0f);
+
+    while (s_running) {
+        printf("  Enter throttle %% [0-100] or q: ");
+        fflush(stdout);
+
+        if (!fgets(input, sizeof(input), stdin)) {
+            return 0;
+        }
+
+        if (input[0] == 'q' || input[0] == 'Q') {
+            break;
+        }
+
+        errno = 0;
+        char *endptr = NULL;
+        long pct = strtol(input, &endptr, 10);
+
+        if (errno != 0 || endptr == input) {
+            printf("  Invalid input. Enter a number or q.\n");
+            continue;
+        }
+
+        while (*endptr == ' ' || *endptr == '\t') {
+            endptr++;
+        }
+        if (*endptr != '\n' && *endptr != '\0') {
+            printf("  Invalid input. Enter a number or q.\n");
+            continue;
+        }
+
+        if (pct < 0) {
+            pct = 0;
+        }
+        if (pct > 100) {
+            printf("  Clamped to 100%% max.\n");
+            pct = 100;
+        }
+
+        uint16_t mv = (uint16_t)((uint32_t)pct * THROTTLE_KEYBOARD_MAX_MV / 100U);
+
+        if (mcp4725_set_mv(mv) != 0) {
+            fprintf(stderr, "  FAIL: mcp4725_set_mv(%u)\n", mv);
+            return -1;
+        }
+
+        printf("  Applied throttle = %ld%% -> %u mV (%.2f V)\n",
+               pct,
+               mv,
+               (float)mv / 1000.0f);
+    }
+
+    printf("  PASS\n");
+    return 0;
+}
+
+static MAYBE_UNUSED int test_eeprom(void)
+{
+    printf("\n--- Test 5: EEPROM write (mid-scale 2048) ---\n");
 
     if (mcp4725_write_eeprom(2048) != 0) {
         fprintf(stderr, "  FAIL: mcp4725_write_eeprom(2048)\n");
@@ -104,9 +177,9 @@ static int test_eeprom(void)
     return 0;
 }
 
-static int test_power_down(void)
+static MAYBE_UNUSED int test_power_down(void)
 {
-    printf("\n--- Test 5: Power-down modes ---\n");
+    printf("\n--- Test 6: Power-down modes ---\n");
 
     const mcp4725_pd_mode_t modes[] = {
         MCP4725_PD_1K, MCP4725_PD_100K, MCP4725_PD_500K, MCP4725_PD_NORMAL
@@ -140,11 +213,13 @@ int main(void)
     }
 
     int rc = 0;
-    if (s_running && (rc = test_raw_output())   != 0) goto done;
-    if (s_running && (rc = test_mv_output())    != 0) goto done;
-    if (s_running && (rc = test_throttle())     != 0) goto done;
-    if (s_running && (rc = test_eeprom())       != 0) goto done;
-    if (s_running && (rc = test_power_down())   != 0) goto done;
+    // Keep full suite available, but run only keyboard mode for now:
+    // if (s_running && (rc = test_raw_output())   != 0) goto done;
+    // if (s_running && (rc = test_mv_output())    != 0) goto done;
+    // if (s_running && (rc = test_throttle())     != 0) goto done;
+    if (s_running && (rc = test_keyboard_throttle()) != 0) goto done;
+    // if (s_running && (rc = test_eeprom())       != 0) goto done;
+    // if (s_running && (rc = test_power_down())   != 0) goto done;
 
 done:
     // Always return output to 0 V and clean up.

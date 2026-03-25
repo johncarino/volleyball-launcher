@@ -20,6 +20,8 @@ int tb6600_init(tb6600_t *motor, int use_enable);
 void tb6600_set_direction(tb6600_t *motor, int dir);
 void tb6600_enable(tb6600_t *motor, int enable);
 void tb6600_step(tb6600_t *motor, int steps, int delay_us);
+void tb6600_step_accel(tb6600_t *motor, int steps, int start_delay_us,
+                       int end_delay_us, int accel_steps);
 void tb6600_close(tb6600_t *motor);
 
 #endif // TB6600_H

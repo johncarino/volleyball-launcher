@@ -3,9 +3,9 @@
 #include <unistd.h> // usleep
 
 // GPIO pin assignments
-#define STEP_PIN 4 //GPIO 9 offset 4
-#define DIR_PIN  10 //GPIO 24 offset 10
-#define EN_PIN   7 //GPIO 23 offset 7
+#define STEP_PIN 4 //GPIO 9 offset 4 pin21
+#define DIR_PIN  10 //GPIO 24 offset 10 pin18
+#define EN_PIN   7 //GPIO 23 offset 7 pin16
 //#define CHIPNAME "/dev/gpiochip0"
 
 static const unsigned int step_offset = STEP_PIN;
@@ -105,23 +105,64 @@ void tb6600_enable(tb6600_t *motor, int enable)
 void tb6600_step(tb6600_t *motor, int steps, int delay_us)
 {
     printf("TB6600: stepping %d steps with %d us delay per half-cycle\n", steps, delay_us);
-    
+
     for (int i = 0; i < steps; i++) {
-        printf("  Step %d/%d: HIGH\n", i + 1, steps);
         if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_ACTIVE) < 0) {
             perror("step high failed");
+            return;
         }
 
         usleep(delay_us);
 
-        printf("  Step %d/%d: LOW\n", i + 1, steps);
         if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_INACTIVE) < 0) {
             perror("step low failed");
+            return;
         }
-        
+
         usleep(delay_us);
     }
-    
+
+    printf("TB6600: stepping complete (%d steps done)\n", steps);
+}
+
+void tb6600_step_accel(tb6600_t *motor, int steps, int start_delay_us,
+                       int end_delay_us, int accel_steps)
+{
+    if (accel_steps > steps / 2) {
+        accel_steps = steps / 2;
+    }
+
+    printf("TB6600: stepping %d steps (accel %d→%d us over %d steps)\n",
+           steps, start_delay_us, end_delay_us, accel_steps);
+
+    for (int i = 0; i < steps; i++) {
+        // Compute current delay: ramp down during accel, ramp up during decel
+        int delay;
+        if (i < accel_steps) {
+            // Accelerating: linearly decrease delay from start to end
+            delay = start_delay_us - (start_delay_us - end_delay_us) * i / accel_steps;
+        } else if (i >= steps - accel_steps) {
+            // Decelerating: linearly increase delay from end back to start
+            int remaining = steps - 1 - i;
+            delay = start_delay_us - (start_delay_us - end_delay_us) * remaining / accel_steps;
+        } else {
+            // Cruising at target speed
+            delay = end_delay_us;
+        }
+
+        if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_ACTIVE) < 0) {
+            perror("step high failed");
+            return;
+        }
+        usleep(delay);
+
+        if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_INACTIVE) < 0) {
+            perror("step low failed");
+            return;
+        }
+        usleep(delay);
+    }
+
     printf("TB6600: stepping complete (%d steps done)\n", steps);
 }
 
