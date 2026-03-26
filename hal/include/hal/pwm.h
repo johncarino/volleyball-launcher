@@ -15,8 +15,8 @@
 #define PWM_MOTOR_2  1   // GPIO15, pwmchip3/pwm0
 
 // USED IN BTS7960.C
-#define BTS_RPWM  0   // GPIO5, pwmchip3/pwm1
-#define BTS_LPWM  1   // GPIO14, pwmchip3/pwm0
+#define BTS_RPWM  0   // GPIO12, pwmchip3/pwm1
+#define BTS_LPWM  1   // GPIO15, pwmchip3/pwm0
 
 #define PWM_NUM_MOTORS 2
 

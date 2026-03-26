@@ -30,7 +30,7 @@ target_link_libraries(tb6600_test PRIVATE hal gpiod)
 add_executable(mcp4725_test functiontests/mcp4725_test_main.c)
 target_link_libraries(mcp4725_test PRIVATE hal)
 
-# Copy executables to final location
+# Copy executables to final location, and register copies for make clean
 foreach(target motor_control bts7960_test tb6600_test mcp4725_test)
   add_custom_command(TARGET ${target} POST_BUILD 
     COMMAND "${CMAKE_COMMAND}" -E make_directory   
@@ -39,4 +39,7 @@ foreach(target motor_control bts7960_test tb6600_test mcp4725_test)
        "$<TARGET_FILE:${target}>"
        "/home/john/Desktop/BeagleY-AI/public/${target}" 
     COMMENT "Copying ${target} to /home/john/Desktop/BeagleY-AI/public/")
+  set_property(DIRECTORY APPEND PROPERTY
+    ADDITIONAL_MAKE_CLEAN_FILES
+    "/home/john/Desktop/BeagleY-AI/public/${target}")
 endforeach()
