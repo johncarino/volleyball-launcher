@@ -1,22 +1,3 @@
-// MCP4725 12-bit DAC HAL implementation using Linux I2C userspace interface.
-//
-// The MCP4725 sits on the I2C bus and converts a 12-bit digital code to an
-// analog voltage (0–VDD).  We use it to produce a 0–4.3 V throttle signal
-// for a brushless-DC motor controller that expects an e-bike throttle input.
-//
-// Protocol reference (Microchip MCP4725 datasheet, DS22039):
-//   Fast-mode write (2 bytes):
-//     Byte 0: [0 0 PD1 PD0  D11 D10 D9 D8]
-//     Byte 1: [D7 D6 D5 D4  D3  D2  D1 D0]
-//
-//   Write DAC register (3 bytes, cmd = 0x40):
-//     Byte 0: 0b0100_0000 | (PD << 1)
-//     Byte 1: D[11:4]
-//     Byte 2: D[3:0] << 4
-//
-//   Write DAC + EEPROM (3 bytes, cmd = 0x60):
-//     same layout as above but cmd = 0b0110_0000
-
 #include "hal/mcp4725.h"
 
 #include <stdbool.h>

@@ -127,9 +127,9 @@ int pwm_init(void)
         return -1;
     }
 
-    // Map motors to hardware channels
-    s_motors[PWM_MOTOR_1].channel = MOTOR1_CHANNEL;
-    s_motors[PWM_MOTOR_2].channel = MOTOR2_CHANNEL;
+    // Map logical channels to hardware channels
+    s_motors[BTS_RPWM].channel = MOTOR1_CHANNEL;
+    s_motors[BTS_LPWM].channel = MOTOR2_CHANNEL;
     
     // Export both channels
     for (int i = 0; i < PWM_NUM_MOTORS; i++) {

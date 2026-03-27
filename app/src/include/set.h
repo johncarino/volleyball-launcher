@@ -18,6 +18,7 @@
 typedef struct {
     float launch_speed;
     float tilt_angle;
+    float yaw_angle;
     float rpm_output;
 } set_specs_t;
 
