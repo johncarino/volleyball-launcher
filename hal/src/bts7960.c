@@ -1,10 +1,3 @@
-// BTS7960 H-bridge HAL for linear actuator control.
-// Uses the shared PWM HAL (pwmchip3) for motor control.
-//
-// Physical wiring:
-//   RPWM: GPIO12 (pin 32) → pwmchip3/pwm1 → PWM_MOTOR_1
-//   LPWM: GPIO15 (pin 10) → pwmchip3/pwm0 → PWM_MOTOR_2
-
 #include "hal/bts7960.h"
 
 #include <stdio.h>

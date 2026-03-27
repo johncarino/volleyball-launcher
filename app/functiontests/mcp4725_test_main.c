@@ -30,10 +30,7 @@ static void pause_ms(int ms)
     usleep(ms * 1000);
 }
 
-// ---------------------------------------------------------------------------
 // Individual tests
-// ---------------------------------------------------------------------------
-
 static int test_raw_output(void)
 {
     printf("\n--- Test 1: Raw 12-bit output (ramp 0 → 4095) ---\n");

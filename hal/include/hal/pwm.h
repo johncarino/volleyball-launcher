@@ -1,20 +1,16 @@
-// PWM HAL module using Linux sysfs PWM interface on BeagleY-AI (EPWM0 / pwmchip3).
+// PWM HAL implementation using Linux sysfs for BeagleY-AI.
+// Both on EPWM0 (pwmchip3): channel A (pwm0) and channel B (pwm1).
 //
 // Physical wiring:
-//   Motor 1: P + G soldered → GPIO12 (pin 32) = pwmchip3/pwm1 (channel B)
-//   Motor 2: P + G soldered → GPIO15 (pin 10) = pwmchip3/pwm0 (channel A)
-
+//   Motor 1: GPIO12 (pin 32) → pwmchip3/pwm1 (channel B)
+//   Motor 2: GPIO15 (pin 10) → pwmchip3/pwm0 (channel A)
 
 #ifndef HAL_PWM_H
 #define HAL_PWM_H
 
 #include <stdbool.h>
 
-// Motor identifiers
-#define PWM_MOTOR_1  0   // GPIO12, pwmchip3/pwm1
-#define PWM_MOTOR_2  1   // GPIO15, pwmchip3/pwm0
-
-// USED IN BTS7960.C
+// BTS7960 compatibility aliases for forward/reverse PWM inputs.
 #define BTS_RPWM  0   // GPIO12, pwmchip3/pwm1
 #define BTS_LPWM  1   // GPIO15, pwmchip3/pwm0
 
@@ -31,12 +27,12 @@ int pwm_set_frequency(int frequency_hz);
 
 // Set the duty cycle for a specific motor as a percentage (0 - 100).
 // 0 = motor stopped, 100 = full speed.
-// motor: PWM_MOTOR_1 or PWM_MOTOR_2
+// motor: channel index (0 or 1), e.g. BTS_RPWM or BTS_LPWM
 // Returns 0 on success, -1 on failure.
 int pwm_set_duty_cycle(int motor, int duty_percent);
 
 // Enable or disable PWM output for a specific motor.
-// motor: PWM_MOTOR_1 or PWM_MOTOR_2
+// motor: channel index (0 or 1), e.g. BTS_RPWM or BTS_LPWM
 // Returns 0 on success, -1 on failure.
 int pwm_enable(int motor, bool enable);
 

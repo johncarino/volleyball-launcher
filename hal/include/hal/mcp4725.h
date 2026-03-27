@@ -15,17 +15,17 @@
 #include <stdint.h>
 
 // Default I2C bus and address (A0 tied to GND)
-#define MCP4725_I2C_BUS      1
-#define MCP4725_I2C_ADDR     0x60
+#define MCP4725_I2C_BUS 1
+#define MCP4725_I2C_ADDR 0x60
 
 // DAC resolution
-#define MCP4725_MAX_VALUE     4095   // 12-bit full-scale
+#define MCP4725_MAX_VALUE 4095   // 12-bit full-scale
 
 // MCP4725 VDD in millivolts (determines analog output ceiling)
-#define MCP4725_VDD_MV        5000
+#define MCP4725_VDD_MV 5000
 
 // Maximum throttle voltage the motor controller expects (mV)
-#define MCP4725_THROTTLE_MAX_MV  4300
+#define MCP4725_THROTTLE_MAX_MV 4300
 
 // Power-down mode selections (bits [2:1] of the command byte)
 typedef enum {
