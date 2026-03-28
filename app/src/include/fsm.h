@@ -4,9 +4,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
+#include <stdlib.h>
 
 #include "calibration.h"
 #include "set.h"
+#include "operation.h"
 
 /*
 * Finite State Machine Header
@@ -33,7 +36,7 @@ typedef struct {
 
 void fsm_init(fsm_state_t *state);
 
-void fsm_update(fsm_state_t *state);
+int fsm_update(fsm_state_t *state);
 
 void fsm_handle_input(fsm_state_t *state, int input);
 

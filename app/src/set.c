@@ -72,3 +72,47 @@ void save_set(int set_index) {
     set_seq[set_index].yaw_angle = yaw_angle[curr_machine_position][curr_target_location][curr_tempo];
     set_seq[set_index].rpm_output = rpm_output[curr_machine_position][curr_target_location][curr_tempo];
 }
+
+void common_sets() {
+    switch(curr_machine_position) {
+        case 0:
+            curr_target_location = 1;
+            curr_tempo = 0;
+            save_set(0);
+            curr_target_location = 1;
+            curr_tempo = 3;
+            save_set(1);
+            curr_target_location = 4;
+            save_set(2);
+            curr_target_location = 2;
+            curr_tempo = 2;
+            save_set(3);
+            break;
+        case 2:
+            curr_target_location = 0;
+            curr_tempo = 1;
+            save_set(0);
+            curr_target_location = 0;
+            curr_tempo = 3;
+            save_set(1);
+            curr_target_location = 3;
+            save_set(2);
+            curr_target_location = 2;
+            curr_tempo = 2;
+            save_set(3);
+            break;
+        default:
+            curr_target_location = 0;
+            curr_tempo = 1;
+            save_set(0);
+            curr_target_location = 0;
+            curr_tempo = 3;
+            save_set(1);
+            curr_target_location = 0;
+            save_set(2);
+            curr_target_location = 2;
+            curr_tempo = 2;
+            save_set(3);
+            break;
+    }
+}

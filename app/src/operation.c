@@ -6,6 +6,8 @@ float curr_yaw_angle = 0.0;
 float tilt_coeff = 1;
 float yaw_coeff = 1;
 
+tb6600_t motor;
+
 void operation_init() {
 
 
@@ -19,11 +21,18 @@ void operation_init() {
     //init mcp4725
     if (mcp4725_init(MCP4725_I2C_BUS, MCP4725_I2C_ADDR) != 0) {
         fprintf(stderr, "Failed to initialize MCP4725 — is I2C enabled?\n");
-        return -1;
+        return;
+    }
+
+    //init bts7960
+    if (bts_init() != 0) {
+        fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
+        return;
     }
 
     set_machine(0);
 }
+
 void tilt_signal(float angle) {
     float delta_angle = angle - curr_tilt_angle;
     long tilt_duration = 0.0;
@@ -46,6 +55,7 @@ void tilt_signal(float angle) {
         //tilt_duration = delta_angle * tilt_coeff;
         reverse_ms(duty_cycle, tilt_duration);
     }
+    bts_cleanup();
 
     curr_tilt_angle = angle;
 }
@@ -81,18 +91,20 @@ void yaw_signal(float angle) {
 void speed_signal(float speed) {
     uint16_t mv = 0;
     //convert speed to mv
+    (void)speed;
     mcp4725_set_mv(mv);
 }
 void set_machine(int set_index) {
     //start the machine for set index
     //run in parallel?
-    tilt_signal(set_seq[set_index]->tilt_angle);
-    yaw_signal(set_seq[set_index]->yaw_angle);
+    tilt_signal(set_seq[set_index].tilt_angle);
+    yaw_signal(set_seq[set_index].yaw_angle);
 
     //run after aiming is done
-    speed_signal(set_seq[set_index]->rpm_output);
+    speed_signal(set_seq[set_index].rpm_output);
 }
 
+/*
 void machine_operating() {
     int curr_set_idx = 1;
     while(stop isnt invoked) {
@@ -111,3 +123,4 @@ void machine_operating() {
         }
     }
 }
+*/

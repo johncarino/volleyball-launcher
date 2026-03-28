@@ -31,6 +31,9 @@ int set_machine_position(int position);
 int choose_target_location(int target);
 int choose_tempo(int tempo);
 
-void save_set(int set_index, float launch_speed, float tilt_angle, float rpm_output);
+void advanced_save_set(int set_index, float launch_speed, float tilt_angle, float yaw_angle, float rpm_output);
+void save_set(int set_index);
+
+void common_sets();
 
 #endif // SET_H

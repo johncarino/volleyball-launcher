@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include "include/fsm.h"
+#include "fsm.h"
 
 
 int main(void) {
@@ -21,7 +21,9 @@ int main(void) {
 
     while (true) {
 
-        fsm_update(&main_state);
+        if (fsm_update(&main_state) == 0) {
+            break;
+        }
 
         scanf("%d", &user_input);
 
