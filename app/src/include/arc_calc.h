@@ -60,6 +60,8 @@ void arc_calc_params(float net_height, float court_width, float court_length);
 
 void calculation();
 
+void yaw_calculation();
+
 float landing_position(float xi, float yi, float theta, float rpm, float yf);
 
 #endif //ARC_CALC_H

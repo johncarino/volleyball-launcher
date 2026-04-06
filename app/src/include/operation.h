@@ -20,6 +20,7 @@
 */
 
 void operation_init();
+void operation_cleanup();
 
 void tilt_signal(float angle);
 void yaw_signal(float angle);

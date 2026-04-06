@@ -53,7 +53,6 @@ void arc_calc_params(float net_height, float court_width, float court_length) {
 //xi = machine_x
 
 void calculation() {
-    //replace with calculation logic
 
     //x displacement
     float dx;
@@ -98,6 +97,43 @@ void calculation() {
                 launch_speed[i][j][k] = v0;
                 tilt_angle[i][j][k] = theta;
                 rpm_output[i][j][k] = rpm;
+            }
+        }
+    }
+
+    yaw_calculation();
+}
+
+void yaw_calculation() {
+    int left = 30;
+    int right = -30;
+
+    for (int i = 0; i < NUM_MACHINE_POSITIONS; i++) {
+        if (i == 0) {
+            for (int j = 0; j < NUM_TARGETS; j++) {
+                for (int k = 0; k < NUM_TEMPOS; k++) {
+                    yaw_angle[i][j][k] = left;
+                }
+            }
+        }
+        else if (i == NUM_MACHINE_POSITIONS - 1) {
+            for (int j = 0; j < NUM_TARGETS; j++) {
+                for (int k = 0; k < NUM_TEMPOS; k++) {
+                    yaw_angle[i][j][k] = right;
+                }
+            }
+        }
+        else { //think of a better way to do this
+            //int relative_pos = NUM_MACHINE_POSITIONS / 2 - 1;
+            for (int j = 0; j < NUM_TARGETS; j++) {
+                for (int k = 0; k < NUM_TEMPOS; k++) {
+                    if (j < NUM_TARGETS / 2) {
+                        yaw_angle[i][j][k] = left;
+                    }
+                    else {
+                        yaw_angle[i][j][k] = right;
+                    }
+                }
             }
         }
     }

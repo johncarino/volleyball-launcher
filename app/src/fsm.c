@@ -1,6 +1,7 @@
 #include "fsm.h"
 
 void fsm_init(fsm_state_t *state) {
+    
     state->mode = MODE_CALIBRATION;
 
     arc_calc_params(STANDARD_NET_HEIGHT, STANDARD_COURT_WIDTH, STANDARD_COURT_LENGTH);
@@ -78,7 +79,8 @@ int fsm_update(fsm_state_t *state) {
         case MODE_OPERATION:
             printf("Entered Operation Mode\n");
             operation_init();
-            set_machine(0);
+            //homing sequence?
+            //set_machine(0);
 
             char set_n;
 
@@ -93,11 +95,14 @@ int fsm_update(fsm_state_t *state) {
                 int n = set_n - '0';
 
                 if (n >= 0 && n <= 3) {
+                    printf("Running set %d\n", n);
                     set_machine(n);
                 } else {
                     printf("Invalid input\n");
                 }
             }
+            operation_cleanup();
+
             state->mode = MODE_SET;
             fsm_update(state);  // Invoke again after mode change
             break;

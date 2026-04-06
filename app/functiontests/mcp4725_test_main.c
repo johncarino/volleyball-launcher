@@ -27,6 +27,7 @@
 
 static volatile bool s_running = true;
 static const uint16_t THROTTLE_KEYBOARD_MAX_MV = 3900;
+static mcp4725_t dac1 = MCP4725_INIT_ZERO;  // Motor 1 – I2C bus 1
 
 static void signal_handler(int sig)
 {
@@ -54,7 +55,7 @@ static MAYBE_UNUSED int test_raw_output(void)
         printf("  raw = %4u  (expected ≈ %.2f V)\n",
                steps[i],
                (float)steps[i] * MCP4725_VDD_MV / MCP4725_MAX_VALUE / 1000.0f);
-        if (mcp4725_set_raw(steps[i]) != 0) {
+        if (mcp4725_set_raw(&dac1, steps[i]) != 0) {
             fprintf(stderr, "  FAIL: mcp4725_set_raw(%u)\n", steps[i]);
             return -1;
         }
@@ -73,7 +74,7 @@ static MAYBE_UNUSED int test_mv_output(void)
 
     for (int i = 0; i < n && s_running; i++) {
         printf("  target = %u mV\n", mv_steps[i]);
-        if (mcp4725_set_mv(mv_steps[i]) != 0) {
+        if (mcp4725_set_mv(&dac1, mv_steps[i]) != 0) {
             fprintf(stderr, "  FAIL: mcp4725_set_mv(%u)\n", mv_steps[i]);
             return -1;
         }
@@ -90,7 +91,7 @@ static MAYBE_UNUSED int test_throttle(void)
     for (int pct = 0; pct <= 100 && s_running; pct += 10) {
         float expected_v = (float)pct * MCP4725_THROTTLE_MAX_MV / 100.0f / 1000.0f;
         printf("  throttle = %3d%%  (expected ≈ %.2f V)\n", pct, expected_v);
-        if (mcp4725_set_throttle(pct) != 0) {
+        if (mcp4725_set_throttle(&dac1, pct) != 0) {
             fprintf(stderr, "  FAIL: mcp4725_set_throttle(%d)\n", pct);
             return -1;
         }
@@ -100,7 +101,7 @@ static MAYBE_UNUSED int test_throttle(void)
     return 0;
 }
 
-static int test_keyboard_throttle(void)
+static MAYBE_UNUSED int test_keyboard_throttle(void)
 {
     char input[64];
 
@@ -148,7 +149,7 @@ static int test_keyboard_throttle(void)
 
         uint16_t mv = (uint16_t)((uint32_t)pct * THROTTLE_KEYBOARD_MAX_MV / 100U);
 
-        if (mcp4725_set_mv(mv) != 0) {
+        if (mcp4725_set_mv(&dac1, mv) != 0) {
             fprintf(stderr, "  FAIL: mcp4725_set_mv(%u)\n", mv);
             return -1;
         }
@@ -163,11 +164,67 @@ static int test_keyboard_throttle(void)
     return 0;
 }
 
+static MAYBE_UNUSED int test_keyboard_mv(void)
+{
+    char input[64];
+
+    printf("\n--- Test: Keyboard mV control (0-%u mV, q to quit) ---\n",
+           (unsigned)MCP4725_VDD_MV);
+
+    while (s_running) {
+        printf("  Enter mV [0-%u] or q: ", (unsigned)MCP4725_VDD_MV);
+        fflush(stdout);
+
+        if (!fgets(input, sizeof(input), stdin)) {
+            return 0;
+        }
+
+        if (input[0] == 'q' || input[0] == 'Q') {
+            break;
+        }
+
+        errno = 0;
+        char *endptr = NULL;
+        long mv = strtol(input, &endptr, 10);
+
+        if (errno != 0 || endptr == input) {
+            printf("  Invalid input. Enter a number or q.\n");
+            continue;
+        }
+
+        while (*endptr == ' ' || *endptr == '\t') {
+            endptr++;
+        }
+        if (*endptr != '\n' && *endptr != '\0') {
+            printf("  Invalid input. Enter a number or q.\n");
+            continue;
+        }
+
+        if (mv < 0) {
+            mv = 0;
+        }
+        if (mv > MCP4725_VDD_MV) {
+            printf("  Clamped to %u mV max.\n", (unsigned)MCP4725_VDD_MV);
+            mv = MCP4725_VDD_MV;
+        }
+
+        if (mcp4725_set_mv(&dac1, (uint16_t)mv) != 0) {
+            fprintf(stderr, "  FAIL: mcp4725_set_mv(%ld)\n", mv);
+            return -1;
+        }
+
+        printf("  Applied %ld mV (%.2f V)\n", mv, (float)mv / 1000.0f);
+    }
+
+    printf("  PASS\n");
+    return 0;
+}
+
 static MAYBE_UNUSED int test_eeprom(void)
 {
     printf("\n--- Test 5: EEPROM write (mid-scale 2048) ---\n");
 
-    if (mcp4725_write_eeprom(2048) != 0) {
+    if (mcp4725_write_eeprom(&dac1, 2048) != 0) {
         fprintf(stderr, "  FAIL: mcp4725_write_eeprom(2048)\n");
         return -1;
     }
@@ -187,7 +244,7 @@ static MAYBE_UNUSED int test_power_down(void)
 
     for (int i = 0; i < 4 && s_running; i++) {
         printf("  mode: %s\n", labels[i]);
-        if (mcp4725_set_power_down(modes[i]) != 0) {
+        if (mcp4725_set_power_down(&dac1, modes[i]) != 0) {
             fprintf(stderr, "  FAIL: mcp4725_set_power_down(%s)\n", labels[i]);
             return -1;
         }
@@ -200,13 +257,13 @@ static MAYBE_UNUSED int test_power_down(void)
 int main(void)
 {
     printf("=== MCP4725 DAC Functional Test ===\n");
-    printf("Bus: /dev/i2c-%d  Addr: 0x%02x\n", MCP4725_I2C_BUS, MCP4725_I2C_ADDR);
+    printf("Bus: /dev/i2c-%d  Addr: 0x%02x\n", MCP4725_I2C_BUS1, MCP4725_I2C_ADDR);
     printf("VDD: %d mV   Throttle max: %d mV\n\n", MCP4725_VDD_MV, MCP4725_THROTTLE_MAX_MV);
 
     signal(SIGINT,  signal_handler);
     signal(SIGTERM, signal_handler);
 
-    if (mcp4725_init(MCP4725_I2C_BUS, MCP4725_I2C_ADDR) != 0) {
+    if (mcp4725_init(&dac1, MCP4725_I2C_BUS1, MCP4725_I2C_ADDR) != 0) {
         fprintf(stderr, "Failed to initialize MCP4725 — is I2C enabled?\n");
         return -1;
     }
@@ -215,15 +272,16 @@ int main(void)
     // Keep full suite available, but run only keyboard mode for now:
     // if (s_running && (rc = test_raw_output())   != 0) goto done;
     // if (s_running && (rc = test_mv_output())    != 0) goto done;
+    if (s_running && (rc = test_keyboard_mv())   != 0) goto done;
     // if (s_running && (rc = test_throttle())     != 0) goto done;
-    if (s_running && (rc = test_keyboard_throttle()) != 0) goto done;
+    //if (s_running && (rc = test_keyboard_throttle()) != 0) goto done;
     // if (s_running && (rc = test_eeprom())       != 0) goto done;
     // if (s_running && (rc = test_power_down())   != 0) goto done;
 
 done:
     // Always return output to 0 V and clean up.
-    mcp4725_set_raw(0);
-    mcp4725_cleanup();
+    mcp4725_set_raw(&dac1, 0);
+    mcp4725_cleanup(&dac1);
 
     if (rc == 0 && s_running) {
         printf("\n=== ALL TESTS PASSED ===\n");

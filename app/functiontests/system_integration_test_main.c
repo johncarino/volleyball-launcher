@@ -23,6 +23,7 @@
 #define ROT_STEP_DELAY_US 500
 
 static volatile sig_atomic_t s_running = 1;
+static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 
 static void signal_handler(int sig)
 {
@@ -133,7 +134,7 @@ static int launcher_menu(void)
             continue;
         }
 
-        if (mcp4725_set_mv((uint16_t)mv) != 0) {
+        if (mcp4725_set_mv(&dac1, (uint16_t)mv) != 0) {
             fprintf(stderr, "Failed to set launcher voltage to %.3f V\n", mv / 1000.0);
             continue;
         }
@@ -231,7 +232,7 @@ int main(void)
         return 1;
     }
 
-    if (mcp4725_init(MCP4725_I2C_BUS, MCP4725_I2C_ADDR) != 0) {
+    if (mcp4725_init(&dac1, MCP4725_I2C_BUS1, MCP4725_I2C_ADDR) != 0) {
         fprintf(stderr, "Failed to initialize MCP4725\n");
         bts_cleanup();
         return 1;
@@ -239,7 +240,7 @@ int main(void)
 
     if (tb6600_init(&motor, 1) != 0) {
         fprintf(stderr, "Failed to initialize TB6600\n");
-        mcp4725_cleanup();
+        mcp4725_cleanup(&dac1);
         bts_cleanup();
         return 1;
     }
@@ -293,8 +294,8 @@ int main(void)
     }
 
     printf("\nShutting down and freeing resources...\n");
-    mcp4725_set_raw(0);
-    mcp4725_cleanup();
+    mcp4725_set_raw(&dac1, 0);
+    mcp4725_cleanup(&dac1);
     bts_cleanup();
     tb6600_enable(&motor, 0);
     tb6600_close(&motor);

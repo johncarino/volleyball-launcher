@@ -3,6 +3,10 @@
 // Volleyball launcher: two DC motors controlled via PWM on ZS-X11H boards.
 // Runs on BeagleY-AI.
 
+//ASSUMING LINEAR
+//171.111111... MS PER DEGREE FORWARD
+//
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -30,28 +34,50 @@ int main(void)
         return 1;
     }
 
-    printf("\nForward 100%% for 4s...\n");
-    if (s_running && forward_ms(100, 4000) != 0) {
-        fprintf(stderr, "Forward command failed\n");
-        bts_cleanup();
-        return 1;
-    }
+    /* --- Interactive test --- */
+    printf("\n--- Interactive mode (enter commands manually) ---\n");
 
-    if (s_running) {
-        printf("Pause 2s...\n");
-        sleep(2);
-    }
+    while (s_running) {
+        char dir;
+        int percent;
+        long duration_ms;
 
-    printf("Reverse 100%% for 4s...\n");
-    if (s_running && reverse_ms(100, 4000) != 0) {
-        fprintf(stderr, "Reverse command failed\n");
-        bts_cleanup();
-        return 1;
-    }
+        printf("\nEnter direction (f=forward, r=reverse, q=quit): ");
+        if (scanf(" %c", &dir) != 1) break;
+        if (dir == 'q' || dir == 'Q') break;
+        if (dir != 'f' && dir != 'F' && dir != 'r' && dir != 'R') {
+            printf("Invalid direction. Use 'f', 'r', or 'q'.\n");
+            continue;
+        }
 
-    if (s_running) {
-        printf("Pause 2s...\n");
-        sleep(2);
+        printf("Enter percent (0-100): ");
+        if (scanf("%d", &percent) != 1) break;
+        if (percent < 0 || percent > 100) {
+            printf("Percent must be between 0 and 100.\n");
+            continue;
+        }
+
+        printf("Enter duration (ms): ");
+        if (scanf("%ld", &duration_ms) != 1) break;
+        if (duration_ms <= 0) {
+            printf("Duration must be positive.\n");
+            continue;
+        }
+
+        int rc;
+        if (dir == 'f' || dir == 'F') {
+            printf("\nForward %d%% for %ld ms...\n", percent, duration_ms);
+            rc = forward_ms(percent, duration_ms);
+        } else {
+            printf("\nReverse %d%% for %ld ms...\n", percent, duration_ms);
+            rc = reverse_ms(percent, duration_ms);
+        }
+
+        if (rc != 0) {
+            fprintf(stderr, "Command failed\n");
+            bts_cleanup();
+            return 1;
+        }
     }
 
     bts_cleanup();
