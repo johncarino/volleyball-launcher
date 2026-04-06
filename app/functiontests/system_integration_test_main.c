@@ -96,7 +96,7 @@ static void print_main_menu(void)
     fflush(stdout);
 }
 
-static int launcher_menu(void)
+static int launcher_menu(mcp4725_t *dac)
 {
     char input[128];
 
@@ -133,7 +133,7 @@ static int launcher_menu(void)
             continue;
         }
 
-        if (mcp4725_set_mv((uint16_t)mv) != 0) {
+        if (mcp4725_set_mv(dac, (uint16_t)mv) != 0) {
             fprintf(stderr, "Failed to set launcher voltage to %.3f V\n", mv / 1000.0);
             continue;
         }
@@ -217,6 +217,7 @@ static int rotation_menu(tb6600_t *motor, int steps_per_increment)
 int main(void)
 {
     tb6600_t motor;
+    mcp4725_t dac = MCP4725_INIT_ZERO;
     char input[128];
     int ms_per_10mm = DEFAULT_MS_PER_10MM;
     int steps_per_increment = DEFAULT_ROT_STEPS;
@@ -231,7 +232,7 @@ int main(void)
         return 1;
     }
 
-    if (mcp4725_init(MCP4725_I2C_BUS, MCP4725_I2C_ADDR) != 0) {
+    if (mcp4725_init(&dac, MCP4725_I2C_BUS, MCP4725_I2C_ADDR) != 0) {
         fprintf(stderr, "Failed to initialize MCP4725\n");
         bts_cleanup();
         return 1;
@@ -239,7 +240,7 @@ int main(void)
 
     if (tb6600_init(&motor, 1) != 0) {
         fprintf(stderr, "Failed to initialize TB6600\n");
-        mcp4725_cleanup();
+        mcp4725_cleanup(&dac);
         bts_cleanup();
         return 1;
     }
@@ -270,7 +271,7 @@ int main(void)
         if (is_quit_token(input)) {break;}
 
         if (strcmp(input, "1") == 0 || strcmp(input, "launcher") == 0) {
-            if (launcher_menu() != 0) {
+            if (launcher_menu(&dac) != 0) {
                 break;
             }
             continue;
@@ -293,8 +294,8 @@ int main(void)
     }
 
     printf("\nShutting down and freeing resources...\n");
-    mcp4725_set_raw(0);
-    mcp4725_cleanup();
+    mcp4725_set_raw(&dac, 0);
+    mcp4725_cleanup(&dac);
     bts_cleanup();
     tb6600_enable(&motor, 0);
     tb6600_close(&motor);

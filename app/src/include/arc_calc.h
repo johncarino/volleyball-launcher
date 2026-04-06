@@ -46,13 +46,10 @@ extern const float target_y; // y-coordinate of target (fixed)
 extern float peak_height[NUM_TEMPOS];
 
 extern float tilt_angle[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
-extern float tilt_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
 
 extern float yaw_angle[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
-extern float yaw_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
 
 extern float launch_speed[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
-extern float launch_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
 
 extern float rpm_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
 

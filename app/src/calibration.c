@@ -28,7 +28,7 @@ void set_net_height(float height) {
     }
     net_height = height;
 
-    arc_calc_params(net_height, court_length, court_width);
+    arc_calc_params(net_height, court_width, court_length);
 
     //test
     printf("Net height set to %.2f meters.\n", net_height);
@@ -47,7 +47,7 @@ void set_court_dimensions(float length, float width) {
     court_length = length;
     court_width = width;
 
-    arc_calc_params(net_height, court_length, court_width);
+    arc_calc_params(net_height, court_width, court_length);
 
     //test
     printf("Court dimensions set to %.2f meters (length) x %.2f meters (width).\n", court_length, court_width);
@@ -56,7 +56,7 @@ void set_court_dimensions(float length, float width) {
 
 void calibrate_user_input(char input, float value) {
 
-    arc_calc_params(net_height, court_length, court_width);
+    arc_calc_params(net_height, court_width, court_length);
 
     switch (input) {
         case 'w':

@@ -18,9 +18,11 @@ float yaw_angle[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
 
 float launch_speed[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
 
-float launch_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
-
 float rpm_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+
+// Forward depth: distance from machine baseline to target landing zone.
+// Set by arc_calc_params() from court_length.
+static float s_forward_depth = 0.0f;
 
 void arc_calc_params(float net_height, float court_width, float court_length) {
     //launch positions (metre)
@@ -41,8 +43,8 @@ void arc_calc_params(float net_height, float court_width, float court_length) {
     peak_height[2] = net_height + 1.5; // tempo 3
     peak_height[3] = net_height + 2.0; // tempo 4
 
-    //court length unused
-    (void)court_length;
+    //forward depth: machine at own endline, target at center of opponent's half
+    s_forward_depth = court_length * 0.75f;
 
     calculation();
 
@@ -53,10 +55,9 @@ void arc_calc_params(float net_height, float court_width, float court_length) {
 //xi = machine_x
 
 void calculation() {
-    //replace with calculation logic
 
-    //x displacement
-    float dx;
+    //lateral displacement (signed, for yaw) and total horizontal distance
+    float dx_signed, dx_lateral, d_horiz;
     //launch velocity
     float vy0, vx0, v0;
     //time to peak, time from peak to target, total time of flight
@@ -66,7 +67,16 @@ void calculation() {
 
     for (int i = 0; i < NUM_MACHINE_POSITIONS; i++) {
         for (int j = 0; j < NUM_TARGETS; j++) {
-            dx = fabs(target_x[j] - machine_x[i]);
+            //signed lateral offset (positive = target to the right of machine)
+            dx_signed = target_x[j] - machine_x[i];
+            dx_lateral = fabs(dx_signed);
+
+            //true horizontal distance accounting for depth across court
+            d_horiz = sqrt(dx_lateral*dx_lateral + s_forward_depth*s_forward_depth);
+
+            //yaw angle: horizontal aiming angle relative to straight ahead
+            //positive = right, negative = left (radians)
+            float yaw = atan2(dx_signed, s_forward_depth);
 
             for (int k = 0; k < NUM_TEMPOS; k++) {
                 //vertical launch velocity calculation
@@ -81,15 +91,13 @@ void calculation() {
                 //total time of flight calculation
                 t_total = t_up + t_down;
 
-                //horizontal launch velocity calculation
-                vx0 = dx / t_total;
+                //horizontal launch velocity (using true 3D distance)
+                vx0 = d_horiz / t_total;
 
                 //total launch speed calculation
                 v0 = sqrt(vx0*vx0 + vy0*vy0);
 
-                //launch angle calculation
-                printf("vy0: %.2f, vx0: %.2f\n", vy0, vx0); // Debugging output
-                
+                //launch tilt angle calculation
                 theta = atan(vy0 / vx0);
 
                 rpm = (v0 / (2*M_PI*WHEEL_R)) * 60 / EFF_K;
@@ -97,6 +105,7 @@ void calculation() {
                 //store results
                 launch_speed[i][j][k] = v0;
                 tilt_angle[i][j][k] = theta;
+                yaw_angle[i][j][k] = yaw;
                 rpm_output[i][j][k] = rpm;
             }
         }
