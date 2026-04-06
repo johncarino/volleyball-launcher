@@ -40,6 +40,4 @@ int fsm_update(fsm_state_t *state);
 
 void fsm_handle_input(fsm_state_t *state, int input);
 
-fsm_state_t fsm_get_state();
-
 #endif // FSM_H

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #include "set.h"
 #include "hal/bts7960.h"
@@ -19,15 +20,14 @@
 * 4. User can shuffle the set sequence
 */
 
-void operation_init();
+void operation_init(void);
 
 void tilt_signal(float angle);
 void yaw_signal(float angle);
 void speed_signal(float speed);
-void set_machine(int set_index);
-void machine_operating();
-void stop_machine();
-void repeat_set();
-void shuffle_set_sequence();
+int  set_machine(int set_index);
+
+void flywheel_stop(void);
+void operation_cleanup(void);
 
 #endif // OPERATION_H

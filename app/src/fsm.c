@@ -78,12 +78,11 @@ int fsm_update(fsm_state_t *state) {
         case MODE_OPERATION:
             printf("Entered Operation Mode\n");
             operation_init();
-            set_machine(0);
 
             char set_n;
 
             while (true) {
-                printf("Enter set 0 to 3, or q: ");
+                printf("Enter set 0 to 3, or q to quit: ");
                 scanf(" %c", &set_n);
 
                 if (set_n == 'q') {
@@ -93,11 +92,17 @@ int fsm_update(fsm_state_t *state) {
                 int n = set_n - '0';
 
                 if (n >= 0 && n <= 3) {
-                    set_machine(n);
+                    if (set_machine(n) != 0) {
+                        printf("Failed to execute set %d\n", n);
+                    }
                 } else {
                     printf("Invalid input\n");
                 }
             }
+
+            // Shut down all operation hardware before leaving
+            operation_cleanup();
+
             state->mode = MODE_SET;
             fsm_update(state);  // Invoke again after mode change
             break;

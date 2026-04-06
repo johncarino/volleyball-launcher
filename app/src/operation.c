@@ -9,12 +9,26 @@
 #define REVERSE_SPEED_RATIO 0.4f     // Reverse motor capped at 40% of max RPM
 
 // ---------------------------------------------------------------------------
+// Launch timing
+// ---------------------------------------------------------------------------
+#define SPINUP_DELAY_MS     2500     // Time for flywheel to reach target RPM
+
+// ---------------------------------------------------------------------------
+// Stepper motion parameters (1/4 microstepping, 800 steps/rev)
+// ---------------------------------------------------------------------------
+#define YAW_START_DELAY_US  2000   // Slow start (250 steps/sec)
+#define YAW_CRUISE_DELAY_US  600   // Cruise speed — bearing reduces load
+#define YAW_ACCEL_STEPS      100   // Steps to ramp up/down
+#define YAW_DIR_SETTLE_US  50000   // 50ms settle after direction change
+
+// ---------------------------------------------------------------------------
 // Actuator calibration coefficients — TODO: calibrate on hardware
 // ---------------------------------------------------------------------------
 // Tilt: linear actuator run-time per radian of angle change
 static float tilt_coeff = 3000.0f;   // ms per radian  (TODO: calibrate)
 // Yaw: stepper steps per radian of rotation
-static float yaw_coeff  = 130.0f;    // steps per radian (TODO: calibrate)
+// 1/4 microstep (800 steps/rev): 800 / (2 * PI) = 127.32
+static float yaw_coeff  = 127.32f;   // steps per radian (1/4 microstep)
 
 // ---------------------------------------------------------------------------
 // Current actuator positions (used for delta calculations)
@@ -90,7 +104,7 @@ void operation_init() {
         return;
     }
 
-    set_machine(0);
+    printf("Operation hardware initialized.\n");
 }
 
 void tilt_signal(float angle) {
@@ -115,17 +129,12 @@ void tilt_signal(float angle) {
         tilt_duration = (long)(delta_angle * tilt_coeff);
         reverse_ms(duty_cycle, tilt_duration);
     }
-    bts_cleanup();
-
     curr_tilt_angle = angle;
 }
 
 void yaw_signal(float angle) {
     float delta_angle = angle - curr_yaw_angle;
     int yaw_steps = 0;
-    //delay of stepper motor, in us
-    //keep this a constant
-    int delay = 500;
 
     if (delta_angle == 0) {
         //no change
@@ -135,15 +144,20 @@ void yaw_signal(float angle) {
         tb6600_set_direction(&motor, 1);
         //convert delta_angle (radians) to yaw steps
         yaw_steps = (int)(delta_angle * yaw_coeff);
-        tb6600_step(&motor, yaw_steps, delay);
     }
     else { // if delta_angle < 0
         tb6600_set_direction(&motor, 0);
         delta_angle = -delta_angle;
         //convert delta_angle (radians) to yaw steps
         yaw_steps = (int)(delta_angle * yaw_coeff);
-        tb6600_step(&motor, yaw_steps, delay);
     }
+
+    // Let DIR line settle before stepping — prevents reverse-stall
+    usleep(YAW_DIR_SETTLE_US);
+
+    // Use acceleration ramp for smooth motion under load
+    tb6600_step_accel(&motor, yaw_steps, YAW_START_DELAY_US,
+                      YAW_CRUISE_DELAY_US, YAW_ACCEL_STEPS);
 
     curr_yaw_angle = angle;
 }
@@ -161,33 +175,68 @@ void speed_signal(float speed) {
            reverse_mv, reverse_mv / 1000.0f,
            forward_mv, forward_mv / 1000.0f);
 }
-void set_machine(int set_index) {
-    //start the machine for set index
-    //run in parallel?
+int set_machine(int set_index) {
+    if (set_index < 0 || set_index >= NUM_SETS) {
+        fprintf(stderr, "Invalid set index %d. Must be 0-%d.\n", set_index, NUM_SETS - 1);
+        return -1;
+    }
+
+    // ----- Phase 1: Position (tilt + yaw) -----
+    printf("Positioning: tilt=%.2f rad, yaw=%.2f rad\n",
+           set_seq[set_index].tilt_angle,
+           set_seq[set_index].yaw_angle);
+
     tilt_signal(set_seq[set_index].tilt_angle);
     yaw_signal(set_seq[set_index].yaw_angle);
 
-    //run after aiming is done
+    printf("Position set. Actuators idle.\n");
+
+    // ----- Phase 2: Await user trigger -----
+    printf("Place ball and press ENTER to launch...\n");
+    // Flush any leftover newlines, then wait for ENTER
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF) { }
+    getchar();
+
+    // ----- Phase 3: Launch (flywheel spin-up) -----
+    printf("Spinning up flywheel (RPM=%.0f)...\n", set_seq[set_index].rpm_output);
     speed_signal(set_seq[set_index].rpm_output);
+
+    // Wait for motors to reach target speed
+    usleep((useconds_t)SPINUP_DELAY_MS * 1000);
+
+    printf("Launched!\n");
+
+    // Stop flywheel after launch
+    flywheel_stop();
+
+    return 0;
 }
 
-/*
-void machine_operating() {
-    int curr_set_idx = 1;
-    while(stop isnt invoked) {
-        if (set once) {
-            if (repeat_set) {
-                repeat_set
-            }
-            else {
-                set_machine(curr_set_idx);
-                curr_set_idx = curr_set_idx++ % NUM_SETS;
-            }
-        }
-
-        if (shuffle sequence) {
-            shuffle set set sequence once
-        }
-    }
+void flywheel_stop(void) {
+    mcp4725_set_mv(&s_dac_rev, 0);
+    mcp4725_set_mv(&s_dac_fwd, 0);
+    printf("Flywheel stopped.\n");
 }
-*/
+
+void operation_cleanup(void) {
+    // Zero out DACs (stop flywheel)
+    flywheel_stop();
+
+    // Disable and close stepper
+    tb6600_enable(&motor, 0);
+    tb6600_close(&motor);
+
+    // Cleanup linear actuator PWM
+    bts_cleanup();
+
+    // Cleanup DACs
+    mcp4725_cleanup(&s_dac_rev);
+    mcp4725_cleanup(&s_dac_fwd);
+
+    // Reset position tracking
+    curr_tilt_angle = 0.0f;
+    curr_yaw_angle  = 0.0f;
+
+    printf("Operation hardware shut down.\n");
+}

@@ -55,9 +55,6 @@ void set_court_dimensions(float length, float width) {
 }
 
 void calibrate_user_input(char input, float value) {
-
-    arc_calc_params(net_height, court_width, court_length);
-
     switch (input) {
         case 'w':
             set_net_height(value);
