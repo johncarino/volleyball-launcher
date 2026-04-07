@@ -116,3 +116,9 @@ void common_sets() {
             break;
     }
 }
+
+void print_sets() {
+    for (int i = 0; i < NUM_SETS; i++) {
+        printf("Set %d: Target Location = %d, Tempo = %d\n", i, curr_target_location, curr_tempo);
+    }
+}

@@ -36,4 +36,6 @@ void save_set(int set_index);
 
 void common_sets();
 
+void print_sets();
+
 #endif // SET_H

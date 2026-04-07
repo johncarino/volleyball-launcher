@@ -1,75 +1,181 @@
 #include "fsm.h"
 
+static bool read_token(char *buf) {
+    return scanf(" %31s", buf) == 1;
+}
+
+static bool is_quit_token(const char *token) {
+    return (token[0] == 'q' || token[0] == 'Q') && token[1] == '\0';
+}
+
+static bool parse_int_token(const char *token, int *out) {
+    char *endptr = NULL;
+    long value = strtol(token, &endptr, 10);
+
+    if (endptr == token || *endptr != '\0') {
+        return false;
+    }
+
+    *out = (int)value;
+    return true;
+}
+
+static bool parse_float_token(const char *token, float *out) {
+    char *endptr = NULL;
+    float value = strtof(token, &endptr);
+
+    if (endptr == token || *endptr != '\0') {
+        return false;
+    }
+
+    *out = value;
+    return true;
+}
+
 void fsm_init(fsm_state_t *state) {
     
     state->mode = MODE_CALIBRATION;
 
     arc_calc_params(STANDARD_NET_HEIGHT, STANDARD_COURT_WIDTH, STANDARD_COURT_LENGTH);
+
+    printf("============= DIME TIME =============\n");
+    printf("Welcome to the Volleyball Launcher!\n");
+    printf("Please follow the prompts to calibrate the machine and set up your desired launch parameters.\n");
+    printf("You can quit at any time by entering 'q'.\n");
+    printf("=====================================\n\n");
 }
 
 int fsm_update(fsm_state_t *state) {
+    char token[32];
+
     switch (state->mode) {
         case MODE_CALIBRATION:
-            printf("Entered Calibration Mode\n");
-            //logic
-            char input;
+            char input = '\0';
             float value;
+            printf("Entering Calibration Mode. You can adjust the following parameters:\n");
             while (true) {
-            printf("Change net height (w), court width (e), or court length (r)? q to quit\n");
-            scanf(" %c", &input);
-            if (input == 'q') {
-                break;
+            printf("Change net height (w), court width (e), or court length (r)\n");
+            printf("Net height: %.2f m\n", get_net_height());
+            printf("Court width: %.2f m\n", get_court_width());
+            printf("Court length: %.2f m\n", get_court_length());
+            printf("Enter t to continue with the current parameters.\n");
+
+            if (!read_token(token)) {
+                return 0;
             }
+            if (is_quit_token(token)) {
+                return 0;
+            }
+            if (token[1] == '\0' && (token[0] == 't' || token[0] == 'T')) {
+                state->mode = MODE_SET;
+                return fsm_update(state);
+            }
+            if (token[1] != '\0' || (token[0] != 'w' && token[0] != 'e' && token[0] != 'r')) {
+                printf("Invalid input. Enter w, e, r, t, or q.\n");
+                continue;
+            }
+
+            input = token[0];
             printf("Enter new value:\n");
-            scanf("%f", &value);
+            if (!read_token(token)) {
+                return 0;
+            }
+            if (is_quit_token(token)) {
+                return 0;
+            }
+            if (!parse_float_token(token, &value)) {
+                printf("Invalid value. Please enter a number.\n");
+                continue;
+            }
             calibrate_user_input(input, value);
             }
             state->mode = MODE_SET;
             fsm_update(state);  // Invoke again after mode change
             break;
         case MODE_SET:
-            printf("Entered Set Mode\n");
+            printf("Entering Set Mode.\n");
+            printf("In Set Mode, you can define machine position, target location, and tempo for your sets.\n");
+
             //logic
             int machine_pos, target_loc, tempo, set_index;
             char cont;
             while (true) {
-                printf("Choose machine position (0 for left, 1 for center, 2 for right):\n");
-                scanf("%d", &machine_pos);
+                printf("Choose machine position (0-2):\n");
+                if (!read_token(token)) {
+                    return 0;
+                }
+                if (is_quit_token(token)) {
+                    return 0;
+                }
+                if (!parse_int_token(token, &machine_pos)) {
+                    printf("Invalid input. Please enter 0, 1, 2, or q.\n");
+                    continue;
+                }
                 set_machine_position(machine_pos);
                 common_sets();
-                printf("start operation with predefined sets? (y/n)\n");
-                scanf(" %c", &cont);
+                printf("The current sets are:\n");
+                print_sets();
+                printf("To begin operation with the current sets, enter y. To customize sets, enter n.\n");
+                printf("To return to calibration mode, enter c.\n");
+                if (!read_token(token)) {
+                    return 0;
+                }
+                if (is_quit_token(token)) {
+                    return 0;
+                }
+                if (token[1] != '\0') {
+                    printf("Invalid input. Please enter y, n, or q.\n");
+                    continue;
+                }
+                cont = token[0];
                 if (cont == 'y') {
                     state->mode = MODE_OPERATION;
                     return fsm_update(state);
                 }
-                printf("Choose target location (0-4):\n");
-                scanf("%d", &target_loc);
-                choose_target_location(target_loc);
-                printf("Choose tempo (0-3):\n");
-                scanf("%d", &tempo);
-                choose_tempo(tempo);
-                printf("Save set to slot 0~3?\n");
-                scanf("%d", &set_index);
-                save_set(set_index);
-                printf("Set saved. Do you want to save another set? (y/n)\n");
-                scanf(" %c", &cont);
-                if (cont == 'n') {
-                    printf("Choose next mode: operation(o), calibration(c), quit(q)\n");
-                    scanf(" %c", &cont);
-                    switch(cont) {
-                        case 'o':
-                            state->mode = MODE_OPERATION;
-                            return fsm_update(state);
-                        case 'c':
-                            state->mode = MODE_CALIBRATION;
-                            return fsm_update(state);
-                        case 'q':
-                            return 0;
-                        default:
-                            printf("Invalid input. Please try again.\n");
-                    }
+                if (cont == 'c') {
+                    state->mode = MODE_CALIBRATION;
+                    return fsm_update(state);
                 }
+                printf("Target Location:   Tempo:\n");
+                printf("Choose target location (0-4)\n");
+                if (!read_token(token)) {
+                    return 0;
+                }
+                if (is_quit_token(token)) {
+                    return 0;
+                }
+                if (!parse_int_token(token, &target_loc)) {
+                    printf("Invalid input. Please enter 0-4.\n");
+                    continue;
+                }
+                choose_target_location(target_loc);
+                printf("Target Location: %d   Tempo:\n", target_loc);
+                printf("Choose tempo (0-3).\n");
+                if (!read_token(token)) {
+                    return 0;
+                }
+                if (is_quit_token(token)) {
+                    return 0;
+                }
+                if (!parse_int_token(token, &tempo)) {
+                    printf("Invalid input. Please enter 0-3\n");
+                    continue;
+                }
+                choose_tempo(tempo);
+                printf("Target Location: %d   Tempo: %d\n", target_loc, tempo);
+                printf("Save set to slot 0~3:\n");
+                if (!read_token(token)) {
+                    return 0;
+                }
+                if (is_quit_token(token)) {
+                    return 0;
+                }
+                if (!parse_int_token(token, &set_index)) {
+                    printf("Invalid input. Please enter 0-3.\n");
+                    continue;
+                }
+                save_set(set_index);
+                printf("Set saved to slot %d.\n", set_index);
             }
             break;
         case MODE_ADVANCED:
@@ -77,18 +183,33 @@ int fsm_update(fsm_state_t *state) {
             //logic
             break;
         case MODE_OPERATION:
-            printf("Entered Operation Mode\n");
+            printf("Entering Operation Mode\n");
+            printf("In Operation Mode, the machine will execute launches based on the defined parameters in Set Mode.\n");
+            printf("You can return to Set Mode at any time by entering 's'.\n");
+            printf("As always, you can quit at any time by entering 'q'.\n");
+
             operation_init();
-            //homing sequence?
-            //set_machine(0);
 
             char set_n;
 
             while (true) {
-                printf("Enter set 0 to 3, or q: ");
-                scanf(" %c", &set_n);
+                printf("Enter set 0 to 3: ");
+                if (!read_token(token)) {
+                    operation_cleanup();
+                    return 0;
+                }
+                if (is_quit_token(token)) {
+                    operation_cleanup();
+                    return 0;
+                }
+                if (token[1] != '\0') {
+                    printf("Invalid input\n");
+                    continue;
+                }
 
-                if (set_n == 'q') {
+                set_n = token[0];
+
+                if (set_n == 's' || set_n == 'S') {
                     break;
                 }
 

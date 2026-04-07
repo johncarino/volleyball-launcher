@@ -14,7 +14,7 @@ int main(void) {
 
     fsm_state_t main_state;
 
-    printf("init main\n");
+    //printf("init main\n");
     fsm_init(&main_state);
 
     int user_input = 0;
@@ -31,6 +31,8 @@ int main(void) {
 
         sleep(1); // Sleep to prevent busy-waiting
     }
+
+    printf("Goodbye! Shutting down the Volleyball Launcher.\n");
 
     return 0;
 }
