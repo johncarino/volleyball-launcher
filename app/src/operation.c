@@ -13,6 +13,8 @@ static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 
 void operation_init() {
 
+    curr_tilt_angle = 15.0;
+    curr_yaw_angle = 0.0;
 
     //init tb6600
     if (tb6600_init(&motor, 1) < 0) {

@@ -20,6 +20,8 @@ typedef struct {
     float tilt_angle;
     float yaw_angle;
     float rpm_output;
+    int target_location;
+    int tempo;
 } set_specs_t;
 
 #define NUM_SETS 4

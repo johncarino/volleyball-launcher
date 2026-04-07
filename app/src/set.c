@@ -61,6 +61,9 @@ void advanced_save_set(int set_index, float launch_speed, float tilt_angle, floa
     }
     set_seq[set_index].rpm_output = rpm_output;
 
+    set_seq[set_index].target_location = -1; //indicate custom set
+    set_seq[set_index].tempo = -1; //indicate custom set
+
     //test
     printf("Set %d saved: Launch Speed = %.2f m/s, Tilt Angle = %.2f degrees, RPM Output = %.2f\n",
            set_index, launch_speed, tilt_angle * 180 / M_PI, rpm_output);
@@ -71,6 +74,8 @@ void save_set(int set_index) {
     set_seq[set_index].tilt_angle = tilt_angle[curr_machine_position][curr_target_location][curr_tempo];
     set_seq[set_index].yaw_angle = yaw_angle[curr_machine_position][curr_target_location][curr_tempo];
     set_seq[set_index].rpm_output = rpm_output[curr_machine_position][curr_target_location][curr_tempo];
+    set_seq[set_index].target_location = curr_target_location;
+    set_seq[set_index].tempo = curr_tempo;
 }
 
 void common_sets() {
@@ -105,10 +110,9 @@ void common_sets() {
             curr_target_location = 0;
             curr_tempo = 1;
             save_set(0);
-            curr_target_location = 0;
-            curr_tempo = 3;
+            curr_tempo = 2;
             save_set(1);
-            curr_target_location = 0;
+            curr_tempo = 3;
             save_set(2);
             curr_target_location = 2;
             curr_tempo = 2;
@@ -119,6 +123,6 @@ void common_sets() {
 
 void print_sets() {
     for (int i = 0; i < NUM_SETS; i++) {
-        printf("Set %d: Target Location = %d, Tempo = %d\n", i, curr_target_location, curr_tempo);
+        printf("Set %d: Target Location = %d, Tempo = %d\n", i, set_seq[i].target_location, set_seq[i].tempo);
     }
 }

@@ -47,7 +47,7 @@ void arc_calc_params(float net_height, float court_width, float court_length) {
     calculation();
 
     //test
-    printf("Arc calculation parameters updated based on calibration:\n");
+    //printf("Arc calculation parameters updated based on calibration:\n");
 }
 //xf = target_x
 //xi = machine_x
@@ -87,7 +87,7 @@ void calculation() {
                 v0 = sqrt(vx0*vx0 + vy0*vy0);
 
                 //launch angle calculation
-                printf("vy0: %.2f, vx0: %.2f\n", vy0, vx0); // Debugging output
+                //printf("vy0: %.2f, vx0: %.2f\n", vy0, vx0); // Debugging output
                 
                 theta = atan(vy0 / vx0);
 
