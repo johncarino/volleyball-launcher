@@ -21,6 +21,7 @@
 
 void operation_init();
 void operation_cleanup();
+void homing_sequence();
 
 void tilt_signal(float angle);
 void yaw_signal(float angle);

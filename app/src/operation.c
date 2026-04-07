@@ -48,6 +48,16 @@ void operation_cleanup() {
     bts_cleanup();
 }
 
+void homing_sequence() {
+    //home the machine to a known position
+    //for now, just set tilt and yaw to 0
+    printf("Homing sequence initiated. Moving to default position...\n");
+    tilt_signal(0.0);
+    yaw_signal(0.0);
+    curr_tilt_angle = 0.0;
+    curr_yaw_angle = 0.0;
+}
+
 void tilt_signal(float angle) {
     //convert radians to degrees
     d_angle = angle * 180.0 / 3.14159;
