@@ -23,7 +23,7 @@
 extern float curr_tilt_angle;
 extern float curr_yaw_angle;
 
-tb6600_t motor;
+extern tb6600_t motor;
 
 //communicates with the hal files to send signal to the machine
 void tilt_signal(float angle);
@@ -33,6 +33,7 @@ void speed_signal(float speed);
 void set_machine(int set_index);
 
 void operation_init();
+void operation_cleanup();
 void stop_machine();
 void repeat_set();
 void shuffle_set_sequence();
