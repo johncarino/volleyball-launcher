@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
 
 #include "set.h"
 #include "hal/bts7960.h"

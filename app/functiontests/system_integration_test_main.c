@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <termios.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #include "hal/bts7960.h"
 #include "hal/mcp4725.h"
@@ -17,8 +20,7 @@
 
 #define LAUNCHER_MIN_MV 1500
 #define LAUNCHER_MAX_MV 3900
-#define ACTUATOR_SPEED_PERCENT 70
-#define DEFAULT_MS_PER_10MM 300
+#define ACTUATOR_DUTY 100
 #define DEFAULT_ROT_STEPS 100
 #define ROT_STEP_DELAY_US 500
 
@@ -55,20 +57,6 @@ static int read_line(char *buf, size_t size)
     if (!s_running) {return -1;}
     if (fgets(buf, (int)size, stdin) == NULL) {return -1;}
     trim_newline(buf);
-    return 0;
-}
-
-static int parse_int_strict(const char *s, int *out)
-{
-    long val;
-    char *endptr = NULL;
-
-    if (s == NULL || out == NULL || s[0] == '\0') {return -1;}
-
-    val = strtol(s, &endptr, 10);
-    if (*endptr != '\0') {return -1;}
-    if (val < -2147483648L || val > 2147483647L) {return -1;}
-    *out = (int)val;
     return 0;
 }
 
@@ -144,40 +132,80 @@ static int launcher_menu(void)
     return -1;
 }
 
-static int angle_menu(int ms_per_10mm)
+static int angle_menu(void)
 {
-    char input[128];
+    struct termios old_tio, new_tio;
+    int moving = 0; // 0=stopped, 1=forward, -1=reverse
+    int idle_count = 0;
+    const int idle_threshold = 3; // stop after 3 consecutive timeouts (~300ms)
+
+    printf("\n[angle] Hold UP arrow to extend, DOWN arrow to retract.\n");
+    printf("Press 'b' to return to main menu, 'q' to quit.\n");
+    printf("Actuator runs at %d%% duty while key is held.\n", ACTUATOR_DUTY);
+    fflush(stdout);
+
+    // Switch terminal to raw mode with timeout
+    tcgetattr(STDIN_FILENO, &old_tio);
+    new_tio = old_tio;
+    new_tio.c_lflag &= ~(ICANON | ECHO);
+    new_tio.c_cc[VMIN] = 0;
+    new_tio.c_cc[VTIME] = 1; // 100ms timeout
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_tio);
 
     while (s_running) {
-        printf("\n[angle]\n");
-        printf("Commands: e=extend +10mm, r=retract -10mm, b=back, q/Q/exit=quit\n");
-        printf("Actuator speed fixed at %d%%, duration per 10mm: %d ms\n", ACTUATOR_SPEED_PERCENT, ms_per_10mm);
-        printf("Enter command: ");
-        fflush(stdout);
+        unsigned char buf[8];
+        int n = read(STDIN_FILENO, buf, sizeof(buf));
 
-        if (read_line(input, sizeof(input)) != 0) {return -1;}
-        if (strcmp(input, "b") == 0 || strcmp(input, "B") == 0) {return 0;}
-        if (is_quit_token(input)) {return -1;}
+        if (n > 0) {
+            idle_count = 0;
 
-        if (strcmp(input, "e") == 0 || strcmp(input, "E") == 0) {
-            if (forward_ms(ACTUATOR_SPEED_PERCENT, ms_per_10mm) != 0) {
-                fprintf(stderr, "Extend command failed\n");
-            } else {
-                printf("Extended by ~10 mm\n");
+            // Check for 'b' or 'q' single-char commands
+            if (n == 1 && (buf[0] == 'b' || buf[0] == 'B')) {
+                bts_stop();
+                tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
+                printf("\n");
+                return 0;
             }
-            continue;
-        }
-
-        if (strcmp(input, "r") == 0 || strcmp(input, "R") == 0) {
-            if (reverse_ms(ACTUATOR_SPEED_PERCENT, ms_per_10mm) != 0) {
-                fprintf(stderr, "Retract command failed\n");
-            } else {
-                printf("Retracted by ~10 mm\n");
+            if (n == 1 && (buf[0] == 'q' || buf[0] == 'Q')) {
+                bts_stop();
+                tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
+                printf("\n");
+                return -1;
             }
-            continue;
+
+            // Arrow keys: ESC [ A (up) / ESC [ B (down)
+            if (n >= 3 && buf[0] == 0x1b && buf[1] == '[') {
+                if (buf[2] == 'A') { // UP arrow = extend/forward
+                    if (moving != 1) {
+                        bts_forward_start(ACTUATOR_DUTY);
+                        moving = 1;
+                    }
+                    continue;
+                }
+                if (buf[2] == 'B') { // DOWN arrow = retract/reverse
+                    if (moving != -1) {
+                        bts_reverse_start(ACTUATOR_DUTY);
+                        moving = -1;
+                    }
+                    continue;
+                }
+            }
+        } else {
+            // Timeout — no key data this cycle
+            if (moving != 0) {
+                idle_count++;
+                if (idle_count >= idle_threshold) {
+                    bts_stop();
+                    moving = 0;
+                    idle_count = 0;
+                }
+            }
         }
-        printf("Unknown command. Use e/r/b/q.\n");
     }
+
+    bts_stop();
+    tcsetattr(STDIN_FILENO, TCSANOW, &old_tio);
+    printf("\n");
     return -1;
 }
 
@@ -219,7 +247,6 @@ int main(void)
 {
     tb6600_t motor;
     char input[128];
-    int ms_per_10mm = DEFAULT_MS_PER_10MM;
     int steps_per_increment = DEFAULT_ROT_STEPS;
 
     signal(SIGINT, signal_handler);
@@ -249,21 +276,8 @@ int main(void)
 
     printf("\nInitialization complete.\n");
     printf("Launcher: %.1f-%.1f V allowed (start spin ~1.5 V, cutoff >3.9 V).\n", LAUNCHER_MIN_MV / 1000.0, LAUNCHER_MAX_MV / 1000.0);
-    printf("Angle: 10mm increments at %d%% duty.\n", ACTUATOR_SPEED_PERCENT);
+    printf("Angle: hold UP/DOWN arrow keys at %d%% duty.\n", ACTUATOR_DUTY);
     printf("Rotation: %d-step increments.\n", steps_per_increment);
-
-    printf("\nOptional calibration: enter milliseconds for one 10mm actuator move\n");
-    printf("(press Enter to keep default %d ms): ", ms_per_10mm);
-    fflush(stdout);
-    if (read_line(input, sizeof(input)) == 0 && input[0] != '\0') {
-        int parsed = 0;
-        if (parse_int_strict(input, &parsed) == 0 && parsed > 0) {
-            ms_per_10mm = parsed;
-            printf("Using %d ms per 10mm\n", ms_per_10mm);
-        } else {
-            printf("Invalid value, using default %d ms\n", ms_per_10mm);
-        }
-    }
 
     while (s_running) {
         print_main_menu();
@@ -278,7 +292,7 @@ int main(void)
         }
 
         if (strcmp(input, "2") == 0 || strcmp(input, "angle") == 0) {
-            if (angle_menu(ms_per_10mm) != 0) {
+            if (angle_menu() != 0) {
                 break;
             }
             continue;

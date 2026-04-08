@@ -49,7 +49,7 @@ int fsm_update(fsm_state_t *state) {
     char token[32];
 
     switch (state->mode) {
-        case MODE_CALIBRATION:
+        case MODE_CALIBRATION: {
             char input = '\0';
             float value;
             printf("Entering Calibration Mode. You can adjust the following parameters:\n");
@@ -92,6 +92,7 @@ int fsm_update(fsm_state_t *state) {
             state->mode = MODE_SET;
             fsm_update(state);  // Invoke again after mode change
             break;
+        }
         case MODE_SET:
             printf("Entering Set Mode.\n");
             printf("In Set Mode, you can define machine position, target location, and tempo for your sets.\n");
@@ -99,6 +100,7 @@ int fsm_update(fsm_state_t *state) {
             //logic
             int machine_pos, target_loc, tempo, set_index;
             char cont;
+
             while (true) {
                 printf("Choose machine position (0-2):\n");
                 if (!read_token(token)) {
@@ -113,6 +115,10 @@ int fsm_update(fsm_state_t *state) {
                 }
                 set_machine_position(machine_pos);
                 common_sets();
+                break;
+            }
+
+            while (true) {
                 printf("The current sets are:\n");
                 print_sets();
                 printf("To begin operation with the current sets, enter y. To customize sets, enter n.\n");
@@ -150,7 +156,7 @@ int fsm_update(fsm_state_t *state) {
                 }
                 choose_target_location(target_loc);
                 printf("Target Location: %d   Tempo:\n", target_loc);
-                printf("Choose tempo (0-3).\n");
+                printf("Choose tempo (1-4).\n");
                 if (!read_token(token)) {
                     return 0;
                 }
@@ -193,7 +199,10 @@ int fsm_update(fsm_state_t *state) {
             char set_n;
 
             while (true) {
-                printf("Enter set 0 to 3: ");
+                printf("Enter set 0 to 3: \n");
+                printf("You can return to Set Mode at any time by entering 's'.\n");
+                printf("you can quit at any time by entering 'q'.\n");
+                
                 if (!read_token(token)) {
                     operation_cleanup();
                     return 0;

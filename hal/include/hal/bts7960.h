@@ -21,4 +21,8 @@ void bts_cleanup(void);
 int forward_ms(int percent, long ms);
 int reverse_ms(int percent, long ms);
 
+int bts_forward_start(int percent);
+int bts_reverse_start(int percent);
+int bts_stop(void);
+
 #endif // BTS7960_H
