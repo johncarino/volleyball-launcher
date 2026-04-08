@@ -40,7 +40,7 @@ extern const float machine_y; // y-coordinate of machine (fixed)
 //target position
 extern int target_position;
 extern float target_x[NUM_TARGETS]; // x-coordinates of target locations
-extern const float target_y; // y-coordinate of target (fixed)
+extern float target_y; // y-coordinate of target (fixed)
 
 //peak heights
 extern float peak_height[NUM_TEMPOS];

@@ -15,11 +15,13 @@
 * Operation Mode Header
 *
 * Operations within Operation Mode:
-* 1. Launch the ball based on entries in the set seuqence
+* 1. Launch the ball based on entries in the set sequence
 * 2. User can stop the machine at any time
 * 3. User can repeat the same set
 * 4. User can shuffle the set sequence
 */
+
+#define INITIAL_TILT_ANGLE 15.0
 
 void operation_init();
 void operation_cleanup();

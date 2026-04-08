@@ -25,6 +25,9 @@ typedef struct {
 } set_specs_t;
 
 #define NUM_SETS 4
+#define TILT_COEFF 135.0 //171ms per degree, determined experimentally
+#define YAW_COEFF 10 //10 steps per degree, determined experimentally
+#define SPEED_COEFF 2.36
 
 extern set_specs_t set_seq[NUM_SETS];
 
@@ -34,7 +37,7 @@ int choose_target_location(int target);
 int choose_tempo(int tempo);
 
 void advanced_save_set(int set_index, float launch_speed, float tilt_angle, float yaw_angle, float rpm_output);
-void save_set(int set_index);
+int save_set(int set_index, int print_info);
 
 void common_sets();
 

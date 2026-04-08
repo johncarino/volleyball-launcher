@@ -43,6 +43,8 @@ void fsm_init(fsm_state_t *state) {
     printf("Please follow the prompts to calibrate the machine and set up your desired launch parameters.\n");
     printf("You can quit at any time by entering 'q'.\n");
     printf("=====================================\n\n");
+
+    sleep(2); // Pause for 2 seconds before starting the FSM loop
 }
 
 int fsm_update(fsm_state_t *state) {
@@ -58,7 +60,7 @@ int fsm_update(fsm_state_t *state) {
             printf("Net height: %.2f m\n", get_net_height());
             printf("Court width: %.2f m\n", get_court_width());
             printf("Court length: %.2f m\n", get_court_length());
-            printf("Enter t to continue with the current parameters.\n");
+            printf("Enter 't' to continue with the current parameters.\n");
 
             if (!read_token(token)) {
                 return 0;
@@ -121,8 +123,8 @@ int fsm_update(fsm_state_t *state) {
             while (true) {
                 printf("The current sets are:\n");
                 print_sets();
-                printf("To begin operation with the current sets, enter y. To customize sets, enter n.\n");
-                printf("To return to calibration mode, enter c.\n");
+                printf("\nTo begin operation with the current sets, enter 'y'. To customize sets, enter 'n'.\n");
+                printf("To return to calibration mode, enter 'c'.\n");
                 if (!read_token(token)) {
                     return 0;
                 }
@@ -142,7 +144,7 @@ int fsm_update(fsm_state_t *state) {
                     state->mode = MODE_CALIBRATION;
                     return fsm_update(state);
                 }
-                printf("Target Location:   Tempo:\n");
+                printf("Target Location:     Tempo:\n");
                 printf("Choose target location (0-4)\n");
                 if (!read_token(token)) {
                     return 0;
@@ -151,6 +153,10 @@ int fsm_update(fsm_state_t *state) {
                     return 0;
                 }
                 if (!parse_int_token(token, &target_loc)) {
+                    printf("Invalid input. Please enter 0-4.\n");
+                    continue;
+                }
+                if (target_loc < 0 || target_loc > 4) {
                     printf("Invalid input. Please enter 0-4.\n");
                     continue;
                 }
@@ -164,7 +170,11 @@ int fsm_update(fsm_state_t *state) {
                     return 0;
                 }
                 if (!parse_int_token(token, &tempo)) {
-                    printf("Invalid input. Please enter 0-3\n");
+                    printf("Invalid input. Please enter 1-4.\n");
+                    continue;
+                }
+                if (tempo < 1 || tempo > 4) {
+                    printf("Invalid input. Please enter 1-4.\n");
                     continue;
                 }
                 choose_tempo(tempo);
@@ -180,8 +190,16 @@ int fsm_update(fsm_state_t *state) {
                     printf("Invalid input. Please enter 0-3.\n");
                     continue;
                 }
-                save_set(set_index);
-                printf("Set saved to slot %d.\n", set_index);
+                if (set_index < 0 || set_index > 3) {
+                    printf("Invalid input. Please enter 0-3.\n");
+                    continue;
+                }
+                if (!save_set(set_index, 1)) {
+                    printf("Failed to save set to slot %d.\n", set_index);
+                } else {
+                    printf("Set saved to slot %d.\n", set_index);
+                }
+                sleep(2); // Pause for 2 seconds before showing the menu again
             }
             break;
         case MODE_ADVANCED:

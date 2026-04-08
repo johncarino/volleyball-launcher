@@ -7,7 +7,7 @@ const float machine_y = 1.75;
 
 int target_position = 0;
 float target_x[NUM_TARGETS];
-const float target_y = 0.0;
+float target_y = 0.0;
 
 int tempo_position = 0;
 float peak_height[NUM_TEMPOS];
@@ -24,9 +24,9 @@ float rpm_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
 
 void arc_calc_params(float net_height, float court_width, float court_length) {
     //launch positions (metre)
-    machine_x[0] = 0 + 0.5; // left target
+    machine_x[0] = 0 + 1; // left target
     machine_x[1] = court_width / 2; // center target
-    machine_x[2] = court_width - 0.5; // right target
+    machine_x[2] = court_width - 1; // right target
 
     //target positions (metre)
     target_x[0] = 0 + 0.5; // left target
@@ -34,6 +34,8 @@ void arc_calc_params(float net_height, float court_width, float court_length) {
     target_x[2] = court_width / 2; // center target
     target_x[3] = 3 * court_width / 4; // right center
     target_x[4] = court_width - 0.5; // right target
+
+    target_y = net_height + 0.2;
 
     //tempo heights (metre)
     peak_height[0] = net_height + 0.5; // tempo 1
@@ -91,6 +93,9 @@ void calculation() {
                 
                 theta = atan(vy0 / vx0);
 
+                //convert to degrees
+                theta = theta * 180 / M_PI;
+
                 rpm = (v0 / (2*M_PI*WHEEL_R)) * 60 / EFF_K;
 
                 //store results
@@ -105,8 +110,8 @@ void calculation() {
 }
 
 void yaw_calculation() {
-    int left = 30;
-    int right = -30;
+    int left = 90;
+    int right = -90;
 
     for (int i = 0; i < NUM_MACHINE_POSITIONS; i++) {
         if (i == 0) {

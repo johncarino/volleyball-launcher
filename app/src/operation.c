@@ -4,9 +4,11 @@ float curr_tilt_angle = 0.0;
 float curr_yaw_angle = 0.0;
 
 float d_angle = 0;
-float tilt_coeff = 135.0; //171ms per degree, determined experimentally
-float yaw_coeff = 10; //10 steps per degree, determined experimentally
-float speed_coeff = 2.36;
+
+//Defined in set.h
+//#define TILT_COEFF 135.0 //171ms per degree, determined experimentally
+//#define YAW_COEFF 10 //10 steps per degree, determined experimentally
+//#define SPEED_COEFF 2.36
 
 pthread_t tilt_thread, yaw_thread;
 pthread_mutex_t tilt_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -73,7 +75,7 @@ void operation_init() {
 
     shutdown = 0;
 
-    curr_tilt_angle = 15.0;
+    curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_yaw_angle = 0.0;
 
     //init tb6600
@@ -110,7 +112,7 @@ void operation_cleanup() {
 
     printf("First reset to default position...\n");
     mcp4725_set_raw(&dac1, 0);
-    tilt_signal(0.262);
+    tilt_signal(INITIAL_TILT_ANGLE);
 
     printf("Cleaning up operation mode...\n");
 
@@ -139,23 +141,20 @@ void homing_sequence() {
     //home the machine to a known position
     //for now, just set tilt and yaw to 0
     printf("Homing sequence initiated. Moving to default position...\n");
-    tilt_signal(0.262);
+    tilt_signal(INITIAL_TILT_ANGLE);
     yaw_signal(0.0);
-    curr_tilt_angle = 15.0;
+    curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_yaw_angle = 0.0;
 }
 
 void tilt_signal(float angle) {
 
-    //convert radians to degrees
-    d_angle = angle * 180.0 / 3.14159;
-
-    if (d_angle > 85.0) {
-        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be 85 degrees or less). Skipping tilt.\n", d_angle);
+    if (angle > 85.0) {
+        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be 85 degrees or less). Skipping tilt.\n", angle);
         return;
     }
 
-    float delta_angle = d_angle - curr_tilt_angle;
+    float delta_angle = angle - curr_tilt_angle;
     long tilt_duration = 0.0;
     //duty_cycle of linear actuator, as a percentage
     //keep this a constant
@@ -167,8 +166,8 @@ void tilt_signal(float angle) {
     }
     else if (delta_angle > 0) {
         //convert delta_angle to tilt_duration
-        tilt_duration = delta_angle * tilt_coeff;
-        printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, d_angle, tilt_duration);
+        tilt_duration = delta_angle * TILT_COEFF;
+        printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
 
         //(void)duty_cycle; // Avoid unused variable warning
         forward_ms(duty_cycle, tilt_duration);
@@ -176,12 +175,12 @@ void tilt_signal(float angle) {
     else { // if delta_angle < 0
         delta_angle = -delta_angle;
         //convert delta_angle to tilt_duration
-        tilt_duration = delta_angle * tilt_coeff;
-        printf("tilting reverse by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, d_angle, tilt_duration);
+        tilt_duration = delta_angle * TILT_COEFF;
+        printf("tilting reverse by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
         reverse_ms(duty_cycle, tilt_duration);
     }
 
-    curr_tilt_angle = d_angle;
+    curr_tilt_angle = angle;
 }
 
 void yaw_signal(float angle) {
@@ -199,7 +198,7 @@ void yaw_signal(float angle) {
     else if (delta_angle > 0) {
         tb6600_set_direction(&motor, 1);
         //convert delta_angle to yaw steps
-        yaw_steps = delta_angle * yaw_coeff;
+        yaw_steps = delta_angle * YAW_COEFF;
         printf("yaw right by %.2f degrees to %.2f degrees for %d steps\n", delta_angle, angle, yaw_steps);
 
         //(void)delay; // Avoid unused variable warning
@@ -209,7 +208,7 @@ void yaw_signal(float angle) {
         tb6600_set_direction(&motor, 0);
         delta_angle = -delta_angle;
         //convert delta_angle to yaw steps
-        yaw_steps = delta_angle * yaw_coeff;
+        yaw_steps = delta_angle * YAW_COEFF;
         printf("yaw left by %.2f degrees to %.2f degrees for %d steps\n", delta_angle, angle, yaw_steps);
         tb6600_step(&motor, yaw_steps, delay);
     }
@@ -224,7 +223,7 @@ void speed_signal(float speed) {
     }
     uint16_t mv = 0;
     //convert speed to mv
-    mv = (uint16_t)(speed * speed_coeff);
+    mv = (uint16_t)(speed * SPEED_COEFF);
     //(void)speed;
     printf("setting speed to %.2f mV\n", (float)mv);
     mcp4725_set_mv(&dac1, mv);
