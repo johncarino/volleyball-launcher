@@ -69,7 +69,6 @@ void tilt_signal(float angle) {
     int duty_cycle = 100;
 
     if (delta_angle == 0) {
-        //no change
         printf("No change in tilt angle\n");
         return;
     }
@@ -101,7 +100,7 @@ void yaw_signal(float angle) {
     int delay = 500;
 
     if (delta_angle == 0) {
-        //no change
+        printf("No change in yaw angle\n");
         return;
     }
     else if (delta_angle > 0) {
