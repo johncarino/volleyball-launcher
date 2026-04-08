@@ -156,7 +156,7 @@ int fsm_update(fsm_state_t *state) {
                 }
                 choose_target_location(target_loc);
                 printf("Target Location: %d   Tempo:\n", target_loc);
-                printf("Choose tempo (0-3).\n");
+                printf("Choose tempo (1-4).\n");
                 if (!read_token(token)) {
                     return 0;
                 }

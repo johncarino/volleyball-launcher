@@ -4,14 +4,74 @@ float curr_tilt_angle = 0.0;
 float curr_yaw_angle = 0.0;
 
 float d_angle = 0;
-float tilt_coeff = 120.0; //171ms per degree, determined experimentally
+float tilt_coeff = 135.0; //171ms per degree, determined experimentally
 float yaw_coeff = 10; //10 steps per degree, determined experimentally
-float speed_coeff = 1.875;
+float speed_coeff = 2.36;
+
+pthread_t tilt_thread, yaw_thread;
+pthread_mutex_t tilt_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t yaw_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t done_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t tilt_cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t yaw_cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t done_cond = PTHREAD_COND_INITIALIZER;
+
+volatile float tilt_angle_w = 0;
+volatile float yaw_angle_w = 0;
+volatile int tilt_done = 1;
+volatile int yaw_done = 1;
+volatile int shutdown = 0;
 
 tb6600_t motor;
 static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 
+void* tilt_worker() {
+    while(true) {
+        pthread_mutex_lock(&tilt_mutex);
+        while(tilt_done && !shutdown) {
+            pthread_cond_wait(&tilt_cond, &tilt_mutex);
+        }
+        if (shutdown) {
+            pthread_mutex_unlock(&tilt_mutex);
+            return NULL;
+        }
+        float work = tilt_angle_w;
+        pthread_mutex_unlock(&tilt_mutex);
+
+        tilt_signal(work);
+
+        pthread_mutex_lock(&done_mutex);
+        tilt_done = 1;
+        pthread_cond_signal(&done_cond);
+        pthread_mutex_unlock(&done_mutex);
+    }
+}
+
+void* yaw_worker() {
+    while(true) {
+        pthread_mutex_lock(&yaw_mutex);
+        while(yaw_done && !shutdown) {
+            pthread_cond_wait(&yaw_cond, &yaw_mutex);
+        }
+        if (shutdown) {
+            pthread_mutex_unlock(&yaw_mutex);
+            return NULL;
+        }
+        float work = yaw_angle_w;
+        pthread_mutex_unlock(&yaw_mutex);
+
+        yaw_signal(work);
+
+        pthread_mutex_lock(&done_mutex);
+        yaw_done = 1;
+        pthread_cond_signal(&done_cond);
+        pthread_mutex_unlock(&done_mutex);
+    }
+}
+
 void operation_init() {
+
+    shutdown = 0;
 
     curr_tilt_angle = 15.0;
     curr_yaw_angle = 0.0;
@@ -35,16 +95,41 @@ void operation_init() {
         return;
     }
 
-    //set_machine(0);
+    //init threads
+    if (pthread_create(&tilt_thread, NULL, tilt_worker, NULL) != 0) {
+        fprintf(stderr, "Failed to create tilt thread\n");
+        return;
+    }
+    if (pthread_create(&yaw_thread, NULL, yaw_worker, NULL) != 0) {
+        fprintf(stderr, "Failed to create yaw thread\n");
+        return;
+    }
 }
 
 void operation_cleanup() {
+
+    printf("First reset to default position...\n");
+    mcp4725_set_raw(&dac1, 0);
+    tilt_signal(0.262);
+
     printf("Cleaning up operation mode...\n");
+
+    shutdown = 1;
+
+    pthread_mutex_lock(&tilt_mutex);
+    pthread_cond_signal(&tilt_cond);
+    pthread_mutex_unlock(&tilt_mutex);
+
+    pthread_mutex_lock(&yaw_mutex);
+    pthread_cond_signal(&yaw_cond);
+    pthread_mutex_unlock(&yaw_mutex);
+
+    pthread_join(tilt_thread, NULL);
+    pthread_join(yaw_thread, NULL);
 
     tb6600_enable(&motor, 0);
     tb6600_close(&motor);
 
-    mcp4725_set_raw(&dac1, 0);
     mcp4725_cleanup(&dac1);
 
     bts_cleanup();
@@ -54,15 +139,21 @@ void homing_sequence() {
     //home the machine to a known position
     //for now, just set tilt and yaw to 0
     printf("Homing sequence initiated. Moving to default position...\n");
-    tilt_signal(0.0);
+    tilt_signal(0.262);
     yaw_signal(0.0);
-    curr_tilt_angle = 0.0;
+    curr_tilt_angle = 15.0;
     curr_yaw_angle = 0.0;
 }
 
 void tilt_signal(float angle) {
+
     //convert radians to degrees
     d_angle = angle * 180.0 / 3.14159;
+
+    if (d_angle > 85.0) {
+        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be 85 degrees or less). Skipping tilt.\n", d_angle);
+        return;
+    }
 
     float delta_angle = d_angle - curr_tilt_angle;
     long tilt_duration = 0.0;
@@ -128,6 +219,10 @@ void yaw_signal(float angle) {
 }
 
 void speed_signal(float speed) {
+    if (speed > 1130.0) {
+        fprintf(stderr, "Invalid RPM: %.2f (must be 1130 or less). Skipping speed.\n", speed);
+        return;
+    }
     uint16_t mv = 0;
     //convert speed to mv
     mv = (uint16_t)(speed * speed_coeff);
@@ -135,19 +230,41 @@ void speed_signal(float speed) {
     printf("setting speed to %.2f mV\n", (float)mv);
     mcp4725_set_mv(&dac1, mv);
 }
+
 void set_machine(int set_index) {
     //start the machine for set index
-    //run in parallel?
 
-    //testing with comments
     printf("Setting machine for set %d\n", set_index);
-    printf("Tilt angle: %f, Yaw angle: %f, Speed: %f\n", set_seq[set_index].tilt_angle, set_seq[set_index].yaw_angle, set_seq[set_index].rpm_output);
-    tilt_signal(set_seq[set_index].tilt_angle);
-    yaw_signal(set_seq[set_index].yaw_angle);
+    printf("Tilt angle: %f, Yaw angle: %f, Speed: %f\n",
+            set_seq[set_index].tilt_angle,
+            set_seq[set_index].yaw_angle, 
+            set_seq[set_index].rpm_output);
+    
+    //signal tilt
+    pthread_mutex_lock(&tilt_mutex);
+    tilt_angle_w = set_seq[set_index].tilt_angle;
+    tilt_done = 0;
+    pthread_cond_signal(&tilt_cond);
+    pthread_mutex_unlock(&tilt_mutex);
 
-    //run after aiming is done
+    //signal yaw
+    //pthread_mutex_lock(&yaw_mutex);
+    //yaw_angle_w = set_seq[set_index].yaw_angle;
+    //yaw_done = 0;
+    //pthread_cond_signal(&yaw_cond);
+    //pthread_mutex_unlock(&yaw_mutex);
+
+    //wait for tilt and yaw to finish
+    pthread_mutex_lock(&done_mutex);
+    //while (!tilt_done || !yaw_done) {
+    while (!tilt_done) {
+        pthread_cond_wait(&done_cond, &done_mutex);
+    }
+    pthread_mutex_unlock(&done_mutex);
+
+    //signal speed
     speed_signal(set_seq[set_index].rpm_output);
-}
+} 
 
 /*
 void machine_operating() {
