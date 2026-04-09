@@ -166,7 +166,7 @@ void tilt_signal(float angle) {
     }
     else if (delta_angle > 0) {
         //convert delta_angle to tilt_duration
-        tilt_duration = delta_angle * TILT_COEFF;
+        tilt_duration = tilt_angle_to_time(delta_angle);
         printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
 
         //(void)duty_cycle; // Avoid unused variable warning
@@ -175,7 +175,7 @@ void tilt_signal(float angle) {
     else { // if delta_angle < 0
         delta_angle = -delta_angle;
         //convert delta_angle to tilt_duration
-        tilt_duration = delta_angle * TILT_COEFF;
+        tilt_duration = tilt_angle_to_time(delta_angle);
         printf("tilting reverse by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
         reverse_ms(duty_cycle, tilt_duration);
     }
@@ -261,7 +261,7 @@ void set_machine(int set_index) {
     pthread_mutex_unlock(&done_mutex);
 
     //signal speed
-    speed_signal(set_seq[set_index].rpm_output);
+    //speed_signal(set_seq[set_index].rpm_output);
 } 
 
 /*

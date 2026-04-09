@@ -6,6 +6,15 @@ static int curr_machine_position = 0;
 static int curr_target_location = 0;
 static int curr_tempo = 0;
 
+uint16_t rpm_to_mv(float rpm) {
+    return (uint16_t)(0.757832 * rpm + 782.928);
+}
+
+float tilt_angle_to_time(float angle) {
+    //CHANGE TO QUADRATIC
+    return angle * TILT_COEFF;
+}
+
 int set_machine_position(int position) {
     if (position < 0 || position >= NUM_MACHINE_POSITIONS) {
         fprintf(stderr, "Invalid machine position. Must be between 0 and %d.\n", NUM_MACHINE_POSITIONS - 1);
@@ -87,8 +96,8 @@ int save_set(int set_index, int print_info) {
     set_seq[set_index].tilt_angle = angle;
     set_seq[set_index].yaw_angle = yaw_angle[curr_machine_position][curr_target_location][curr_tempo];
     float rpm = rpm_output[curr_machine_position][curr_target_location][curr_tempo];
-    if (rpm > 1130.0) {
-        fprintf(stderr, "Invalid RPM output for set %d: %.2f (must be 1130 or less).\n", set_index, rpm);
+    if (rpm > 1250.0) {
+        fprintf(stderr, "Invalid RPM output for set %d: %.2f (must be 1250 or less).\n", set_index, rpm);
         return 0;
     }
     set_seq[set_index].rpm_output = rpm;

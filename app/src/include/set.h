@@ -25,11 +25,15 @@ typedef struct {
 } set_specs_t;
 
 #define NUM_SETS 4
-#define TILT_COEFF 135.0 //171ms per degree, determined experimentally
+#define TILT_COEFF 150.0 //150ms per degree, determined experimentally
 #define YAW_COEFF 10 //10 steps per degree, determined experimentally
 #define SPEED_COEFF 2.36
 
 extern set_specs_t set_seq[NUM_SETS];
+
+uint16_t rpm_to_mv(float rpm);
+
+float tilt_angle_to_time(float angle);
 
 int set_machine_position(int position);
 
