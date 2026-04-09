@@ -229,6 +229,73 @@ int fsm_update(fsm_state_t *state) {
                     operation_cleanup();
                     return 0;
                 }
+                if (strcmp(token, "dev") == 0) {
+                    printf("Entering Developer Mode...\n");
+                    while (true) {
+                        float tilt, yaw, speed;
+                        printf("Set tilt, yaw, or rpm? (t/y/s) Enter 'b' to go back.\n");
+                        if (!read_token(token)) {
+                            continue;
+                        }
+                        if (is_quit_token(token)) {
+                            continue;
+                        }
+                        if (token[1] != '\0') {
+                            printf("Invalid input. Please enter t, y, s, b, or q.\n");
+                            continue;
+                        }
+                        char param = token[0];
+                        if (param == 'b' || param == 'B') {
+                            break;
+                        }
+                        if (param == 't' || param == 'T') {
+                            printf("Enter tilt angle in degrees (5 - 85):\n");
+                            if (!read_token(token)) {
+                                continue;
+                            }
+                            if (is_quit_token(token)) {
+                                continue;
+                            }
+                            if (!parse_float_token(token, &tilt)) {
+                                printf("Invalid input. Please enter a number.\n");
+                                continue;
+                            }
+                            tilt_signal(tilt);
+                            continue;
+                        }
+                        if (param == 'y' || param == 'Y') {
+                            printf("Enter yaw angle in degrees (-90 to 90):\n");
+                            if (!read_token(token)) {
+                                continue;
+                            }
+                            if (is_quit_token(token)) {
+                                continue;
+                            }
+                            if (!parse_float_token(token, &yaw)) {
+                                printf("Invalid input. Please enter a number.\n");
+                                continue;
+                            }
+                            yaw_signal(yaw);
+                            continue;
+                        }
+                        if (param == 's' || param == 'S') {
+                            printf("Enter speed in RPM (0 - 1130):\n");
+                            if (!read_token(token)) {
+                                continue;
+                            }
+                            if (is_quit_token(token)) {
+                                continue;
+                            }
+                            if (!parse_float_token(token, &speed)) {
+                                printf("Invalid input. Please enter a number.\n");
+                                continue;
+                            }
+                            speed_signal(speed);
+                            continue;
+                        }
+                    }
+                    continue;
+                }
                 if (token[1] != '\0') {
                     printf("Invalid input\n");
                     continue;

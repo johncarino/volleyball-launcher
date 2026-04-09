@@ -136,8 +136,6 @@ static int angle_menu(void)
 {
     struct termios old_tio, new_tio;
     int moving = 0; // 0=stopped, 1=forward, -1=reverse
-    int idle_count = 0;
-    const int idle_threshold = 3; // stop after 3 consecutive timeouts (~300ms)
 
     printf("\n[angle] Hold UP arrow to extend, DOWN arrow to retract.\n");
     printf("Press 'b' to return to main menu, 'q' to quit.\n");
@@ -157,8 +155,6 @@ static int angle_menu(void)
         int n = read(STDIN_FILENO, buf, sizeof(buf));
 
         if (n > 0) {
-            idle_count = 0;
-
             // Check for 'b' or 'q' single-char commands
             if (n == 1 && (buf[0] == 'b' || buf[0] == 'B')) {
                 bts_stop();
@@ -191,14 +187,10 @@ static int angle_menu(void)
                 }
             }
         } else {
-            // Timeout — no key data this cycle
+            // Timeout — no key held, stop motor
             if (moving != 0) {
-                idle_count++;
-                if (idle_count >= idle_threshold) {
-                    bts_stop();
-                    moving = 0;
-                    idle_count = 0;
-                }
+                bts_stop();
+                moving = 0;
             }
         }
     }
