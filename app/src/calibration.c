@@ -6,7 +6,7 @@ const float STANDARD_NET_HEIGHT = 2.43; // Standard volleyball net height in met
 const float STANDARD_COURT_LENGTH = 18.0; // Standard volleyball court length in meters
 const float STANDARD_COURT_WIDTH = 9.0; // Standard volleyball court width
 
-const float MIN_NET_HEIGHT = 1.0; // Minimum net height in meters
+const float MIN_NET_HEIGHT = 2.0; // Minimum net height in meters
 const float MAX_NET_HEIGHT = 3.0; // Maximum net height in meters
 
 const float MIN_COURT_LENGTH = 10.0; // Minimum court length in meters

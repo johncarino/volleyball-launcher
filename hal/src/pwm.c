@@ -151,7 +151,7 @@ int pwm_init(void)
     }
 
     s_initialized = true;
-    printf("PWM HAL: initialized (pwmchip%d, motor1=pwm%d/GPIO12, motor2=pwm%d/GPIO15, freq=%d Hz)\n", PWMCHIP, MOTOR1_CHANNEL, MOTOR2_CHANNEL, s_frequency_hz);
+    //printf("PWM HAL: initialized (pwmchip%d, motor1=pwm%d/GPIO12, motor2=pwm%d/GPIO15, freq=%d Hz)\n", PWMCHIP, MOTOR1_CHANNEL, MOTOR2_CHANNEL, s_frequency_hz);
     return 0;
 }
 
@@ -195,6 +195,7 @@ int pwm_set_duty_cycle(int motor, int duty_percent)
 
     if (set_duty_ns(s_motors[motor].channel, s_motors[motor].duty_ns) != 0) {return -1;}
 
+    //printf("PWM HAL: motor %d duty cycle set to %d%%\n", motor + 1, duty_percent);
     return 0;
 }
 
@@ -203,6 +204,7 @@ int pwm_enable(int motor, bool enable)
     if (!s_initialized || motor < 0 || motor >= PWM_NUM_MOTORS) {return -1;}
     if (enable_channel(s_motors[motor].channel, enable) != 0) {return -1;}
 
+    //printf("PWM HAL: motor %d %s\n", motor + 1, enable ? "enabled" : "disabled");
     return 0;
 }
 
@@ -218,7 +220,7 @@ void pwm_cleanup(void)
     }
     
     s_initialized = false;
-    printf("PWM HAL: cleaned up (both motors)\n");
+    //printf("PWM HAL: cleaned up (both motors)\n");
 }
 
 int pwm_get_frequency(void){return s_frequency_hz;}

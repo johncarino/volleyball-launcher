@@ -42,7 +42,6 @@ void fsm_init(fsm_state_t *state) {
     printf("Welcome to the Volleyball Launcher!\n");
     printf("Please follow the prompts to calibrate the machine and set up your desired launch parameters.\n");
     printf("You can quit at any time by entering 'q'.\n");
-    printf("=====================================\n\n");
 
     sleep(2); // Pause for 2 seconds before starting the FSM loop
 }
@@ -54,6 +53,7 @@ int fsm_update(fsm_state_t *state) {
         case MODE_CALIBRATION: {
             char input = '\0';
             float value;
+            printf("\n=====================================\n");
             printf("Entering Calibration Mode. You can adjust the following parameters:\n");
             while (true) {
             printf("Change net height (w), court width (e), or court length (r)\n");
@@ -96,6 +96,7 @@ int fsm_update(fsm_state_t *state) {
             break;
         }
         case MODE_SET:
+            printf("\n=====================================\n");
             printf("Entering Set Mode.\n");
             printf("In Set Mode, you can define machine position, target location, and tempo for your sets.\n");
 
@@ -123,7 +124,8 @@ int fsm_update(fsm_state_t *state) {
             while (true) {
                 printf("The current sets are:\n");
                 print_sets();
-                printf("\nTo begin operation with the current sets, enter 'y'. To customize sets, enter 'n'.\n");
+                printf("\nTo begin operation with the current sets, enter 'y'.\n");
+                printf("To customize sets, enter 'n'.\n");
                 printf("To return to calibration mode, enter 'c'.\n");
                 if (!read_token(token)) {
                     return 0;
@@ -207,19 +209,18 @@ int fsm_update(fsm_state_t *state) {
             //logic
             break;
         case MODE_OPERATION:
+            printf("\n=====================================\n");    
             printf("Entering Operation Mode\n");
             printf("In Operation Mode, the machine will execute launches based on the defined parameters in Set Mode.\n");
-            printf("You can return to Set Mode at any time by entering 's'.\n");
-            printf("As always, you can quit at any time by entering 'q'.\n");
 
             operation_init();
 
             char set_n;
 
             while (true) {
+                printf("\nYou can return to Set Mode at any time by entering 's'.\n");
+                printf("You can quit at any time by entering 'q'.\n");
                 printf("Enter set 0 to 3: \n");
-                printf("You can return to Set Mode at any time by entering 's'.\n");
-                printf("you can quit at any time by entering 'q'.\n");
                 
                 if (!read_token(token)) {
                     operation_cleanup();
@@ -249,7 +250,7 @@ int fsm_update(fsm_state_t *state) {
                             break;
                         }
                         if (param == 't' || param == 'T') {
-                            printf("Enter tilt angle in degrees (5 - 85):\n");
+                            printf("Enter tilt angle in degrees (9 - 80):\n");
                             if (!read_token(token)) {
                                 continue;
                             }
@@ -279,7 +280,7 @@ int fsm_update(fsm_state_t *state) {
                             continue;
                         }
                         if (param == 's' || param == 'S') {
-                            printf("Enter speed in RPM (0 - 1130):\n");
+                            printf("Enter speed in RPM (0 - 1200):\n");
                             if (!read_token(token)) {
                                 continue;
                             }
@@ -310,7 +311,7 @@ int fsm_update(fsm_state_t *state) {
                 int n = set_n - '0';
 
                 if (n >= 0 && n <= 3) {
-                    printf("Running set %d\n", n);
+                    //printf("Running set %d\n", n);
                     set_machine(n);
                 } else {
                     printf("Invalid input\n");

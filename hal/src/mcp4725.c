@@ -109,7 +109,7 @@ int mcp4725_init(mcp4725_t *dac, int bus, uint8_t addr)
         return -1;
     }
 
-    printf("MCP4725 HAL: initialized on %s, addr 0x%02x\n", dev_path, addr);
+    //printf("MCP4725 HAL: initialized on %s, addr 0x%02x\n", dev_path, addr);
     return 0;
 }
 
@@ -180,5 +180,5 @@ void mcp4725_cleanup(mcp4725_t *dac)
     dac->fd = -1;
     dac->initialized = false;
 
-    printf("MCP4725 HAL: cleaned up\n");
+    //printf("MCP4725 HAL: cleaned up\n");
 }

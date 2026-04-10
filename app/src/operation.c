@@ -149,8 +149,8 @@ void homing_sequence() {
 
 void tilt_signal(float angle) {
 
-    if (angle > 85.0) {
-        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be 85 degrees or less). Skipping tilt.\n", angle);
+    if (angle > 80.0 || angle < INITIAL_TILT_ANGLE) {
+        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 80 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
         return;
     }
 
@@ -217,13 +217,13 @@ void yaw_signal(float angle) {
 }
 
 void speed_signal(float speed) {
-    if (speed > 1130.0) {
-        fprintf(stderr, "Invalid RPM: %.2f (must be 1130 or less). Skipping speed.\n", speed);
+    if (speed > 1200.0) {
+        fprintf(stderr, "Invalid RPM: %.2f (must be 1200 or less). Skipping speed.\n", speed);
         return;
     }
     uint16_t mv = 0;
     //convert speed to mv
-    mv = (uint16_t)(speed * SPEED_COEFF);
+    mv = rpm_to_mv(speed);
     //(void)speed;
     printf("setting speed to %.2f mV\n", (float)mv);
     mcp4725_set_mv(&dac1, mv);
