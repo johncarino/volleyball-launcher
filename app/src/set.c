@@ -10,9 +10,162 @@ uint16_t rpm_to_mv(float rpm) {
     return (uint16_t)(0.757832 * rpm + 782.928);
 }
 
-float tilt_angle_to_time(float angle) {
-    //CHANGE TO QUADRATIC
-    return angle * TILT_COEFF;
+long tilt_angle_to_time(float i_angle, float f_angle) {
+    float d_angle;
+    long c_duration = 0;
+    if (i_angle == f_angle) {
+        return 0;
+    }
+
+    if (f_angle > i_angle) {
+        //forward
+        if (i_angle <= 15.0) {
+            if (f_angle <= 15.0) {
+                d_angle = f_angle - i_angle;
+                c_duration += d_angle * FTC_9_15;
+                //printf("EXIT tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", d_angle, f_angle, c_duration);
+                return c_duration;
+            }
+            else {
+                c_duration += (15.0 - i_angle) * FTC_9_15;
+                //printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", 15.0 - i_angle, 15.0, c_duration);
+                i_angle = 15.0;
+            }
+
+        }
+        
+        if (i_angle <= 30.0) {
+            if (f_angle <= 30.0) {
+                d_angle = f_angle - i_angle;
+                c_duration += d_angle * FTC_15_30;
+                //printf("EXIT tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", d_angle, f_angle, c_duration);
+                return c_duration;
+            }
+            else {
+                c_duration += (30.0 - i_angle) * FTC_15_30;
+                //printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", 30.0 - i_angle, 30.0, c_duration);
+                i_angle = 30.0;
+            }
+        }
+        
+        if (i_angle <= 45.0) {
+            if (f_angle <= 45.0) {
+                d_angle = f_angle - i_angle;
+                c_duration += d_angle * FTC_30_45;
+                //printf("EXIT tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", d_angle, f_angle, c_duration);
+                return c_duration;
+            }
+            else {
+                c_duration += (45.0 - i_angle) * FTC_30_45;
+                //printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", 45.0 - i_angle, 45.0, c_duration);
+                i_angle = 45.0;
+            }
+        }
+        
+        if (i_angle <= 60.0) {
+            if (f_angle <= 60.0) {
+                d_angle = f_angle - i_angle;
+                c_duration += d_angle * FTC_45_60;
+                //printf("EXIT tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", d_angle, f_angle, c_duration);
+                return c_duration;
+            }
+            else {
+                c_duration += (60.0 - i_angle) * FTC_45_60;
+                //printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", 60.0 - i_angle, 60.0, c_duration);
+                i_angle = 60.0;
+            }
+        }
+
+        if (i_angle <= 75.0) {
+            if (f_angle <= 75.0) {
+                d_angle = f_angle - i_angle;
+                c_duration += d_angle * FTC_60_75;
+                //printf("EXIT tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", d_angle, f_angle, c_duration);
+                return c_duration;
+            }
+            else {
+                c_duration += (75.0 - i_angle) * FTC_60_75;
+                //printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", 75.0 - i_angle, 75.0, c_duration);
+                i_angle = 75.0;
+            }
+        }
+
+        if (i_angle <= 85.0 && f_angle <= 85.0) {
+            d_angle = f_angle - i_angle;
+            c_duration += d_angle * FTC_75_85;
+            //printf("EXIT tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", d_angle, f_angle, c_duration);
+            return c_duration;
+        }
+    }
+    else {
+        //reverse
+        if (i_angle >= 75.0) {
+            if (f_angle >= 75.0) {
+                d_angle = i_angle - f_angle;
+                c_duration += d_angle * RTC_75_85;
+                return c_duration;
+            }
+            else {
+                c_duration += (i_angle - 75.0) * RTC_75_85;
+                i_angle = 75.0;
+            }
+        }
+
+        if (i_angle >= 60.0) {
+            if (f_angle >= 60.0) {
+                d_angle = i_angle - f_angle;
+                c_duration += d_angle * RTC_60_75;
+                return c_duration;
+            }
+            else {
+                c_duration += (i_angle - 60.0) * RTC_60_75;
+                i_angle = 60.0;
+            }
+        }
+
+        if (i_angle >= 45.0) {
+            if (f_angle >= 45.0) {
+                d_angle = i_angle - f_angle;
+                c_duration += d_angle * RTC_45_60;
+                return c_duration;
+            }
+            else {
+                c_duration += (i_angle - 45.0) * RTC_45_60;
+                i_angle = 45.0;
+            }
+        }
+
+        if (i_angle >= 30.0) {
+            if (f_angle >= 30.0) {
+                d_angle = i_angle - f_angle;
+                c_duration += d_angle * RTC_30_45;
+                return c_duration;
+            }
+            else {
+                c_duration += (i_angle - 30.0) * RTC_30_45;
+                i_angle = 30.0;
+            }
+        }
+        
+        if (i_angle >= 15.0) {
+            if (f_angle >= 15.0) {
+                d_angle = i_angle - f_angle;
+                c_duration += d_angle * RTC_15_30;
+                return c_duration;
+            }
+            else {
+                c_duration += (i_angle - 15.0) * RTC_15_30;
+                i_angle = 15.0;
+            }
+        }
+
+        if (i_angle >= 9.0 && f_angle >= 9.0) {
+            d_angle = i_angle - f_angle;
+            c_duration += d_angle * RTC_9_15;
+            return c_duration;
+        }
+    }
+    return c_duration;
 }
 
 int set_machine_position(int position) {

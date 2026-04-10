@@ -21,7 +21,7 @@
 * 4. User can shuffle the set sequence
 */
 
-#define INITIAL_TILT_ANGLE 7.0
+#define INITIAL_TILT_ANGLE 9.0
 
 void operation_init();
 void operation_cleanup();

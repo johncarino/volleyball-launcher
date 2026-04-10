@@ -166,7 +166,7 @@ void tilt_signal(float angle) {
     }
     else if (delta_angle > 0) {
         //convert delta_angle to tilt_duration
-        tilt_duration = tilt_angle_to_time(delta_angle);
+        tilt_duration = tilt_angle_to_time(curr_tilt_angle, angle);
         printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
 
         //(void)duty_cycle; // Avoid unused variable warning
@@ -175,7 +175,7 @@ void tilt_signal(float angle) {
     else { // if delta_angle < 0
         delta_angle = -delta_angle;
         //convert delta_angle to tilt_duration
-        tilt_duration = tilt_angle_to_time(delta_angle);
+        tilt_duration = tilt_angle_to_time(curr_tilt_angle, angle);
         printf("tilting reverse by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
         reverse_ms(duty_cycle, tilt_duration);
     }

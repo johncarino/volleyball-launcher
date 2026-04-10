@@ -25,15 +25,32 @@ typedef struct {
 } set_specs_t;
 
 #define NUM_SETS 4
-#define TILT_COEFF 150.0 //150ms per degree, determined experimentally
+//#define TILT_COEFF 150.0 //150ms per degree, determined experimentally
 #define YAW_COEFF 10 //10 steps per degree, determined experimentally
 #define SPEED_COEFF 2.36
+
+//tilt coefficients for every 15 degrees (ms per degree)
+//Foward coefficients
+#define FTC_9_15 175.0
+#define FTC_15_30 160.0
+#define FTC_30_45 146.6666
+#define FTC_45_60 134.6666
+#define FTC_60_75 110.0
+#define FTC_75_85 85.0
+
+//Reverse coefficients
+#define RTC_9_15 158.3
+#define RTC_15_30 150.0
+#define RTC_30_45 146.6666
+#define RTC_45_60 133.3333
+#define RTC_60_75 113.3333
+#define RTC_75_85 100.0
 
 extern set_specs_t set_seq[NUM_SETS];
 
 uint16_t rpm_to_mv(float rpm);
 
-float tilt_angle_to_time(float angle);
+long tilt_angle_to_time(float i_angle, float f_angle);
 
 int set_machine_position(int position);
 
