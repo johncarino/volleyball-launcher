@@ -149,8 +149,8 @@ void homing_sequence() {
 
 void tilt_signal(float angle) {
 
-    if (angle > 80.0 || angle < INITIAL_TILT_ANGLE) {
-        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 80 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
+    if (angle > 81.0 || angle < INITIAL_TILT_ANGLE) {
+        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 81 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
         return;
     }
 
@@ -231,6 +231,9 @@ void speed_signal(float speed) {
 
 void set_machine(int set_index) {
     //start the machine for set index
+    
+    //set rpm to 0
+    mcp4725_set_raw(&dac1, 0);
 
     printf("Setting machine for set %d\n", set_index);
     printf("Tilt angle: %f, Yaw angle: %f, Speed: %f\n",
@@ -261,7 +264,7 @@ void set_machine(int set_index) {
     pthread_mutex_unlock(&done_mutex);
 
     //signal speed
-    //speed_signal(set_seq[set_index].rpm_output);
+    speed_signal(set_seq[set_index].rpm_output);
 } 
 
 /*

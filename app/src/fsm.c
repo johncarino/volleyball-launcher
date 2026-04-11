@@ -69,10 +69,28 @@ int fsm_update(fsm_state_t *state) {
                 return 0;
             }
             if (token[1] == '\0' && (token[0] == 't' || token[0] == 'T')) {
+                int machine_pos;
+                while (true) {
+                    printf("Choose machine position\n");
+                    printf("0: Left   1: Center   2: Right\n");
+                    if (!read_token(token)) {
+                        return 0;
+                    }
+                    if (is_quit_token(token)) {
+                        return 0;
+                    }
+                    if (!parse_int_token(token, &machine_pos)) {
+                        printf("Invalid input. Please enter 0, 1, 2, or q.\n");
+                        continue;
+                    }
+                    set_machine_position(machine_pos);
+                    common_sets();
+                    break;
+                }
                 state->mode = MODE_SET;
                 return fsm_update(state);
             }
-            if (token[1] != '\0' || (token[0] != 'w' && token[0] != 'e' && token[0] != 'r')) {
+            if (token[1] != '\0' || (token[0] != 'w' && token[0] != 'e' && token[0] != 'r' && token[0] != 't' && token[0] != 'T')) {
                 printf("Invalid input. Enter w, e, r, t, or q.\n");
                 continue;
             }
@@ -91,6 +109,7 @@ int fsm_update(fsm_state_t *state) {
             }
             calibrate_user_input(input, value);
             }
+
             state->mode = MODE_SET;
             fsm_update(state);  // Invoke again after mode change
             break;
@@ -101,25 +120,8 @@ int fsm_update(fsm_state_t *state) {
             printf("In Set Mode, you can define machine position, target location, and tempo for your sets.\n");
 
             //logic
-            int machine_pos, target_loc, tempo, set_index;
+            int target_loc, tempo, set_index;
             char cont;
-
-            while (true) {
-                printf("Choose machine position (0-2):\n");
-                if (!read_token(token)) {
-                    return 0;
-                }
-                if (is_quit_token(token)) {
-                    return 0;
-                }
-                if (!parse_int_token(token, &machine_pos)) {
-                    printf("Invalid input. Please enter 0, 1, 2, or q.\n");
-                    continue;
-                }
-                set_machine_position(machine_pos);
-                common_sets();
-                break;
-            }
 
             while (true) {
                 printf("The current sets are:\n");
@@ -133,8 +135,8 @@ int fsm_update(fsm_state_t *state) {
                 if (is_quit_token(token)) {
                     return 0;
                 }
-                if (token[1] != '\0') {
-                    printf("Invalid input. Please enter y, n, or q.\n");
+                if (token[1] != '\0' || (token[0] != 'y' && token[0] != 'Y' && token[0] != 'n' && token[0] != 'N' && token[0] != 'c' && token[0] != 'C')) {
+                    printf("Invalid input. Please enter y, n, c, or q.\n");
                     continue;
                 }
                 cont = token[0];
@@ -147,7 +149,7 @@ int fsm_update(fsm_state_t *state) {
                     return fsm_update(state);
                 }
                 printf("Target Location:     Tempo:\n");
-                printf("Choose target location (0-4)\n");
+                printf("Choose target location (1-5)\n");
                 if (!read_token(token)) {
                     return 0;
                 }
@@ -155,11 +157,11 @@ int fsm_update(fsm_state_t *state) {
                     return 0;
                 }
                 if (!parse_int_token(token, &target_loc)) {
-                    printf("Invalid input. Please enter 0-4.\n");
+                    printf("Invalid input. Please enter 1-5.\n");
                     continue;
                 }
-                if (target_loc < 0 || target_loc > 4) {
-                    printf("Invalid input. Please enter 0-4.\n");
+                if (target_loc < 1 || target_loc > 5) {
+                    printf("Invalid input. Please enter 1-5.\n");
                     continue;
                 }
                 choose_target_location(target_loc);
@@ -220,7 +222,7 @@ int fsm_update(fsm_state_t *state) {
             while (true) {
                 printf("\nYou can return to Set Mode at any time by entering 's'.\n");
                 printf("You can quit at any time by entering 'q'.\n");
-                printf("Enter set 0 to 3: \n");
+                printf("Enter a Set Sequence 0 to 3 from the previous list: \n");
                 
                 if (!read_token(token)) {
                     operation_cleanup();
@@ -250,7 +252,7 @@ int fsm_update(fsm_state_t *state) {
                             break;
                         }
                         if (param == 't' || param == 'T') {
-                            printf("Enter tilt angle in degrees (9 - 80):\n");
+                            printf("Enter tilt angle in degrees (9 - 81):\n");
                             if (!read_token(token)) {
                                 continue;
                             }

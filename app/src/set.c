@@ -212,12 +212,12 @@ int set_machine_position(int position) {
 }
 
 int choose_target_location(int target) {
-    if (target < 0 || target >= NUM_TARGETS) {
-        fprintf(stderr, "Invalid target location. Must be between 0 and %d.\n", NUM_TARGETS - 1);
+    if (target < 1 || target > NUM_TARGETS) {
+        fprintf(stderr, "Invalid target location. Must be between 1 and %d.\n", NUM_TARGETS);
         return 0;
     }
 
-    curr_target_location = target;
+    curr_target_location = target - 1; //adjust for 0-indexing
 
     return target;
 
@@ -245,8 +245,8 @@ void advanced_save_set(int set_index, float launch_speed, float tilt_angle, floa
         return;
     }
     set_seq[set_index].launch_speed = launch_speed;
-    if (tilt_angle > 80.0) {
-        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be 80 degrees or less).\n", tilt_angle);
+    if (tilt_angle > 81.0) {
+        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be 81 degrees or less).\n", tilt_angle);
         return;
     }
     set_seq[set_index].tilt_angle = tilt_angle;
@@ -270,8 +270,8 @@ void advanced_save_set(int set_index, float launch_speed, float tilt_angle, floa
 
 int save_set(int set_index, int print_info) {
     float angle = tilt_angle[curr_machine_position][curr_target_location][curr_tempo];
-    if (angle > 80.0 || angle < 9.0) {
-        fprintf(stderr, "Invalid tilt angle for set %d: %.2f degrees (must be between 9 and 80 degrees).\n", set_index, angle);
+    if (angle > 81.0 || angle < 9.0) {
+        fprintf(stderr, "Invalid tilt angle for set %d: %.2f degrees (must be between 9 and 81 degrees).\n", set_index, angle);
         return 0;
     }
     set_seq[set_index].launch_speed = launch_speed[curr_machine_position][curr_target_location][curr_tempo];
@@ -287,50 +287,48 @@ int save_set(int set_index, int print_info) {
     set_seq[set_index].tempo = curr_tempo;
 
     if (print_info) {
-        printf("Set %d: Target Location = %d, Tempo = %d\n", set_index, set_seq[set_index].target_location, set_seq[set_index].tempo + 1);
-        printf("        Tilt Angle = %.2f degrees, Yaw Angle = %.2f degrees, RPM Output = %.2f, RPM in mv = %d\n",
-               set_seq[set_index].tilt_angle, set_seq[set_index].yaw_angle, set_seq[set_index].rpm_output, rpm_to_mv(set_seq[set_index].rpm_output));
+        printf("Set %d: Target Location = %d, Tempo = %d\n", set_index, set_seq[set_index].target_location + 1, set_seq[set_index].tempo + 1);
+        //printf("        Tilt Angle = %.2f degrees, Yaw Angle = %.2f degrees, RPM Output = %.2f, RPM in mv = %d\n",
+        //       set_seq[set_index].tilt_angle, set_seq[set_index].yaw_angle, set_seq[set_index].rpm_output, rpm_to_mv(set_seq[set_index].rpm_output));
     }
     return 1;
 }
 
 void common_sets() {
     switch(curr_machine_position) {
+        //TARGET LOCATIONS AND TEMPOS ARE 0 INDEXED HERE, BUT 1 INDEXED IN USER INTERFACE
         case 0:
-            curr_target_location = 1;
-            curr_tempo = 0;
-            save_set(0, 0);
-            curr_target_location = 1;
-            curr_tempo = 2;
-            save_set(1, 0);
-            curr_target_location = 4;
-            save_set(2, 0);
             curr_target_location = 2;
-            curr_tempo = 2;
-            save_set(3, 0);
-            break;
-        case 2:
-            curr_target_location = 0;
-            curr_tempo = 0;
-            save_set(0, 0);
-            curr_target_location = 0;
-            curr_tempo = 3;
-            save_set(1, 0);
-            curr_target_location = 3;
-            save_set(2, 0);
-            curr_target_location = 2;
-            curr_tempo = 2;
-            save_set(3, 0);
-            break;
-        default:
-            curr_target_location = 0;
             curr_tempo = 0;
             save_set(0, 0);
             curr_tempo = 1;
             save_set(1, 0);
             curr_tempo = 2;
             save_set(2, 0);
+            curr_tempo = 3;
+            save_set(3, 0);
+            break;
+        case 2:
+            curr_target_location = 3;
+            curr_tempo = 2;
+            save_set(0, 0);
+            curr_target_location = 2;
+            save_set(1, 0);
             curr_target_location = 1;
+            save_set(2, 0);
+            curr_target_location = 0;
+            save_set(3, 0);
+            break;
+        default:
+            curr_target_location = 3;
+            curr_tempo = 2;
+            save_set(0, 0);
+            curr_target_location = 0;
+            curr_tempo = 2;
+            save_set(1, 0);
+            curr_tempo = 3;
+            save_set(2, 0);
+            curr_target_location = 4;
             curr_tempo = 2;
             save_set(3, 0);
             break;
@@ -339,8 +337,8 @@ void common_sets() {
 
 void print_sets() {
     for (int i = 0; i < NUM_SETS; i++) {
-        printf("Set %d: Target Location = %d, Tempo = %d\n", i, set_seq[i].target_location, set_seq[i].tempo + 1);
-        printf("        Tilt Angle = %.2f degrees, Yaw Angle = %.2f degrees, RPM Output = %.2f, RPM in mv = %d\n",
-               set_seq[i].tilt_angle, set_seq[i].yaw_angle, set_seq[i].rpm_output, rpm_to_mv(set_seq[i].rpm_output));
+        printf("Set %d: Target Location = %d, Tempo = %d\n", i, set_seq[i].target_location + 1, set_seq[i].tempo + 1);
+        //printf("        Tilt Angle = %.2f degrees, Yaw Angle = %.2f degrees, RPM Output = %.2f, RPM in mv = %d\n",
+        //       set_seq[i].tilt_angle, set_seq[i].yaw_angle, set_seq[i].rpm_output, rpm_to_mv(set_seq[i].rpm_output));
     }
 }
