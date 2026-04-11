@@ -32,9 +32,9 @@ uint16_t rpm_to_mv(float rpm)
     }
 
     //quadratic
-    double value = -0.000552477 * rpm * rpm
-         + 1.511338 * rpm
-         + 1059.823250;
+    double value = -0.000542557 * rpm * rpm
+         + 1.496989 * rpm
+         + 1063.520;
 
     return (uint16_t)value;
 }
