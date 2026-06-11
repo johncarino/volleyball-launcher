@@ -1,0 +1,50 @@
+/* MARKER: NEW_CSS */
+body {
+    max-width: 1100px;
+    width: 95%;
+    margin: 0 auto;
+}
+
+h1, h2 {
+	margin-bottom: 1px;
+	padding-bottom: 1px;
+}
+
+#content {
+    margin-top: 10pt;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+
+#status-box {
+    width: 250px;
+    min-height: 200pt;
+    border: thin black solid;
+    background-color: #f3f3f3;
+    padding-left: 10pt;
+    padding-right: 10pt;
+    float: none;
+}
+
+
+#left-box {
+    border: thin black solid;
+    padding-left: 10pt;
+    padding-right: 10pt;
+    min-height: 200pt;
+    margin-right: 0;
+    flex: 1;
+}
+
+#error-box {
+	border: thin black solid;
+	clear: both;
+	background-color: red;
+	padding-left: 10pt;
+	padding-right: 10pt;
+	min-height: 100pt;
+	margin-top: 20px;
+	display: none;
+}
