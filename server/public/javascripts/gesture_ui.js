@@ -10,8 +10,11 @@ var FINGER_KEYS = ["thumb", "index", "middle", "ring", "pinky"];
 
 $(document).ready(function () {
 	$('#error-box').hide();
+	setupGestureUI();
 	setupServerMessageHandlers(socket);
+});
 
+function setupGestureUI() {
 	$("#startBtn").click(function () {
 		sendCommandToServer("start");
 		appendStatus("Requesting recogniser start...");
@@ -21,7 +24,7 @@ $(document).ready(function () {
 		sendCommandToServer("stop");
 		appendStatus("Requesting recogniser stop...");
 	});
-});
+}
 
 function setupServerMessageHandlers(socket) {
 	socket.on('gesture-update', function (data) {
