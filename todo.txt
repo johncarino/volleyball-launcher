@@ -1,0 +1,3 @@
+- Move randomize set into program mode
+- Have a startup sequence that goes through each mode
+- Change UI to make operation the main page and the rest all children of main

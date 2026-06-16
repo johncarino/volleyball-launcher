@@ -1,402 +1,544 @@
 <!DOCTYPE html>
-<!-- MARKER: GESTURE_UI -->
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BeagleY-AI Gesture Control</title>
-  <style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AVSS Controller</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f3;
+    --bg-danger: #fcebeb;
+    --text-primary: #1a1a18;
+    --text-secondary: #5f5e5a;
+    --text-tertiary: #888780;
+    --text-success: #0f6e56;
+    --text-danger: #a32d2d;
+    --border: rgba(0,0,0,0.15);
+    --border-secondary: rgba(0,0,0,0.25);
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --blue: #185FA5;
+    --green: #1a7a3a;
+    --red: #b52a2a;
+  }
+
+  @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0f1220;
-      --panel: rgba(255, 255, 255, 0.06);
-      --panel-border: rgba(255, 255, 255, 0.12);
-      --accent: #6ee7b7;
-      --accent-2: #60a5fa;
-      --text: #e5e7eb;
-      --muted: #9aa3b2;
-      --danger: #f87171;
+      --bg-primary: #1e1e1c;
+      --bg-secondary: #2a2a28;
+      --bg-danger: #3a1a1a;
+      --text-primary: #f0ede8;
+      --text-secondary: #b4b2a9;
+      --text-tertiary: #888780;
+      --text-success: #5dcaa5;
+      --text-danger: #f09595;
+      --border: rgba(255,255,255,0.12);
+      --border-secondary: rgba(255,255,255,0.22);
     }
+  }
 
-    * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #e8e6df;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0;
+  }
 
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      color: var(--text);
-      background:
-        radial-gradient(1200px 600px at 80% -10%, rgba(96, 165, 250, 0.15), transparent),
-        radial-gradient(900px 500px at -10% 110%, rgba(110, 231, 183, 0.12), transparent),
-        var(--bg);
-    }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111110; }
+  }
 
-    .wrap {
-      max-width: 880px;
-      margin: 0 auto;
-      padding: 28px 18px 60px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
+  .app {
+    width: 100%;
+    height: 100vh;
+    max-width: none;
+    background: var(--bg-primary);
+    border: none;
+    border-radius: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
 
-    .page-nav {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 18px;
-      justify-content: center;
-      width: 100%;
-    }
+  .statusbar {
+    background: var(--bg-secondary);
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .statusbar .device { font-size: 12px; color: var(--text-secondary); }
+  .statusbar .conn { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-success); }
 
-    .page-btn {
-      flex: 0 0 auto;
-      min-width: 120px;
-    }
+  .topbar { padding: 12px 16px 0; display: flex; align-items: center; justify-content: space-between; }
+  .topbar h1 { font-size: 18px; font-weight: 500; color: var(--text-primary); }
+  .topbar .pwr {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 0.5px solid var(--border-secondary);
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 18px; color: var(--text-secondary);
+  }
 
-    .page-btn.active {
-      border-color: var(--accent);
-      background: rgba(110, 231, 183, 0.16);
-      color: #d1fae5;
-    }
+  .modenav { display: flex; overflow-x: auto; gap: 4px; padding: 12px 16px; scrollbar-width: none; }
+  .modenav::-webkit-scrollbar { display: none; }
+  .modetab {
+    flex-shrink: 0; padding: 6px 12px; border-radius: 20px;
+    border: 0.5px solid var(--border-secondary);
+    background: transparent; font-size: 12px; font-weight: 500;
+    color: var(--text-secondary); cursor: pointer; white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .modetab.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 
-    .page {
-      display: none;
-      animation: pageFade 0.2s ease;
-      width: 100%;
-      text-align: center;
-    }
+  .content { flex: 1; padding: 0 16px 16px; overflow-y: auto; }
 
-    .page.active { display: block; }
+  .section { margin-bottom: 20px; }
+  .section-label {
+    font-size: 11px; font-weight: 500; color: var(--text-tertiary);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
+  }
 
-    @keyframes pageFade {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+  .card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    padding: 12px 14px; margin-bottom: 10px;
+  }
 
-    header h1 { margin: 0 0 4px; font-size: 1.6rem; }
-    header p { margin: 0 0 22px; color: var(--muted); }
+  .field-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .field-row:last-child { margin-bottom: 0; }
+  .field-label { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+  .field-label i { font-size: 15px; }
+  .field-value { font-size: 13px; font-weight: 500; color: var(--text-primary); }
 
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--panel-border);
-      border-radius: 16px;
-      padding: 20px;
-      backdrop-filter: blur(8px);
-      margin-bottom: 18px;
-      width: 100%;
-    }
+  .coord-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .coord-box {
+    background: var(--bg-primary);
+    border: 0.5px solid var(--border-secondary);
+    border-radius: var(--radius-md); padding: 8px 10px;
+  }
+  .coord-box label { font-size: 11px; color: var(--text-tertiary); display: block; margin-bottom: 2px; }
+  .coord-box select {
+    width: 100%; border: none; background: transparent;
+    font-size: 13px; font-weight: 500; color: var(--text-primary); outline: none;
+    font-family: inherit;
+  }
 
-    .slider-grid {
-      display: flex;
-      gap: 16px;
-      justify-content: center;
-      align-items: stretch;
-      flex-wrap: nowrap;
-    }
+  .tempo-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tempo-pill {
+    padding: 6px 14px; border-radius: 20px;
+    border: 0.5px solid var(--border-secondary);
+    background: transparent; font-size: 12px; color: var(--text-secondary);
+    cursor: pointer; font-family: inherit;
+  }
+  .tempo-pill.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 
-    .machine-actions {
-      margin-top: 18px;
-      display: flex;
-      justify-content: center;
-    }
+  .op-btn {
+    width: 100%; padding: 20px 0;
+    border-radius: var(--radius-md); border: none;
+    font-size: 17px; font-weight: 500; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; transition: opacity 0.15s; font-family: inherit;
+  }
+  .op-btn.start { background: var(--green); color: #fff; }
+  .op-btn.stop  { background: var(--red);   color: #fff; }
 
-    .machine-stop-btn {
-      border-color: rgba(248, 113, 113, 0.75);
-      background: rgba(248, 113, 113, 0.18);
-      color: #fecaca;
-      min-width: 180px;
-    }
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 0.5px solid var(--border);
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-label { font-size: 13px; color: var(--text-primary); }
+  .toggle {
+    width: 38px; height: 22px; border-radius: 11px;
+    border: 0.5px solid var(--border-secondary);
+    background: var(--bg-secondary); position: relative; cursor: pointer;
+  }
+  .toggle.on { background: var(--blue); border-color: var(--blue); }
+  .toggle-thumb {
+    width: 16px; height: 16px; border-radius: 50%; background: white;
+    position: absolute; top: 2px; left: 3px; transition: left 0.15s;
+  }
+  .toggle.on .toggle-thumb { left: 19px; }
 
-    .machine-stop-btn:hover {
-      background: rgba(248, 113, 113, 0.26);
-    }
+  .drill-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 0.5px solid var(--border);
+  }
+  .drill-item:last-child { border-bottom: none; }
+  .drill-num {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--bg-secondary); border: 0.5px solid var(--border-secondary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 500; color: var(--text-secondary); flex-shrink: 0;
+  }
+  .drill-info { flex: 1; }
+  .drill-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+  .drill-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
+  .drill-drag { color: var(--text-tertiary); font-size: 18px; cursor: grab; }
 
-    .slider-card {
-      flex: 1 1 0;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      padding: 16px 12px;
-      border-radius: 14px;
-      border: 1px solid var(--panel-border);
-      background: rgba(255, 255, 255, 0.04);
-    }
+  .save-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .slot {
+    border: 0.5px solid var(--border-secondary);
+    border-radius: var(--radius-md); padding: 10px 12px; cursor: pointer; background: transparent;
+  }
+  .slot.filled { border-color: var(--blue); background: rgba(24,95,165,0.06); }
+  .slot-num { font-size: 11px; color: var(--text-tertiary); margin-bottom: 4px; }
+  .slot-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+  .slot.empty .slot-name { color: var(--text-tertiary); }
 
-    .slider-card label {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text);
-    }
+  .dev-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0; border-bottom: 0.5px solid var(--border);
+  }
+  .dev-row:last-child { border-bottom: none; }
+  .dev-label { font-size: 12px; color: var(--text-secondary); width: 80px; flex-shrink: 0; }
+  .dev-bar-wrap { flex: 1; height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; }
+  .dev-bar { height: 100%; border-radius: 4px; background: var(--blue); transition: width 0.4s; }
+  .dev-val { font-size: 12px; font-weight: 500; color: var(--text-primary); width: 60px; text-align: right; }
 
-    .slider-value {
-      font-size: 0.9rem;
-      color: var(--muted);
-    }
+  .add-btn {
+    width: 100%; padding: 10px;
+    border: 0.5px dashed var(--border-secondary);
+    border-radius: var(--radius-md); background: transparent;
+    color: var(--text-tertiary); font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px; margin-top: 8px; font-family: inherit;
+  }
 
-    .vertical-slider-wrap {
-      height: 260px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+  .vert-sliders { display: flex; justify-content: center; }
+  .vert-slider-col { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; }
+  .vert-slider-label { font-size: 13px; color: var(--text-secondary); }
+  .vert-slider-val { font-size: 15px; font-weight: 500; color: var(--text-primary); }
+  .vert-slider-track { height: 180px; display: flex; align-items: center; justify-content: center; }
+  input[type=range].vertical {
+    writing-mode: vertical-lr; direction: rtl;
+    width: 36px; height: 160px; cursor: pointer;
+  }
 
-    .vertical-slider {
-      appearance: slider-vertical;
-      writing-mode: vertical-lr;
-      direction: rtl;
-      width: 44px;
-      margin: 0;
-      background: transparent;
-      accent-color: var(--accent);
-      touch-action: pan-y;
-    }
-
-    .vertical-slider:focus {
-      outline: none;
-    }
-
-    .vertical-slider::-webkit-slider-runnable-track {
-      width: 44px;
-    }
-
-    .vertical-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 0;
-      height: 0;
-      border: 0;
-      background: transparent;
-      box-shadow: none;
-      opacity: 0;
-    }
-
-    .vertical-slider::-moz-range-thumb {
-      width: 0;
-      height: 0;
-      border: 0;
-      background: transparent;
-      box-shadow: none;
-      opacity: 0;
-    }
-
-    @media (max-width: 520px) {
-      .slider-grid {
-        gap: 12px;
-      }
-
-      .slider-card {
-        padding: 14px 10px;
-      }
-
-      .vertical-slider-wrap {
-        height: 240px;
-      }
-
-      .vertical-slider {
-        height: 220px;
-      }
-    }
-
-    .row {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-    }
-
-    button {
-      cursor: pointer;
-      border: 1px solid var(--panel-border);
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--text);
-      padding: 12px 22px;
-      border-radius: 12px;
-      font-size: 1rem;
-      transition: transform 0.05s ease, background 0.2s ease, opacity 0.2s ease;
-    }
-    button:hover { background: rgba(255, 255, 255, 0.14); }
-    button:active { transform: translateY(1px); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    #startBtn { border-color: rgba(110, 231, 183, 0.5); }
-    #stopBtn { border-color: rgba(248, 113, 113, 0.5); }
-
-    .pill {
-      padding: 6px 14px;
-      border-radius: 999px;
-      font-size: 0.85rem;
-      border: 1px solid var(--panel-border);
-      color: var(--muted);
-    }
-    .pill.on { color: #052e16; background: var(--accent); border-color: var(--accent); }
-
-    .gesture-name {
-      font-size: 3rem;
-      font-weight: 700;
-      letter-spacing: 1px;
-      text-align: center;
-      margin: 4px 0 6px;
-      background: linear-gradient(90deg, var(--accent), var(--accent-2));
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-    .finger-count { text-align: center; color: var(--muted); margin-bottom: 18px; }
-    .finger-count span { color: var(--text); font-weight: 700; }
-
-    .fingers {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 10px;
-    }
-    .finger {
-      text-align: center;
-      padding: 14px 6px;
-      border-radius: 12px;
-      border: 1px solid var(--panel-border);
-      background: rgba(255, 255, 255, 0.04);
-      transition: background 0.15s ease, border-color 0.15s ease;
-    }
-    .finger .finger-name { font-size: 0.8rem; color: var(--muted); }
-    .finger .finger-state { font-size: 1.1rem; font-weight: 700; margin-top: 6px; }
-    .finger.up {
-      background: rgba(110, 231, 183, 0.14);
-      border-color: rgba(110, 231, 183, 0.55);
-    }
-    .finger.up .finger-state { color: var(--accent); }
-    .finger.down .finger-state { color: var(--muted); }
-
-    #status {
-      white-space: pre-wrap;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.85rem;
-      color: var(--muted);
-      max-height: 160px;
-      overflow-y: auto;
-      margin: 0;
-      text-align: left;
-    }
-
-    #error-box {
-      border: 1px solid rgba(248, 113, 113, 0.5);
-      background: rgba(248, 113, 113, 0.12);
-      color: var(--danger);
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin-bottom: 18px;
-    }
-
-    h2 { font-size: 1rem; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
-  </style>
+  input[type=range] { accent-color: var(--blue); }
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <nav class="page-nav" aria-label="Page navigation">
-      <button class="page-btn active" type="button" data-page-target="page-main">Gesture Control</button>
-      <button class="page-btn" type="button" data-page-target="page-two">Machine Control</button>
-    </nav>
 
-    <div id="error-box">
-      <strong>Error:</strong> <span id="error-text"></span>
-    </div>
-
-    <section class="page active" id="page-main" data-page="main">
-      <header>
-        <h1>BeagleY-AI Gesture Control</h1>
-        <p>MediaPipe hand tracking &rarr; UDP &rarr; live web readout</p>
-      </header>
-
-      <div class="panel">
-        <div class="row">
-          <button id="startBtn">Start</button>
-          <button id="stopBtn" disabled>Stop</button>
-          <span class="pill" id="statePill">Idle</span>
-          <span style="display:none" id="stateid">Idle</span>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="gesture-name" id="gestureName">NONE</div>
-        <div class="finger-count">Fingers up: <span id="fingerCount">0</span></div>
-        <div class="fingers">
-          <div class="finger down" id="finger-thumb">
-            <div class="finger-name">Thumb</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-index">
-            <div class="finger-name">Index</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-middle">
-            <div class="finger-name">Middle</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-ring">
-            <div class="finger-name">Ring</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-pinky">
-            <div class="finger-name">Pinky</div><div class="finger-state">down</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h2>Status log</h2>
-        <pre id="status"></pre>
-      </div>
-    </section>
-
-    <section class="page" id="page-two" data-page="two">
-      <header>
-        <h1>Machine Control</h1>
-        <p>Adjust the motor controls below.</p>
-      </header>
-
-      <div class="panel">
-        <div class="slider-grid">
-          <div class="slider-card">
-            <label for="speedSlider">Speed</label>
-            <div class="slider-value"><span id="speedValue">0</span>%</div>
-            <div class="vertical-slider-wrap">
-              <input
-                id="speedSlider"
-                class="vertical-slider"
-                type="range"
-                min="0"
-                max="100"
-                value="0"
-                aria-label="Speed"
-              />
-            </div>
-          </div>
-
-          <div class="slider-card">
-            <label for="angleSlider">Angle</label>
-            <div class="slider-value"><span id="angleValue">0</span>&deg;</div>
-            <div class="vertical-slider-wrap">
-              <input
-                id="angleSlider"
-                class="vertical-slider"
-                type="range"
-                min="0"
-                max="90"
-                value="0"
-                aria-label="Angle"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="machine-actions">
-          <button id="machineStopBtn" class="machine-stop-btn" type="button">Stop Motors</button>
-        </div>
-      </div>
-    </section>
+<div class="app">
+  <div class="statusbar">
+    <span class="device">AVSS</span>
+    <span class="conn"><i class="ti ti-wifi" style="font-size:13px" aria-hidden="true"></i> Connected</span>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="https://code.jquery.com/jquery-1.11.1.min.js"></script>
-  <script src="javascripts/page_control.js"></script>
-  <script src="javascripts/machine_control.js"></script>
-  <script src="javascripts/gesture_ui.js"></script>
+  <div class="topbar">
+    <h1 id="page-title">Operation</h1>
+  </div>
+
+  <div class="modenav" role="tablist" aria-label="Modes">
+    <button class="modetab" role="tab" data-mode="operation">Operation</button>
+    <button class="modetab" role="tab" data-mode="dev">Dev</button>
+  </div>
+
+  <div class="content" id="main-content"></div>
+</div>
+
+<script>
+const screens = {
+  operation: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Current set</div>
+      <div class="card">
+        <div class="field-row"><span class="field-label"><i class="ti ti-map-pin" aria-hidden="true"></i>Machine</span><span class="field-value">Back-right corner</span></div>
+        <div class="field-row"><span class="field-label"><i class="ti ti-target" aria-hidden="true"></i>Target</span><span class="field-value">Front-left zone 3</span></div>
+        <div class="field-row"><span class="field-label"><i class="ti ti-metronome" aria-hidden="true"></i>Tempo</span><span class="field-value">3</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Launch</div>
+      <button class="op-btn start" id="launch-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+    </div>
+    <div class="section" style="margin-top:12px">
+      <div class="section-label">Playback</div>
+      <div class="card">
+        <div class="toggle-row">
+          <span class="toggle-label">Repeat set</span>
+          <div class="toggle on" onclick="this.classList.toggle('on')" role="switch" aria-label="Repeat set"><div class="toggle-thumb"></div></div>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Randomize order</span>
+          <div class="toggle" onclick="this.classList.toggle('on')" role="switch" aria-label="Randomize order"><div class="toggle-thumb"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Mode sections</div>
+      <div class="card">
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button class="modetab subtab active" data-sub="set" onclick="setOperationSubmode('set')">Set</button>
+          <button class="modetab subtab" data-sub="drill" onclick="setOperationSubmode('drill')">Drill</button>
+          <button class="modetab subtab" data-sub="advance" onclick="setOperationSubmode('advance')">Advanced</button>
+          <button class="modetab subtab" data-sub="court" onclick="setOperationSubmode('court')">Court</button>
+        </div>
+        <div id="operation-subcontent"></div>
+      </div>
+    </div>`,
+
+  set: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Machine location</div>
+      <div class="coord-grid">
+        <div class="coord-box"><label>Side</label><select><option>Back-right</option><option>Back-left</option><option>Centre</option><option>Front-right</option></select></div>
+        <div class="coord-box"><label>Zone</label><select><option>Zone 1</option><option>Zone 2</option><option>Zone 3</option><option>Zone 4</option><option>Zone 5</option><option>Zone 6</option></select></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Target location</div>
+      <div class="coord-grid">
+        <div class="coord-box"><label>Side</label><select><option>Left</option><option>Centre</option><option>Right</option></select></div>
+        <div class="coord-box"><label>Zone</label><select><option>Zone 1</option><option>Zone 2</option><option>Zone 3</option><option>Zone 4</option><option>Zone 5</option><option>Zone 6</option></select></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Tempo</div>
+      <div class="card">
+        <div class="tempo-pills">
+          <button class="tempo-pill" onclick="setPill(this)">1</button>
+          <button class="tempo-pill active" onclick="setPill(this)">2</button>
+          <button class="tempo-pill" onclick="setPill(this)">3</button>
+          <button class="tempo-pill" onclick="setPill(this)">4</button>
+          <button class="tempo-pill" onclick="setPill(this)">5</button>
+        </div>
+      </div>
+    </div>
+    <button class="add-btn"><i class="ti ti-plus" aria-hidden="true"></i>Save Machine Settings</button>`,
+
+  drill: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Drill sequence</div>
+      <div class="card">
+        <div class="drill-item">
+          <div class="drill-num">1</div>
+          <div class="drill-info"><div class="drill-name">Cross-court serve receive</div><div class="drill-meta">Back-right → Zone 1 · Tempo 3 · ×8</div></div>
+          <i class="ti ti-grip-vertical drill-drag" aria-hidden="true"></i>
+        </div>
+        <div class="drill-item">
+          <div class="drill-num">2</div>
+          <div class="drill-info"><div class="drill-name">Line attack feed</div><div class="drill-meta">Centre → Zone 6 · Tempo 2 · ×6</div></div>
+          <i class="ti ti-grip-vertical drill-drag" aria-hidden="true"></i>
+        </div>
+        <div class="drill-item">
+          <div class="drill-num">3</div>
+          <div class="drill-info"><div class="drill-name">Short float serve</div><div class="drill-meta">Back-left → Zone 2 · Tempo 4 · ×10</div></div>
+          <i class="ti ti-grip-vertical drill-drag" aria-hidden="true"></i>
+        </div>
+      </div>
+      <button class="add-btn"><i class="ti ti-plus" aria-hidden="true"></i> Add drill</button>
+    </div>`,
+
+  advance: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Launch parameters</div>
+      <div class="card">
+        <div class="vert-sliders">
+          <div class="vert-slider-col">
+            <span class="vert-slider-label">Angle</span>
+            <span class="vert-slider-val" id="ang-val">32°</span>
+            <div class="vert-slider-track">
+              <input type="range" class="vertical" min="5" max="85" value="32" step="1"
+                oninput="document.getElementById('ang-val').textContent=this.value+'°'">
+            </div>
+            <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
+          </div>
+          <div class="vert-slider-col">
+            <span class="vert-slider-label">Speed</span>
+            <span class="vert-slider-val" id="spd-val">68 km/h</span>
+            <div class="vert-slider-track">
+              <input type="range" class="vertical" min="20" max="120" value="68" step="1"
+                oninput="document.getElementById('spd-val').textContent=this.value+' km/h'">
+            </div>
+            <span style="font-size:11px;color:var(--text-tertiary)">20 – 120 km/h</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Save to slot</div>
+      <div class="save-slots">
+        <div class="slot filled"><div class="slot-num">Slot 1</div><div class="slot-name">Serve receive A</div></div>
+        <div class="slot filled"><div class="slot-num">Slot 2</div><div class="slot-name">Attack feed high</div></div>
+        <div class="slot empty" onclick="this.classList.add('filled');this.querySelector('.slot-name').textContent='New set'"><div class="slot-num">Slot 3</div><div class="slot-name">Empty — tap to save</div></div>
+        <div class="slot empty" onclick="this.classList.add('filled');this.querySelector('.slot-name').textContent='New set'"><div class="slot-num">Slot 4</div><div class="slot-name">Empty — tap to save</div></div>
+      </div>
+    </div>`,
+
+  court: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Net height</div>
+      <div class="card">
+        <div style="margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+            <span style="font-size:13px;color:var(--text-secondary)">Height</span>
+            <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="net-val">243 cm</strong>
+          </div>
+          <input type="range" min="220" max="260" value="243" step="1" style="width:100%" oninput="document.getElementById('net-val').textContent=this.value+' cm'">
+        </div>
+        <div class="field-row" style="margin-top:4px"><span class="field-label" style="font-size:11px">Standard men's: 243 cm · Women's: 224 cm</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Court dimensions</div>
+      <div class="card">
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+            <span style="font-size:13px;color:var(--text-secondary)">Length</span>
+            <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="len-val">18.0 m</strong>
+          </div>
+          <input type="range" min="10" max="22" value="18" step="0.5" style="width:100%" oninput="document.getElementById('len-val').textContent=parseFloat(this.value).toFixed(1)+' m'">
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+            <span style="font-size:13px;color:var(--text-secondary)">Width</span>
+            <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="wid-val">9.0 m</strong>
+          </div>
+          <input type="range" min="5" max="12" value="9" step="0.5" style="width:100%" oninput="document.getElementById('wid-val').textContent=parseFloat(this.value).toFixed(1)+' m'">
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Machine offset</div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+          <span style="font-size:13px;color:var(--text-secondary)">Distance from end line</span>
+          <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="off-val">0.5 m</strong>
+        </div>
+        <input type="range" min="0" max="300" value="50" step="5" style="width:100%" oninput="document.getElementById('off-val').textContent=(this.value/100).toFixed(1)+' m'">
+      </div>
+    </div>
+    <button class="add-btn" style="border-style:solid;color:var(--text-primary)">Save Court Settings</button>`,
+
+  dev: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Manual control</div>
+      <div class="card">
+        <div class="vert-sliders">
+          <div class="vert-slider-col">
+            <span class="vert-slider-label">Angle</span>
+            <span class="vert-slider-val" id="dev-ang-val">32°</span>
+            <div class="vert-slider-track">
+              <input type="range" class="vertical" min="5" max="85" value="32" step="1"
+                oninput="document.getElementById('dev-ang-val').textContent=this.value+'°'">
+            </div>
+            <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
+          </div>
+          <div class="vert-slider-col">
+            <span class="vert-slider-label">Speed</span>
+            <span class="vert-slider-val" id="dev-spd-val">68 km/h</span>
+            <div class="vert-slider-track">
+              <input type="range" class="vertical" min="20" max="120" value="68" step="1" id="dev-spd-slider"
+                oninput="document.getElementById('dev-spd-val').textContent=this.value+' km/h'">
+            </div>
+            <span style="font-size:11px;color:var(--text-tertiary)">20 – 120 km/h</span>
+          </div>
+        </div>
+      </div>
+      <button class="op-btn stop" onclick="stopDevMotor()"><i class="ti ti-player-stop" aria-hidden="true"></i> Stop</button>
+    </div>
+    <div class="section">
+      <div class="section-label">Live telemetry</div>
+      <div class="card">
+        <div class="dev-row">
+          <span class="dev-label">Flywheel L</span>
+          <div class="dev-bar-wrap"><div class="dev-bar" id="fw-l" style="width:74%"></div></div>
+          <span class="dev-val" id="fw-l-v">3700 rpm</span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">Flywheel R</span>
+          <div class="dev-bar-wrap"><div class="dev-bar" id="fw-r" style="width:71%"></div></div>
+          <span class="dev-val" id="fw-r-v">3550 rpm</span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">Angle</span>
+          <div class="dev-bar-wrap"><div class="dev-bar" id="ang-b" style="width:38%"></div></div>
+          <span class="dev-val" id="ang-bv">32°</span>
+        </div>
+      </div>
+    </div>`
+};
+
+function setPill(el) {
+  el.closest('.tempo-pills').querySelectorAll('.tempo-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function toggleLaunch(btn) {
+  const running = btn.classList.contains('stop');
+  if (running) {
+    btn.classList.remove('stop');
+    btn.classList.add('start');
+    btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+  } else {
+    btn.classList.remove('start');
+    btn.classList.add('stop');
+    btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+  }
+}
+
+function setOperationSubmode(sub) {
+  const container = document.getElementById('operation-subcontent');
+  if (!container) return;
+  document.querySelectorAll('.subtab').forEach(s => s.classList.remove('active'));
+  const btn = document.querySelector(`.subtab[data-sub="${sub}"]`);
+  if (btn) btn.classList.add('active');
+  if (typeof screens[sub] === 'function') container.innerHTML = screens[sub]();
+  else container.innerHTML = '';
+}
+
+function stopDevMotor() {
+  const speedSlider = document.getElementById('dev-spd-slider');
+  if (speedSlider) {
+    speedSlider.value = 0;
+    document.getElementById('dev-spd-val').textContent = '0 km/h';
+  }
+}
+
+function setMode(mode) {
+  document.querySelectorAll('.modetab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
+  document.getElementById('main-content').innerHTML = screens[mode]();
+  document.getElementById('page-title').textContent = {
+    operation: 'Operation', set: 'Set mode', drill: 'Drill',
+    advance: 'Advanced', court: 'Court', dev: 'Dev'
+  }[mode];
+  if (mode === 'operation') {
+    // initialize embedded subview
+    setOperationSubmode('set');
+  }
+  if (mode === 'dev') startTelemetry();
+}
+
+function startTelemetry() {
+  clearInterval(window._telem);
+  window._telem = setInterval(() => {
+    if (!document.getElementById('fw-l')) return clearInterval(window._telem);
+    const jitter = v => Math.max(0, Math.min(100, v + (Math.random() - 0.5) * 4));
+    const lPct = jitter(74), rPct = jitter(71);
+    document.getElementById('fw-l').style.width = lPct.toFixed(0) + '%';
+    document.getElementById('fw-r').style.width = rPct.toFixed(0) + '%';
+    document.getElementById('fw-l-v').textContent = Math.round(lPct * 50) + ' rpm';
+    document.getElementById('fw-r-v').textContent = Math.round(rPct * 50) + ' rpm';
+    document.getElementById('cpu-temp').textContent = Math.round(42 + Math.random() * 4) + ' °C';
+    document.getElementById('ecap-duty').textContent = (60 + Math.random() * 5).toFixed(1) + '%';
+    document.getElementById('bus-v').textContent = (46.8 + Math.random() * 0.8).toFixed(1) + ' V';
+  }, 800);
+}
+
+document.querySelectorAll('.modetab').forEach(t => t.addEventListener('click', () => setMode(t.dataset.mode)));
+setMode('operation');
+</script>
 </body>
 </html>
