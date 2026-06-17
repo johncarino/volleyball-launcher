@@ -236,7 +236,7 @@ int fsm_update(fsm_state_t *state) {
                     printf("Entering Developer Mode...\n");
                     while (true) {
                         float tilt, yaw, speed;
-                        printf("Set tilt, yaw, or rpm? (t/y/s) Enter 'b' to go back.\n");
+                        printf("Set tilt, yaw, or mv? (t/y/s) Enter 'b' to go back.\n");
                         if (!read_token(token)) {
                             continue;
                         }
@@ -263,7 +263,8 @@ int fsm_update(fsm_state_t *state) {
                                 printf("Invalid input. Please enter a number.\n");
                                 continue;
                             }
-                            tilt_signal(tilt);
+                            //tilt_signal(tilt);
+                            tilt_with_feedback(tilt);
                             continue;
                         }
                         if (param == 'y' || param == 'Y') {

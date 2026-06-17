@@ -17,16 +17,16 @@ float rpm_table[DATA_SIZE] = {
 
 uint16_t mv_table[DATA_SIZE] = {
     1722, 1795, 1852,
-    1790, 1840, 1911, 2008,
-    1958, 1935, 1958, 2006,
-    2088, 2006, 2006, 2006
+    1863, 1840, 1943, 2008,
+    1958, 1935, 2017, 2006,
+    2088, 2006, 2095, 2110
 };
 
 uint16_t rpm_to_mv(float rpm)
 {
     for (int i = 0; i < DATA_SIZE; i++) {
         if ((int)lroundf(rpm) == rpm_table[i]) {
-            //printf("Exact match found for RPM %.2f: %d mV\n", rpm, mv_table[i]);
+            printf("Exact match found for RPM %.2f: %d mV\n", rpm, mv_table[i]);
             return mv_table[i];
         }
     }
@@ -298,14 +298,14 @@ void common_sets() {
     switch(curr_machine_position) {
         //TARGET LOCATIONS AND TEMPOS ARE 0 INDEXED HERE, BUT 1 INDEXED IN USER INTERFACE
         case 0:
-            curr_target_location = 2;
-            curr_tempo = 0;
-            save_set(0, 0);
-            curr_tempo = 1;
-            save_set(1, 0);
+            curr_target_location = 1;
             curr_tempo = 2;
+            save_set(0, 0);
+            curr_target_location = 2;
+            save_set(1, 0);
+            curr_target_location = 3;
             save_set(2, 0);
-            curr_tempo = 3;
+            curr_target_location = 4;
             save_set(3, 0);
             break;
         case 2:

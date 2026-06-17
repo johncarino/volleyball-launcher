@@ -10,6 +10,10 @@ float d_angle = 0;
 //#define YAW_COEFF 10 //10 steps per degree, determined experimentally
 //#define SPEED_COEFF 2.36
 
+#define TILT_TOLERANCE_DEG 0.5
+#define TILT_TIMEOUT_SEC 10
+#define TILT_LOOP_DELAY_US 50000
+
 pthread_t tilt_thread, yaw_thread;
 pthread_mutex_t tilt_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t yaw_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -78,6 +82,18 @@ void operation_init() {
     curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_yaw_angle = 0.0;
 
+    //init mpu6050
+    if (mpu6050_init(NULL) != 0) {
+        fprintf(stderr, "Failed to initialize MPU6050. Is I2C enabled and the sensor connected?\n");
+        return;
+    }
+
+    //init bts7960
+    if (bts_init() != 0) {
+        fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
+        return;
+    }
+
     //init tb6600
     if (tb6600_init(&motor, 1) < 0) {
         fprintf(stderr, "Failed to initialize TB6600\n");
@@ -88,12 +104,6 @@ void operation_init() {
     //init mcp4725
     if (mcp4725_init(&dac1, MCP4725_I2C_BUS1, MCP4725_I2C_ADDR) != 0) {
         fprintf(stderr, "Failed to initialize MCP4725 — is I2C enabled?\n");
-        return;
-    }
-
-    //init bts7960
-    if (bts_init() != 0) {
-        fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
         return;
     }
 
@@ -131,6 +141,8 @@ void operation_cleanup() {
 
     tb6600_enable(&motor, 0);
     tb6600_close(&motor);
+
+    mpu6050_close();
 
     mcp4725_cleanup(&dac1);
 
@@ -183,6 +195,57 @@ void tilt_signal(float angle) {
     curr_tilt_angle = angle;
 }
 
+void tilt_with_feedback(float angle)
+{
+    mpu6050_data_t imu_data;
+
+    const double target_angle = (double)angle;
+
+    time_t start_time = time(NULL);
+
+    while (1) {
+        if (mpu6050_read(&imu_data) != 0) {
+            fprintf(stderr, "Failed to read MPU6050\n");
+            printf("STOP TILT ACTUATOR\n");
+            bts_stop();
+            return;
+        }
+
+        double current_angle = imu_data.stable_roll_deg;
+        double error = target_angle - current_angle;
+
+        fprintf(stderr,
+                "Target: %.2f deg, Current: %.2f deg, Error: %.2f deg\n",
+                target_angle,
+                current_angle,
+                error);
+
+        if (fabs(error) <= TILT_TOLERANCE_DEG) {
+            printf("Target tilt angle reached within tolerance. Stopping tilt actuator.\n");
+            bts_stop();
+            break;
+        }
+
+        if (error > 0.0) {
+            printf("Tilting forward...\n");
+            bts_forward_start(50);
+        } else {
+            printf("Tilting reverse...\n");
+            bts_reverse_start(50);
+        }
+
+        if ((time(NULL) - start_time) >= TILT_TIMEOUT_SEC) {
+            fprintf(stderr, "Tilt feedback timeout\n");
+            printf("STOP TILT ACTUATOR\n");
+            bts_stop();
+            break;
+        }
+
+        usleep(TILT_LOOP_DELAY_US);
+    }
+
+}
+
 void yaw_signal(float angle) {
 
     float delta_angle = angle - curr_yaw_angle;
@@ -217,8 +280,8 @@ void yaw_signal(float angle) {
 }
 
 void speed_signal(float speed) {
-    if (speed > 1200.0) {
-        fprintf(stderr, "Invalid RPM: %.2f (must be 1200 or less). Skipping speed.\n", speed);
+    if (speed > 9999.0) {
+        fprintf(stderr, "Invalid RPM: %.2f (must be 9999 or less). Skipping speed.\n", speed);
         return;
     }
     uint16_t mv = 0;
@@ -227,6 +290,15 @@ void speed_signal(float speed) {
     //(void)speed;
     printf("setting speed to %.2f mV\n", (float)mv);
     mcp4725_set_mv(&dac1, mv);
+}
+
+void speed_mv(float speed) {
+    if (speed > 9999.0) {
+        fprintf(stderr, "Invalid RPM: %.2f (must be 9999 or less). Skipping speed.\n", speed);
+        return;
+    }
+    
+    mcp4725_set_mv(&dac1, speed);
 }
 
 void set_machine(int set_index) {
@@ -265,6 +337,8 @@ void set_machine(int set_index) {
 
     //signal speed
     speed_signal(set_seq[set_index].rpm_output);
+    //mcp4725_set_mv(&dac1, 1725);
+
 } 
 
 /*

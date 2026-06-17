@@ -10,6 +10,7 @@
 #include "hal/bts7960.h"
 #include "hal/mcp4725.h"
 #include "hal/tb6600.h"
+#include "hal/mpu6050.h"
 
 /*
 * Operation Mode Header
@@ -28,8 +29,11 @@ void operation_cleanup();
 void homing_sequence();
 
 void tilt_signal(float angle);
+void tilt_with_feedback(float angle);
 void yaw_signal(float angle);
 void speed_signal(float speed);
+
+void speed_mv(float speed);
 void set_machine(int set_index);
 void machine_operating();
 void stop_machine();
