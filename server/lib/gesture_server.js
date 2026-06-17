@@ -59,6 +59,21 @@ function handleCommand(socket) {
 		stopRecognizer(socket);
 	});
 
+	socket.on('setSpeed', function(speed) {
+		console.log("Got setSpeed command: " + speed);
+		// TODO: Add logic here to send this value to your launcher hardware (e.g., via UDP or Serial)
+	});
+
+	socket.on('setAngle', function(angle) {
+		console.log("Got setAngle command: " + angle);
+		// TODO: Add logic here to send this value to your launcher hardware
+	});
+
+	socket.on('stopMotors', function() {
+		console.log("Got stopMotors command.");
+		// TODO: Add logic here to emergency stop the launcher motors
+	});
+
 	// Report current state to a freshly-connected browser.
 	socket.emit('state-reply', recognizer ? 'RUNNING' : 'IDLE');
 }

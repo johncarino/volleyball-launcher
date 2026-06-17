@@ -1,54 +1,45 @@
-"use strict";
-// Machine Control module - handles machine controls
+// Ensure Socket.IO is loaded and available
+if (typeof io === 'undefined') {
+  console.error('Socket.IO client library not loaded.');
+} else {
+  const socket = io(); // Connects to the default namespace
 
-$(document).ready(function () {
-	setupSliderControls();
-	setupMachineControls();
-});
+  // Get references to the sliders and their value displays
+  const speedSlider = $('#speedSlider');
+  const speedValueSpan = $('#speedValue');
+  const angleSlider = $('#angleSlider');
+  const angleValueSpan = $('#angleValue');
+  const machineStopBtn = $('#machineStopBtn');
 
-function setupSliderControls() {
-	var $speed = $("#speedSlider");
-	var $angle = $("#angleSlider");
+  // Function to update slider display and emit to server
+  function updateSliderAndEmit(slider, valueSpan, eventName) {
+    const value = slider.val();
+    valueSpan.text(value);
+    console.log(`Emitting ${eventName}: ${value}`);
+    socket.emit(eventName, value);
+  }
 
-	function updateSpeedDisplay() {
-		var v = $speed.val();
-		$("#speedValue").text(v);
-	}
+  // Event listener for Speed Slider changes
+  speedSlider.on('change', function() {
+    updateSliderAndEmit($(this), speedValueSpan, 'setSpeed');
+  });
 
-	function logSpeedChange() {
-		logMachineValue("Speed", $speed.val());
-	}
+  // Event listener for Angle Slider changes
+  angleSlider.on('change', function() {
+    updateSliderAndEmit($(this), angleValueSpan, 'setAngle');
+  });
 
-	function updateAngleDisplay() {
-		var v = $angle.val();
-		$("#angleValue").text(v);
-	}
+  // Event listener for Stop Motors button
+  machineStopBtn.on('click', function() {
+    console.log('Emitting stopMotors');
+    socket.emit('stopMotors');
+    // Optionally reset sliders to 0 after stopping
+    speedSlider.val(0).trigger('input'); // Trigger input to update display
+  });
 
-	function logAngleChange() {
-		logMachineValue("Angle", $angle.val());
-	}
-
-	$speed.on("input", updateSpeedDisplay);
-	$speed.on("change", logSpeedChange);
-
-	$angle.on("input", updateAngleDisplay);
-	$angle.on("change", logAngleChange);
-
-	// initialize displayed values
-	updateSpeedDisplay();
-	updateAngleDisplay();
-	logMachineValue("Speed", $speed.val());
-	logMachineValue("Angle", $angle.val());
-}
-
-function logMachineValue(label, value) {
-	console.log(label + ":", value);
-}
-
-function setupMachineControls() {
-	$("#machineStopBtn").click(function () {
-		$("#speedSlider").val(0);
-		$("#speedValue").text(0);
-		logMachineValue("Speed", 0);
-	});
+  // Initialize slider displays on page load
+  $(document).ready(function() {
+    speedValueSpan.text(speedSlider.val());
+    angleValueSpan.text(angleSlider.val());
+  });
 }
