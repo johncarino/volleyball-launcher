@@ -34,6 +34,19 @@ var CAMERA_INDEX  = process.env.GESTURE_CAMERA || '0';
 var io;
 var recognizer = null;   // current child_process, or null
 
+// ---- Motor-control native addon ------------------------------------------
+// motor_addon.node is built by: cd server && npm run build
+var motor = (function() {
+	try {
+		var m = require('../build/Release/motor_addon');
+		console.log('[motor] Native addon loaded.');
+		return m;
+	} catch (e) {
+		console.warn('[motor] Native addon not available (' + e.message + '). Motor calls will be no-ops.');
+		return { setSpeed: function(){}, setAngle: function(){}, stopMotors: function(){} };
+	}
+}());
+
 exports.listen = function(server) {
 	io = socketio.listen(server);
 	io.set('log level', 1);
@@ -60,18 +73,22 @@ function handleCommand(socket) {
 	});
 
 	socket.on('setSpeed', function(speed) {
-		console.log("Got setSpeed command: " + speed);
-		// TODO: Add logic here to send this value to your launcher hardware (e.g., via UDP or Serial)
+		var value = parseInt(speed, 10);
+		if (isNaN(value)) { console.log('setSpeed: invalid value'); return; }
+		console.log('Got setSpeed command: ' + value);
+		motor.setSpeed(value);
 	});
 
 	socket.on('setAngle', function(angle) {
-		console.log("Got setAngle command: " + angle);
-		// TODO: Add logic here to send this value to your launcher hardware
+		var value = parseInt(angle, 10);
+		if (isNaN(value)) { console.log('setAngle: invalid value'); return; }
+		console.log('Got setAngle command: ' + value);
+		motor.setAngle(value);
 	});
 
 	socket.on('stopMotors', function() {
-		console.log("Got stopMotors command.");
-		// TODO: Add logic here to emergency stop the launcher motors
+		console.log('Got stopMotors command.');
+		motor.stopMotors();
 	});
 
 	// Report current state to a freshly-connected browser.
