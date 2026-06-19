@@ -1,3 +1,4 @@
-- Move randomize set into program mode
-- Have a startup sequence that goes through each mode
-- Change UI to make operation the main page and the rest all children of main
+- Add plus minus next to sliders
+- Going back to configure from advanced stops the machine
+- Implement set slot saves
+- Add set slots to launch menu
