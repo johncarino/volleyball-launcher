@@ -88,7 +88,7 @@ const slots = {
   3: null,
   4: null,
 };
-let activeSlot = null;
+
 
 const repeatLabels = ['Repeat', 'Repeat all', 'Repeat one'];
 const repeatIcons  = ['ti-repeat', 'ti-repeat', 'ti-repeat-once'];
@@ -165,13 +165,11 @@ function courtPickerHTML(readonly = false) {
 
 function selectMachine(id) {
   selectedMachine = id;
-  if (activeSlot) { slots[activeSlot].machine = id; }
   refreshCourtPicker();
 }
 
 function selectTarget(id) {
   selectedTarget = id;
-  if (activeSlot) { slots[activeSlot].target = id; }
   refreshCourtPicker();
 }
 
@@ -267,19 +265,23 @@ const screens = {
           <div class="vert-slider-col">
             <span class="vert-slider-label">Angle</span>
             <span class="vert-slider-val" id="dev-ang-val">5°</span>
+            <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
             <div class="vert-slider-track">
-              <input type="range" class="vertical" min="5" max="85" value="5" step="1"
+              <input type="range" id="dev-ang-range" class="vertical" min="5" max="85" value="5" step="1"
                 oninput="document.getElementById('dev-ang-val').textContent=this.value+'°'">
             </div>
+            <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
             <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
           </div>
           <div class="vert-slider-col">
             <span class="vert-slider-label">Speed</span>
             <span class="vert-slider-val" id="dev-spd-val">0 %</span>
+            <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
             <div class="vert-slider-track">
-              <input type="range" class="vertical" min="0" max="100" value="0" step="1"
+              <input type="range" id="dev-spd-range" class="vertical" min="0" max="100" value="0" step="1"
                 oninput="document.getElementById('dev-spd-val').textContent=this.value+'%'">
             </div>
+            <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
             <span style="font-size:11px;color:var(--text-tertiary)">0 – 100%</span>
           </div>
         </div>
@@ -309,6 +311,10 @@ const screens = {
         <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">243 cm</span></div>
         <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">18.0 m × 9.0 m</span></div>
       </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Set Slots</div>
+      <div class="save-slots">${slotsHTML(true)}</div>
     </div>
     <div class="section">
       <div class="section-label">Launch</div>
@@ -343,7 +349,6 @@ function setPill(el) {
   el.closest('.tempo-pills').querySelectorAll('.tempo-pill').forEach(p => p.classList.remove('active'));
   el.classList.add('active');
   selectedTempo = parseInt(el.textContent);
-  if (activeSlot) { slots[activeSlot].tempo = selectedTempo; refreshSlots(); }
 }
 
 function refreshSlots() {
@@ -351,32 +356,26 @@ function refreshSlots() {
   if (wrap) wrap.innerHTML = slotsHTML();
 }
 
-function slotsHTML() {
+function slotsHTML(readonly = false) {
   return [1, 2, 3, 4].map(n => {
     const s = slots[n];
-    const isActive = activeSlot === n;
+    const clickAttr = readonly ? '' : `onclick="saveNewSlot(${n})"`;
+    const style = readonly ? ' style="pointer-events:none"' : '';
     if (s) {
-      const sub = [
-        s.machine ? `Machine ${s.machine}` : null,
-        s.target  ? `Zone ${s.target}`     : null,
-        s.tempo   ? `Tempo ${s.tempo}`      : null,
-      ].filter(Boolean).join(' · ') || 'No details saved';
-      return `<div class="slot filled ${isActive ? 'slot-active' : ''}" onclick="loadSlot(${n})">
-        <div class="slot-num">Slot ${n}${isActive ? ' · active' : ''}</div>
+      return `<div class="slot filled" ${clickAttr}${style}>
+        <div class="slot-num">Slot ${n}</div>
         <div class="slot-name">${s.name}</div>
-        <div class="slot-sub">${sub}</div>
       </div>`;
     } else {
-      return `<div class="slot empty" onclick="saveNewSlot(${n})">
+      return `<div class="slot empty" ${clickAttr}${style}>
         <div class="slot-num">Slot ${n}</div>
-        <div class="slot-name">Tap to save current</div>
+        <div class="slot-name">${readonly ? 'Empty' : 'Tap to save current set'}</div>
       </div>`;
     }
   }).join('');
 }
 
 function loadSlot(n) {
-  activeSlot = n;
   const s = slots[n];
   if (s.machine) { selectedMachine = s.machine; }
   if (s.target)  { selectedTarget  = s.target;  }
@@ -391,15 +390,15 @@ function loadSlot(n) {
 
 function saveNewSlot(n) {
   const machinePart = selectedMachine ? `Machine ${selectedMachine}` : null;
-  const zonePart    = selectedTarget  ? `Zone ${selectedTarget}`     : null;
-  const name = [machinePart, zonePart].filter(Boolean).join(' · ') || `Slot ${n}`;
+  const zonePart   = selectedTarget ? `Zone ${selectedTarget}`   : null;
+  const tempoPart  = `Tempo ${selectedTempo}`;
+  const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
   slots[n] = {
     name,
     machine: selectedMachine,
     target: selectedTarget,
     tempo: selectedTempo,
   };
-  activeSlot = n;
   refreshSlots();
 }
 
@@ -447,6 +446,13 @@ function setMode(mode) {
   if (mode === 'advanced') startTelemetry();
 }
 
+function stepSlider(rangeId, valId, suffix, delta) {
+  const input = document.getElementById(rangeId);
+  if (!input) return;
+  input.value = Math.min(input.max, Math.max(input.min, +input.value + delta));
+  document.getElementById(valId).textContent = input.value + suffix;
+}
+
 function startTelemetry() {
   clearInterval(window._telem);
   window._telem = setInterval(() => {
@@ -456,8 +462,8 @@ function startTelemetry() {
     const lPct = jitter(74), rPct = jitter(71);
     fwl.style.width = lPct.toFixed(0) + '%';
     document.getElementById('fw-r').style.width = rPct.toFixed(0) + '%';
-    document.getElementById('fw-l-v').textContent = Math.round(lPct * 50) + ' rpm';
-    document.getElementById('fw-r-v').textContent = Math.round(rPct * 50) + ' rpm';
+    document.getElementById('fw-l-v').textContent = Math.round(lPct * 40) + ' rpm';
+    document.getElementById('fw-r-v').textContent = Math.round(rPct * 40) + ' rpm';
   }, 800);
 }
 

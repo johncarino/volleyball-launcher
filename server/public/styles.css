@@ -159,6 +159,8 @@ body {
 .vert-slider-label { font-size: 13px; color: var(--text-secondary); }
 .vert-slider-val { font-size: 15px; font-weight: 500; color: var(--text-primary); }
 .vert-slider-track { height: 180px; display: flex; align-items: center; justify-content: center; }
+.slider-step-btn { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--card-bg); color: var(--text-primary); font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+.slider-step-btn:active { background: var(--border); }
 input[type=range].vertical {
   writing-mode: vertical-lr; direction: rtl;
   width: 36px; height: 160px; cursor: pointer;

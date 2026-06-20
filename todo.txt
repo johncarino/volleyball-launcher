@@ -1,4 +1,2 @@
-- Add plus minus next to sliders
 - Going back to configure from advanced stops the machine
-- Implement set slot saves
-- Add set slots to launch menu
+- Move JS to separate file
