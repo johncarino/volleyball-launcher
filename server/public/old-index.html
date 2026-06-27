@@ -5,7 +5,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeagleY-AI Gesture Control</title>
-  <link rel="stylesheet" href="stylesheets/style.css" />
   <style>
     :root {
       --bg: #0f1220;
@@ -31,7 +30,47 @@
         var(--bg);
     }
 
-    .wrap { max-width: 880px; margin: 0 auto; padding: 28px 18px 60px; }
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 28px 18px 60px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .page-nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .page-btn {
+      flex: 0 0 auto;
+      min-width: 120px;
+    }
+
+    .page-btn.active {
+      border-color: var(--accent);
+      background: rgba(110, 231, 183, 0.16);
+      color: #d1fae5;
+    }
+
+    .page {
+      display: none;
+      animation: pageFade 0.2s ease;
+      width: 100%;
+      text-align: center;
+    }
+
+    .page.active { display: block; }
+
+    @keyframes pageFade {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
 
     header h1 { margin: 0 0 4px; font-size: 1.6rem; }
     header p { margin: 0 0 22px; color: var(--muted); }
@@ -43,9 +82,129 @@
       padding: 20px;
       backdrop-filter: blur(8px);
       margin-bottom: 18px;
+      width: 100%;
     }
 
-    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .slider-grid {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      align-items: stretch;
+      flex-wrap: nowrap;
+    }
+
+    .machine-actions {
+      margin-top: 18px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .machine-stop-btn {
+      border-color: rgba(248, 113, 113, 0.75);
+      background: rgba(248, 113, 113, 0.18);
+      color: #fecaca;
+      min-width: 180px;
+    }
+
+    .machine-stop-btn:hover {
+      background: rgba(248, 113, 113, 0.26);
+    }
+
+    .slider-card {
+      flex: 1 1 0;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--panel-border);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .slider-card label {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .slider-value {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .vertical-slider-wrap {
+      height: 260px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .vertical-slider {
+      appearance: slider-vertical;
+      writing-mode: vertical-lr;
+      direction: rtl;
+      width: 44px;
+      margin: 0;
+      background: transparent;
+      accent-color: var(--accent);
+      touch-action: pan-y;
+    }
+
+    .vertical-slider:focus {
+      outline: none;
+    }
+
+    .vertical-slider::-webkit-slider-runnable-track {
+      width: 44px;
+    }
+
+    .vertical-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 0;
+      height: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      opacity: 0;
+    }
+
+    .vertical-slider::-moz-range-thumb {
+      width: 0;
+      height: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      opacity: 0;
+    }
+
+    @media (max-width: 520px) {
+      .slider-grid {
+        gap: 12px;
+      }
+
+      .slider-card {
+        padding: 14px 10px;
+      }
+
+      .vertical-slider-wrap {
+        height: 240px;
+      }
+
+      .vertical-slider {
+        height: 220px;
+      }
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+    }
 
     button {
       cursor: pointer;
@@ -65,7 +224,6 @@
     #stopBtn { border-color: rgba(248, 113, 113, 0.5); }
 
     .pill {
-      margin-left: auto;
       padding: 6px 14px;
       border-radius: 999px;
       font-size: 0.85rem;
@@ -118,6 +276,7 @@
       max-height: 160px;
       overflow-y: auto;
       margin: 0;
+      text-align: left;
     }
 
     #error-box {
@@ -134,54 +293,110 @@
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <h1>BeagleY-AI Gesture Control</h1>
-      <p>MediaPipe hand tracking &rarr; UDP &rarr; live web readout</p>
-    </header>
+    <nav class="page-nav" aria-label="Page navigation">
+      <button class="page-btn active" type="button" data-page-target="page-main">Gesture Control</button>
+      <button class="page-btn" type="button" data-page-target="page-two">Machine Control</button>
+    </nav>
 
     <div id="error-box">
       <strong>Error:</strong> <span id="error-text"></span>
     </div>
 
-    <div class="panel">
-      <div class="row">
-        <button id="startBtn">Start</button>
-        <button id="stopBtn" disabled>Stop</button>
-        <span class="pill" id="statePill">Idle</span>
-        <span style="display:none" id="stateid">Idle</span>
-      </div>
-    </div>
+    <section class="page active" id="page-main" data-page="main">
+      <header>
+        <h1>BeagleY-AI Gesture Control</h1>
+        <p>MediaPipe hand tracking &rarr; UDP &rarr; live web readout</p>
+      </header>
 
-    <div class="panel">
-      <div class="gesture-name" id="gestureName">NONE</div>
-      <div class="finger-count">Fingers up: <span id="fingerCount">0</span></div>
-      <div class="fingers">
-        <div class="finger down" id="finger-thumb">
-          <div class="finger-name">Thumb</div><div class="finger-state">down</div>
-        </div>
-        <div class="finger down" id="finger-index">
-          <div class="finger-name">Index</div><div class="finger-state">down</div>
-        </div>
-        <div class="finger down" id="finger-middle">
-          <div class="finger-name">Middle</div><div class="finger-state">down</div>
-        </div>
-        <div class="finger down" id="finger-ring">
-          <div class="finger-name">Ring</div><div class="finger-state">down</div>
-        </div>
-        <div class="finger down" id="finger-pinky">
-          <div class="finger-name">Pinky</div><div class="finger-state">down</div>
+      <div class="panel">
+        <div class="row">
+          <button id="startBtn">Start</button>
+          <button id="stopBtn" disabled>Stop</button>
+          <span class="pill" id="statePill">Idle</span>
+          <span style="display:none" id="stateid">Idle</span>
         </div>
       </div>
-    </div>
 
-    <div class="panel">
-      <h2>Status log</h2>
-      <pre id="status"></pre>
-    </div>
+      <div class="panel">
+        <div class="gesture-name" id="gestureName">NONE</div>
+        <div class="finger-count">Fingers up: <span id="fingerCount">0</span></div>
+        <div class="fingers">
+          <div class="finger down" id="finger-thumb">
+            <div class="finger-name">Thumb</div><div class="finger-state">down</div>
+          </div>
+          <div class="finger down" id="finger-index">
+            <div class="finger-name">Index</div><div class="finger-state">down</div>
+          </div>
+          <div class="finger down" id="finger-middle">
+            <div class="finger-name">Middle</div><div class="finger-state">down</div>
+          </div>
+          <div class="finger down" id="finger-ring">
+            <div class="finger-name">Ring</div><div class="finger-state">down</div>
+          </div>
+          <div class="finger down" id="finger-pinky">
+            <div class="finger-name">Pinky</div><div class="finger-state">down</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Status log</h2>
+        <pre id="status"></pre>
+      </div>
+    </section>
+
+    <section class="page" id="page-two" data-page="two">
+      <header>
+        <h1>Machine Control</h1>
+        <p>Adjust the motor controls below.</p>
+      </header>
+
+      <div class="panel">
+        <div class="slider-grid">
+          <div class="slider-card">
+            <label for="speedSlider">Speed</label>
+            <div class="slider-value"><span id="speedValue">0</span>%</div>
+            <div class="vertical-slider-wrap">
+              <input
+                id="speedSlider"
+                class="vertical-slider"
+                type="range"
+                min="0"
+                max="100"
+                value="0"
+                aria-label="Speed"
+              />
+            </div>
+          </div>
+
+          <div class="slider-card">
+            <label for="angleSlider">Angle</label>
+            <div class="slider-value"><span id="angleValue">0</span>&deg;</div>
+            <div class="vertical-slider-wrap">
+              <input
+                id="angleSlider"
+                class="vertical-slider"
+                type="range"
+                min="0"
+                max="90"
+                value="0"
+                aria-label="Angle"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="machine-actions">
+          <button id="machineStopBtn" class="machine-stop-btn" type="button">Stop Motors</button>
+        </div>
+      </div>
+    </section>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://code.jquery.com/jquery-1.11.1.min.js"></script>
+  <script src="javascripts/page_control.js"></script>
+  <script src="javascripts/machine_control.js"></script>
   <script src="javascripts/gesture_ui.js"></script>
 </body>
 </html>

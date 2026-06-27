@@ -1,0 +1,2 @@
+- Going back to configure from advanced stops the machine
+- Move JS to separate file

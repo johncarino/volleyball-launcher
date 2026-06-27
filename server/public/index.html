@@ -1,402 +1,477 @@
 <!DOCTYPE html>
-<!-- MARKER: GESTURE_UI -->
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BeagleY-AI Gesture Control</title>
-  <style>
-    :root {
-      --bg: #0f1220;
-      --panel: rgba(255, 255, 255, 0.06);
-      --panel-border: rgba(255, 255, 255, 0.12);
-      --accent: #6ee7b7;
-      --accent-2: #60a5fa;
-      --text: #e5e7eb;
-      --muted: #9aa3b2;
-      --danger: #f87171;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      color: var(--text);
-      background:
-        radial-gradient(1200px 600px at 80% -10%, rgba(96, 165, 250, 0.15), transparent),
-        radial-gradient(900px 500px at -10% 110%, rgba(110, 231, 183, 0.12), transparent),
-        var(--bg);
-    }
-
-    .wrap {
-      max-width: 880px;
-      margin: 0 auto;
-      padding: 28px 18px 60px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .page-nav {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 18px;
-      justify-content: center;
-      width: 100%;
-    }
-
-    .page-btn {
-      flex: 0 0 auto;
-      min-width: 120px;
-    }
-
-    .page-btn.active {
-      border-color: var(--accent);
-      background: rgba(110, 231, 183, 0.16);
-      color: #d1fae5;
-    }
-
-    .page {
-      display: none;
-      animation: pageFade 0.2s ease;
-      width: 100%;
-      text-align: center;
-    }
-
-    .page.active { display: block; }
-
-    @keyframes pageFade {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    header h1 { margin: 0 0 4px; font-size: 1.6rem; }
-    header p { margin: 0 0 22px; color: var(--muted); }
-
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--panel-border);
-      border-radius: 16px;
-      padding: 20px;
-      backdrop-filter: blur(8px);
-      margin-bottom: 18px;
-      width: 100%;
-    }
-
-    .slider-grid {
-      display: flex;
-      gap: 16px;
-      justify-content: center;
-      align-items: stretch;
-      flex-wrap: nowrap;
-    }
-
-    .machine-actions {
-      margin-top: 18px;
-      display: flex;
-      justify-content: center;
-    }
-
-    .machine-stop-btn {
-      border-color: rgba(248, 113, 113, 0.75);
-      background: rgba(248, 113, 113, 0.18);
-      color: #fecaca;
-      min-width: 180px;
-    }
-
-    .machine-stop-btn:hover {
-      background: rgba(248, 113, 113, 0.26);
-    }
-
-    .slider-card {
-      flex: 1 1 0;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      padding: 16px 12px;
-      border-radius: 14px;
-      border: 1px solid var(--panel-border);
-      background: rgba(255, 255, 255, 0.04);
-    }
-
-    .slider-card label {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .slider-value {
-      font-size: 0.9rem;
-      color: var(--muted);
-    }
-
-    .vertical-slider-wrap {
-      height: 260px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .vertical-slider {
-      appearance: slider-vertical;
-      writing-mode: vertical-lr;
-      direction: rtl;
-      width: 44px;
-      margin: 0;
-      background: transparent;
-      accent-color: var(--accent);
-      touch-action: pan-y;
-    }
-
-    .vertical-slider:focus {
-      outline: none;
-    }
-
-    .vertical-slider::-webkit-slider-runnable-track {
-      width: 44px;
-    }
-
-    .vertical-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 0;
-      height: 0;
-      border: 0;
-      background: transparent;
-      box-shadow: none;
-      opacity: 0;
-    }
-
-    .vertical-slider::-moz-range-thumb {
-      width: 0;
-      height: 0;
-      border: 0;
-      background: transparent;
-      box-shadow: none;
-      opacity: 0;
-    }
-
-    @media (max-width: 520px) {
-      .slider-grid {
-        gap: 12px;
-      }
-
-      .slider-card {
-        padding: 14px 10px;
-      }
-
-      .vertical-slider-wrap {
-        height: 240px;
-      }
-
-      .vertical-slider {
-        height: 220px;
-      }
-    }
-
-    .row {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-    }
-
-    button {
-      cursor: pointer;
-      border: 1px solid var(--panel-border);
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--text);
-      padding: 12px 22px;
-      border-radius: 12px;
-      font-size: 1rem;
-      transition: transform 0.05s ease, background 0.2s ease, opacity 0.2s ease;
-    }
-    button:hover { background: rgba(255, 255, 255, 0.14); }
-    button:active { transform: translateY(1px); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    #startBtn { border-color: rgba(110, 231, 183, 0.5); }
-    #stopBtn { border-color: rgba(248, 113, 113, 0.5); }
-
-    .pill {
-      padding: 6px 14px;
-      border-radius: 999px;
-      font-size: 0.85rem;
-      border: 1px solid var(--panel-border);
-      color: var(--muted);
-    }
-    .pill.on { color: #052e16; background: var(--accent); border-color: var(--accent); }
-
-    .gesture-name {
-      font-size: 3rem;
-      font-weight: 700;
-      letter-spacing: 1px;
-      text-align: center;
-      margin: 4px 0 6px;
-      background: linear-gradient(90deg, var(--accent), var(--accent-2));
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-    .finger-count { text-align: center; color: var(--muted); margin-bottom: 18px; }
-    .finger-count span { color: var(--text); font-weight: 700; }
-
-    .fingers {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 10px;
-    }
-    .finger {
-      text-align: center;
-      padding: 14px 6px;
-      border-radius: 12px;
-      border: 1px solid var(--panel-border);
-      background: rgba(255, 255, 255, 0.04);
-      transition: background 0.15s ease, border-color 0.15s ease;
-    }
-    .finger .finger-name { font-size: 0.8rem; color: var(--muted); }
-    .finger .finger-state { font-size: 1.1rem; font-weight: 700; margin-top: 6px; }
-    .finger.up {
-      background: rgba(110, 231, 183, 0.14);
-      border-color: rgba(110, 231, 183, 0.55);
-    }
-    .finger.up .finger-state { color: var(--accent); }
-    .finger.down .finger-state { color: var(--muted); }
-
-    #status {
-      white-space: pre-wrap;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.85rem;
-      color: var(--muted);
-      max-height: 160px;
-      overflow-y: auto;
-      margin: 0;
-      text-align: left;
-    }
-
-    #error-box {
-      border: 1px solid rgba(248, 113, 113, 0.5);
-      background: rgba(248, 113, 113, 0.12);
-      color: var(--danger);
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin-bottom: 18px;
-    }
-
-    h2 { font-size: 1rem; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AVSS</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="wrap">
-    <nav class="page-nav" aria-label="Page navigation">
-      <button class="page-btn active" type="button" data-page-target="page-main">Gesture Control</button>
-      <button class="page-btn" type="button" data-page-target="page-two">Machine Control</button>
-    </nav>
 
-    <div id="error-box">
-      <strong>Error:</strong> <span id="error-text"></span>
-    </div>
-
-    <section class="page active" id="page-main" data-page="main">
-      <header>
-        <h1>BeagleY-AI Gesture Control</h1>
-        <p>MediaPipe hand tracking &rarr; UDP &rarr; live web readout</p>
-      </header>
-
-      <div class="panel">
-        <div class="row">
-          <button id="startBtn">Start</button>
-          <button id="stopBtn" disabled>Stop</button>
-          <span class="pill" id="statePill">Idle</span>
-          <span style="display:none" id="stateid">Idle</span>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="gesture-name" id="gestureName">NONE</div>
-        <div class="finger-count">Fingers up: <span id="fingerCount">0</span></div>
-        <div class="fingers">
-          <div class="finger down" id="finger-thumb">
-            <div class="finger-name">Thumb</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-index">
-            <div class="finger-name">Index</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-middle">
-            <div class="finger-name">Middle</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-ring">
-            <div class="finger-name">Ring</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-pinky">
-            <div class="finger-name">Pinky</div><div class="finger-state">down</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h2>Status log</h2>
-        <pre id="status"></pre>
-      </div>
-    </section>
-
-    <section class="page" id="page-two" data-page="two">
-      <header>
-        <h1>Machine Control</h1>
-        <p>Adjust the motor controls below.</p>
-      </header>
-
-      <div class="panel">
-        <div class="slider-grid">
-          <div class="slider-card">
-            <label for="speedSlider">Speed</label>
-            <div class="slider-value"><span id="speedValue">0</span>%</div>
-            <div class="vertical-slider-wrap">
-              <input
-                id="speedSlider"
-                class="vertical-slider"
-                type="range"
-                min="0"
-                max="100"
-                value="0"
-                aria-label="Speed"
-              />
-            </div>
-          </div>
-
-          <div class="slider-card">
-            <label for="angleSlider">Angle</label>
-            <div class="slider-value"><span id="angleValue">0</span>&deg;</div>
-            <div class="vertical-slider-wrap">
-              <input
-                id="angleSlider"
-                class="vertical-slider"
-                type="range"
-                min="0"
-                max="90"
-                value="0"
-                aria-label="Angle"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="machine-actions">
-          <button id="machineStopBtn" class="machine-stop-btn" type="button">Stop Motors</button>
-        </div>
-      </div>
-    </section>
+<div class="app">
+  <div class="statusbar">
+    <span class="device">AVSS</span>
+    <span class="conn"><i class="ti ti-wifi" style="font-size:13px" aria-hidden="true"></i> Connected</span>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="https://code.jquery.com/jquery-1.11.1.min.js"></script>
-  <script src="javascripts/page_control.js"></script>
-  <script src="javascripts/machine_control.js"></script>
-  <script src="javascripts/gesture_ui.js"></script>
+  <div class="topbar" id="topbar">
+    <h1 id="page-title">Configure</h1>
+  </div>
+
+  <div class="modenav" id="modenav" role="tablist" aria-label="Modes">
+    <button class="modetab" role="tab" data-mode="configure">Configure</button>
+    <button class="modetab" role="tab" data-mode="advanced">Advanced</button>
+  </div>
+
+  <div class="content" id="main-content"></div>
+
+  <div class="modal-overlay" id="court-modal" onclick="handleOverlayClick(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">Court settings</span>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="section" style="margin-bottom:16px">
+          <div class="section-label">Net height</div>
+          <div class="card" style="margin-bottom:0">
+            <div style="margin-bottom:6px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                <span style="font-size:13px;color:var(--text-secondary)">Height</span>
+                <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="net-val">243 cm</strong>
+              </div>
+              <input type="range" min="220" max="260" value="243" step="1" style="width:100%"
+                oninput="document.getElementById('net-val').textContent=this.value+' cm'; updateCourtBtn()">
+            </div>
+            <div style="margin-top:4px;font-size:11px;color:var(--text-tertiary)">Standard men's: 243 cm · Women's: 224 cm</div>
+          </div>
+        </div>
+        <div class="section" style="margin-bottom:0">
+          <div class="section-label">Court dimensions</div>
+          <div class="card" style="margin-bottom:0">
+            <div style="margin-bottom:14px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                <span style="font-size:13px;color:var(--text-secondary)">Length</span>
+                <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="len-val">18.0 m</strong>
+              </div>
+              <input type="range" min="10" max="22" value="18" step="0.5" style="width:100%"
+                oninput="document.getElementById('len-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()">
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                <span style="font-size:13px;color:var(--text-secondary)">Width</span>
+                <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="wid-val">9.0 m</strong>
+              </div>
+              <input type="range" min="5" max="12" value="9" step="0.5" style="width:100%"
+                oninput="document.getElementById('wid-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()">
+            </div>
+          </div>
+        </div>
+      </div>
+      <button class="modal-save" onclick="closeModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Persistent state
+let randomOn = false;
+let repeatState = 0;
+let selectedMachine = null;
+let selectedTarget  = null;
+let selectedTempo = 1;
+const slots = {
+  1: null,
+  2: null,
+  3: null,
+  4: null,
+};
+
+
+const repeatLabels = ['Repeat', 'Repeat all', 'Repeat one'];
+const repeatIcons  = ['ti-repeat', 'ti-repeat', 'ti-repeat-once'];
+
+const machineNames = { L: 'Left', R: 'Right' };
+const targetNames  = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
+
+function courtPickerHTML(readonly = false) {
+  const mSel = selectedMachine;
+  const tSel = selectedTarget;
+
+  const machineSpots = [
+    { id: 'L', cx: 22,  cy: 50 },
+    { id: 'R', cx: 298, cy: 50 },
+  ];
+  const targetSpots = [
+    { id: '1', cx: 70,  cy: 38 },
+    { id: '2', cx: 130, cy: 38 },
+    { id: '3', cx: 190, cy: 38 },
+    { id: '4', cx: 250, cy: 38 },
+  ];
+
+  const mCircles = machineSpots.map(s => {
+    const active   = mSel === s.id;
+    const fill     = active ? '#b52a2a' : 'transparent';
+    const stroke   = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
+    const textFill = active ? '#fff' : '#b52a2a';
+    const opacity  = active ? 1 : (readonly ? 0 : 0.7);
+    const onclick  = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
+    const cursor   = readonly ? 'default' : 'pointer';
+    return `<g ${onclick} style="cursor:${cursor}">
+      <circle cx="${s.cx}" cy="${s.cy}" r="16" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}"/>
+      ${active ? `<text x="${s.cx}" y="${s.cy + 4}" text-anchor="middle" font-size="9" fill="${textFill}" font-family="system-ui,sans-serif" font-weight="500">${s.id}</text>` : ''}
+    </g>`;
+  }).join('');
+
+  const tCircles = targetSpots.map(s => {
+    const active   = tSel === s.id;
+    const fill     = active ? '#1a7a3a' : 'transparent';
+    const stroke   = active ? '#1a7a3a' : (readonly ? 'transparent' : '#1a7a3a');
+    const textFill = active ? '#fff' : '#1a7a3a';
+    const opacity  = active ? 1 : (readonly ? 0 : 0.75);
+    const onclick  = readonly ? '' : `onclick="selectTarget('${s.id}')"`;
+    const cursor   = readonly ? 'default' : 'pointer';
+    return `<g ${onclick} style="cursor:${cursor}">
+      <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}"/>
+      ${active ? `<text x="${s.cx}" y="${s.cy + 4}" text-anchor="middle" font-size="9" fill="${textFill}" font-family="system-ui,sans-serif" font-weight="500">${s.id}</text>` : ''}
+    </g>`;
+  }).join('');
+
+  return `
+    <div class="court-picker" style="${readonly ? 'pointer-events:none;' : ''}">
+      <div class="court-svg-wrap">
+        <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
+          <rect x="40" y="20" width="240" height="160" fill="#d4e8f0" rx="2" opacity="0.35"/>
+          <rect x="40" y="20" width="240" height="160" fill="none" stroke="#888" stroke-width="1.5" rx="2"/>
+          <line x1="40" y1="100" x2="280" y2="100" stroke="#888" stroke-width="1" stroke-dasharray="4 3"/>
+          <line x1="40" y1="20" x2="280" y2="20" stroke="#555" stroke-width="3"/>
+          <text x="160" y="14" text-anchor="middle" font-size="9" fill="#888" font-family="system-ui,sans-serif" letter-spacing="1">NET</text>
+          <line x1="100" y1="20" x2="100" y2="180" stroke="#aaa" stroke-width="0.5" stroke-dasharray="3 4" opacity="0.5"/>
+          <line x1="160" y1="20" x2="160" y2="180" stroke="#aaa" stroke-width="0.5" stroke-dasharray="3 4" opacity="0.5"/>
+          <line x1="220" y1="20" x2="220" y2="180" stroke="#aaa" stroke-width="0.5" stroke-dasharray="3 4" opacity="0.5"/>
+          ${tCircles}
+          ${mCircles}
+        </svg>
+      </div>
+      ${!readonly ? `
+      <div class="court-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#b52a2a;opacity:0.8"></div>Machine position</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#1a7a3a;opacity:0.8"></div>Target zone</div>
+      </div>` : ''}
+    </div>`;
+}
+
+function selectMachine(id) {
+  selectedMachine = id;
+  refreshCourtPicker();
+}
+
+function selectTarget(id) {
+  selectedTarget = id;
+  refreshCourtPicker();
+}
+
+function refreshCourtPicker() {
+  const wrap = document.getElementById('court-picker-wrap');
+  if (wrap) wrap.innerHTML = courtPickerHTML();
+}
+
+function toggleRandom() {
+  randomOn = !randomOn;
+  const btn = document.getElementById('pb-random');
+  if (!btn) return;
+  btn.classList.toggle('active', randomOn);
+}
+
+function cycleRepeat() {
+  repeatState = (repeatState + 1) % 3;
+  const btn = document.getElementById('pb-repeat');
+  if (!btn) return;
+  btn.classList.toggle('active', repeatState > 0);
+  btn.classList.toggle('repeat-one', repeatState === 2);
+  btn.querySelector('.pb-btn-label').textContent = repeatLabels[repeatState];
+  btn.querySelector('i').className = `ti ${repeatIcons[repeatState]}`;
+}
+
+function renderPlaybackControls() {
+  const randomActiveClass = randomOn ? 'active' : '';
+  const repeatActiveClass = repeatState > 0 ? 'active' : '';
+  const repeatOneClass    = repeatState === 2 ? 'repeat-one' : '';
+  return `
+    <div class="playback-controls">
+      <button class="pb-btn ${randomActiveClass}" id="pb-random" onclick="toggleRandom()" aria-label="Random">
+        <div class="pb-btn-icon"><i class="ti ti-arrows-shuffle" aria-hidden="true"></i></div>
+        <span class="pb-btn-label">Random</span>
+        <span class="pb-dot"></span>
+      </button>
+      <button class="pb-btn ${repeatActiveClass} ${repeatOneClass}" id="pb-repeat" onclick="cycleRepeat()" aria-label="Repeat">
+        <div class="pb-btn-icon" style="position:relative">
+          <i class="ti ${repeatIcons[repeatState]}" aria-hidden="true"></i>
+          <span class="repeat-badge">1</span>
+        </div>
+        <span class="pb-btn-label">${repeatLabels[repeatState]}</span>
+        <span class="pb-dot"></span>
+      </button>
+    </div>`;
+}
+
+const screens = {
+  configure: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Position</div>
+      <div id="court-picker-wrap">${courtPickerHTML()}</div>
+    </div>
+    <div class="section">
+      <div class="section-label">Tempo</div>
+      <div class="card">
+        <div class="tempo-pills">
+          <button class="tempo-pill ${selectedTempo == 1 ? 'active' : ''}" onclick="setPill(this)">1</button>
+          <button class="tempo-pill ${selectedTempo == 2 ? 'active' : ''}" onclick="setPill(this)">2</button>
+          <button class="tempo-pill ${selectedTempo == 3 ? 'active' : ''}" onclick="setPill(this)">3</button>
+          <button class="tempo-pill ${selectedTempo == 4 ? 'active' : ''}" onclick="setPill(this)">4</button>
+          <button class="tempo-pill ${selectedTempo == 5 ? 'active' : ''}" onclick="setPill(this)">5</button>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Set Slots</div>
+      <div class="save-slots" id="slots-wrap">${slotsHTML()}</div>
+    </div>
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Court</div>
+      <button class="court-btn" onclick="openModal()">
+        <div class="court-btn-left">
+          <i class="ti ti-ruler-measure" style="font-size:18px;color:var(--text-tertiary)" aria-hidden="true"></i>
+          <div>
+            <div class="court-btn-label">Court settings</div>
+            <div class="court-btn-sub" id="court-btn-sub">${getCourtSummary()}</div>
+          </div>
+        </div>
+        <i class="ti ti-chevron-right court-btn-chevron" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Continue</div>
+      <button class="op-btn continue-style" onclick="goToLaunch()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue</button>
+    </div>`,
+
+  advanced: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Manual control</div>
+      <div class="card">
+        <div class="vert-sliders">
+          <div class="vert-slider-col">
+            <span class="vert-slider-label">Angle</span>
+            <span class="vert-slider-val" id="dev-ang-val">5°</span>
+            <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
+            <div class="vert-slider-track">
+              <input type="range" id="dev-ang-range" class="vertical" min="5" max="85" value="5" step="1"
+                oninput="document.getElementById('dev-ang-val').textContent=this.value+'°'">
+            </div>
+            <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
+            <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
+          </div>
+          <div class="vert-slider-col">
+            <span class="vert-slider-label">Speed</span>
+            <span class="vert-slider-val" id="dev-spd-val">0 %</span>
+            <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
+            <div class="vert-slider-track">
+              <input type="range" id="dev-spd-range" class="vertical" min="0" max="100" value="0" step="1"
+                oninput="document.getElementById('dev-spd-val').textContent=this.value+'%'">
+            </div>
+            <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
+            <span style="font-size:11px;color:var(--text-tertiary)">0 – 100%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Live telemetry</div>
+      <div class="card">
+        <div class="dev-row"><span class="dev-label">Flywheel L</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-l" style="width:74%"></div></div><span class="dev-val" id="fw-l-v">3700 rpm</span></div>
+        <div class="dev-row"><span class="dev-label">Flywheel R</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-r" style="width:71%"></div></div><span class="dev-val" id="fw-r-v">3550 rpm</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Launch</div>
+      <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+    </div>`,
+
+  launch: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Position</div>
+      ${courtPickerHTML(true)}
+    </div>
+    <div class="section">
+      <div class="section-label">Set summary</div>
+      <div class="card">
+        <div class="summary-row"><span class="summary-key"><i class="ti ti-metronome" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Tempo</span><span class="summary-val">${selectedTempo}</span></div>
+        <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">243 cm</span></div>
+        <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">18.0 m × 9.0 m</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Set Slots</div>
+      <div class="save-slots">${slotsHTML(true)}</div>
+    </div>
+    <div class="section">
+      <div class="section-label">Launch</div>
+      <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+      ${renderPlaybackControls()}
+    </div>`
+};
+
+function openModal() { document.getElementById('court-modal').classList.add('open'); }
+function closeModal() { document.getElementById('court-modal').classList.remove('open'); }
+function handleOverlayClick(e) { if (e.target === document.getElementById('court-modal')) closeModal(); }
+
+function updateCourtBtn() {
+  const net = document.getElementById('net-val');
+  const len = document.getElementById('len-val');
+  const wid = document.getElementById('wid-val');
+  const sub = document.getElementById('court-btn-sub');
+  if (net && len && wid && sub) sub.textContent = `Net ${net.textContent} · ${len.textContent} × ${wid.textContent}`;
+}
+
+function getCourtSummary() {
+  const net = document.getElementById('net-val');
+  const len = document.getElementById('len-val');
+  const wid = document.getElementById('wid-val');
+  const netTxt = net ? net.textContent : '243 cm';
+  const lenTxt = len ? len.textContent : '18.0 m';
+  const widTxt = wid ? wid.textContent : '9.0 m';
+  return `Net ${netTxt} · ${lenTxt} × ${widTxt}`;
+}
+
+function setPill(el) {
+  el.closest('.tempo-pills').querySelectorAll('.tempo-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  selectedTempo = parseInt(el.textContent);
+}
+
+function refreshSlots() {
+  const wrap = document.getElementById('slots-wrap');
+  if (wrap) wrap.innerHTML = slotsHTML();
+}
+
+function slotsHTML(readonly = false) {
+  return [1, 2, 3, 4].map(n => {
+    const s = slots[n];
+    const clickAttr = readonly ? '' : `onclick="saveNewSlot(${n})"`;
+    const style = readonly ? ' style="pointer-events:none"' : '';
+    if (s) {
+      return `<div class="slot filled" ${clickAttr}${style}>
+        <div class="slot-num">Slot ${n}</div>
+        <div class="slot-name">${s.name}</div>
+      </div>`;
+    } else {
+      return `<div class="slot empty" ${clickAttr}${style}>
+        <div class="slot-num">Slot ${n}</div>
+        <div class="slot-name">${readonly ? 'Empty' : 'Tap to save current set'}</div>
+      </div>`;
+    }
+  }).join('');
+}
+
+function loadSlot(n) {
+  const s = slots[n];
+  if (s.machine) { selectedMachine = s.machine; }
+  if (s.target)  { selectedTarget  = s.target;  }
+  if (s.tempo)   { selectedTempo   = s.tempo;   }
+  refreshCourtPicker();
+  refreshSlots();
+  // update tempo pills
+  document.querySelectorAll('.tempo-pill').forEach(p => {
+    p.classList.toggle('active', parseInt(p.textContent) === selectedTempo);
+  });
+}
+
+function saveNewSlot(n) {
+  const machinePart = selectedMachine ? `Machine ${selectedMachine}` : null;
+  const zonePart   = selectedTarget ? `Zone ${selectedTarget}`   : null;
+  const tempoPart  = `Tempo ${selectedTempo}`;
+  const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
+  slots[n] = {
+    name,
+    machine: selectedMachine,
+    target: selectedTarget,
+    tempo: selectedTempo,
+  };
+  refreshSlots();
+}
+
+function toggleLaunch(btn) {
+  const running = btn.classList.contains('stop');
+  if (running) {
+    btn.classList.remove('stop'); btn.classList.add('start');
+    btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+    clearInterval(window._telem);
+  } else {
+    btn.classList.remove('start'); btn.classList.add('stop');
+    btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+    startTelemetry();
+  }
+}
+
+function goToLaunch() {
+  clearInterval(window._telem);
+  document.getElementById('modenav').style.display = 'none';
+  const topbar = document.getElementById('topbar');
+  topbar.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button><h1 id="page-title">Launch</h1>`;
+  document.getElementById('main-content').innerHTML = screens.launch();
+  const netVal = document.getElementById('net-val');
+  const lenVal = document.getElementById('len-val');
+  const widVal = document.getElementById('wid-val');
+  if (netVal) document.getElementById('sum-net').textContent = netVal.textContent;
+  if (lenVal && widVal) document.getElementById('sum-court').textContent = `${lenVal.textContent} × ${widVal.textContent}`;
+}
+
+function goBack() {
+  clearInterval(window._telem);
+  document.getElementById('modenav').style.display = 'flex';
+  const topbar = document.getElementById('topbar');
+  topbar.innerHTML = `<h1 id="page-title">Configure</h1>`;
+  setMode('configure');
+}
+
+function setMode(mode) {
+  document.querySelectorAll('.modetab').forEach(t => t.classList.remove('active'));
+  const tab = document.querySelector(`[data-mode="${mode}"]`);
+  if (tab) tab.classList.add('active');
+  document.getElementById('main-content').innerHTML = screens[mode]();
+  const title = document.getElementById('page-title');
+  if (title) title.textContent = { configure: 'Configure', advanced: 'Advanced' }[mode] || mode;
+  if (mode === 'advanced') startTelemetry();
+}
+
+function stepSlider(rangeId, valId, suffix, delta) {
+  const input = document.getElementById(rangeId);
+  if (!input) return;
+  input.value = Math.min(input.max, Math.max(input.min, +input.value + delta));
+  document.getElementById(valId).textContent = input.value + suffix;
+}
+
+function startTelemetry() {
+  clearInterval(window._telem);
+  window._telem = setInterval(() => {
+    const fwl = document.getElementById('fw-l');
+    if (!fwl) return clearInterval(window._telem);
+    const jitter = v => Math.max(0, Math.min(100, v + (Math.random() - 0.5) * 4));
+    const lPct = jitter(74), rPct = jitter(71);
+    fwl.style.width = lPct.toFixed(0) + '%';
+    document.getElementById('fw-r').style.width = rPct.toFixed(0) + '%';
+    document.getElementById('fw-l-v').textContent = Math.round(lPct * 40) + ' rpm';
+    document.getElementById('fw-r-v').textContent = Math.round(rPct * 40) + ' rpm';
+  }, 800);
+}
+
+document.querySelectorAll('.modetab').forEach(t => t.addEventListener('click', () => {
+  clearInterval(window._telem);
+  setMode(t.dataset.mode);
+}));
+setMode('configure');
+</script>
 </body>
 </html>
