@@ -359,20 +359,36 @@ function refreshSlots() {
 function slotsHTML(readonly = false) {
   return [1, 2, 3, 4].map(n => {
     const s = slots[n];
-    const clickAttr = readonly ? '' : `onclick="saveNewSlot(${n})"`;
-    const style = readonly ? ' style="pointer-events:none"' : '';
+    const clickAttr = readonly ? `onclick="clickSlot(${n})"` : `onclick="saveNewSlot(${n})"`;
     if (s) {
-      return `<div class="slot filled" ${clickAttr}${style}>
+      return `<div class="slot filled" ${clickAttr}>
         <div class="slot-num">Slot ${n}</div>
         <div class="slot-name">${s.name}</div>
       </div>`;
     } else {
-      return `<div class="slot empty" ${clickAttr}${style}>
+      return `<div class="slot empty" ${clickAttr}>
         <div class="slot-num">Slot ${n}</div>
         <div class="slot-name">${readonly ? 'Empty' : 'Tap to save current set'}</div>
       </div>`;
     }
   }).join('');
+}
+
+function clickSlot(n) {
+  const slotData = slots[n] || { name: 'Empty', machine: null, target: null, tempo: null };
+  console.log('Slot clicked:', n, slotData);
+
+  fetch('/api/slot-click', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slot: n, data: slotData })
+  })
+    .then(res => {
+      if (!res.ok) throw new Error('Server responded with ' + res.status);
+      return res.json().catch(() => ({}));
+    })
+    .then(json => console.log('Server ack:', json))
+    .catch(err => console.error('Failed to send slot click to server:', err));
 }
 
 function loadSlot(n) {
