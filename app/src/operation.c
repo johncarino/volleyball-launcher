@@ -22,10 +22,10 @@ float d_angle = 0;
 // experimentally-determined coefficients, left here as defaults so
 // this file still compiles standalone.
 #ifndef TACH_GPIOCHIP
-#define TACH_GPIOCHIP 2          // gpiochip number, find with gpiodetect
+#define TACH_GPIOCHIP 0          // gpiochip number, find with gpiodetect
 #endif
 #ifndef TACH_LINE
-#define TACH_LINE 7              // line offset, find with gpioinfo
+#define TACH_LINE 0              // line offset, find with gpioinfo
 #endif
 #ifndef TACH_PULSES_PER_REV
 #define TACH_PULSES_PER_REV 1    // magnets per revolution on the BLDC
@@ -53,12 +53,16 @@ tb6600_t motor;
 static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 
 // === TACHOMETER ADDITION ===
+// Uses the libgpiod v2 API (gpiod_chip_request_lines / gpiod_line_request_*).
+// If your board has libgpiod v1 installed instead (older gpiod_line_*
+// functions taking a raw struct gpiod_line*), this won't compile as-is;
+// check with `pkg-config --modversion libgpiod`.
 pthread_t tach_thread;
 pthread_mutex_t tach_mutex = PTHREAD_MUTEX_INITIALIZER;
 volatile int tach_running = 0;
 
-static struct gpiod_chip *tach_chip = NULL;
-static struct gpiod_line *tach_line = NULL;
+static struct gpiod_line_request *tach_request = NULL;
+static struct gpiod_edge_event_buffer *tach_event_buffer = NULL;
 
 static double tach_periods[TACH_AVG_WINDOW];
 static int tach_period_count = 0;
@@ -116,18 +120,21 @@ void* yaw_worker() {
 // for falling edges, keeps a rolling average over TACH_AVG_WINDOW
 // pulses, prints RPM to the terminal on every pulse, and prints 0 if
 // no pulse arrives for TACH_STALE_TIMEOUT_SEC seconds (motor stopped).
+// Uses kernel-supplied edge timestamps rather than our own clock reads,
+// which avoids skew from scheduling jitter on the calling thread.
 void* tach_worker(void* arg) {
     (void)arg;
 
-    struct timespec last_pulse_time;
+    uint64_t last_pulse_ns = 0;
     int have_last = 0;
+    const int64_t timeout_ns = (int64_t)TACH_STALE_TIMEOUT_SEC * 1000000000LL;
 
     while (!shutdown) {
-        struct timespec timeout = { TACH_STALE_TIMEOUT_SEC, 0 };
-        int wait_result = gpiod_line_event_wait(tach_line, &timeout);
+        int wait_result = gpiod_line_request_wait_edge_events(tach_request,
+                                                                timeout_ns);
 
         if (wait_result < 0) {
-            fprintf(stderr, "Tachometer: gpiod_line_event_wait failed\n");
+            fprintf(stderr, "Tachometer: wait_edge_events failed\n");
             break;
         }
         if (wait_result == 0) {
@@ -146,29 +153,36 @@ void* tach_worker(void* arg) {
             continue;
         }
 
-        struct gpiod_line_event event;
-        if (gpiod_line_event_read(tach_line, &event) < 0) {
-            fprintf(stderr, "Tachometer: gpiod_line_event_read failed\n");
+        int num_events = gpiod_line_request_read_edge_events(
+            tach_request, tach_event_buffer, 1);
+        if (num_events < 0) {
+            fprintf(stderr, "Tachometer: read_edge_events failed\n");
             break;
         }
+        if (num_events == 0) {
+            continue;
+        }
 
-        struct timespec now;
-        clock_gettime(CLOCK_MONOTONIC, &now);
+        struct gpiod_edge_event *ev =
+            gpiod_edge_event_buffer_get_event(tach_event_buffer, 0);
+        if (!ev) {
+            continue;
+        }
+
+        uint64_t ts_ns = gpiod_edge_event_get_timestamp_ns(ev);
 
         if (!have_last) {
-            last_pulse_time = now;
+            last_pulse_ns = ts_ns;
             have_last = 1;
             continue;
         }
 
-        double delta_s = (now.tv_sec - last_pulse_time.tv_sec) +
-                          (now.tv_nsec - last_pulse_time.tv_nsec) / 1e9;
-        double delta_us = delta_s * 1e6;
+        double delta_s = (double)(ts_ns - last_pulse_ns) / 1e9;
 
-        if (delta_us < TACH_DEBOUNCE_US) {
-            // Bounce/noise, not a real pulse. Don't update
-            // last_pulse_time, so the next real pulse is measured
-            // against the last good one.
+        // Hardware debounce (set via gpiod_line_settings_set_debounce_period_us
+        // in tach_init) already filters short glitches; this is a backstop
+        // in case the kernel driver doesn't support it.
+        if (delta_s * 1e6 < TACH_DEBOUNCE_US) {
             continue;
         }
 
@@ -192,53 +206,92 @@ void* tach_worker(void* arg) {
 
         printf("Tachometer: RPM = %.1f (inst %.1f)\n", avg_rpm, inst_rpm);
 
-        last_pulse_time = now;
+        last_pulse_ns = ts_ns;
     }
 
     return NULL;
 }
 
-// Opens the GPIO chip/line and starts the tach worker thread. Call
-// from operation_init(), after the other peripherals are set up.
+// Opens the GPIO chip, configures the line for falling-edge input with
+// an external pull-up (matching the wiring notes), requests it, and
+// starts the tach worker thread. Call from operation_init(), after the
+// other peripherals are set up.
 int tach_init() {
-    char chip_name[32];
-    snprintf(chip_name, sizeof(chip_name), "gpiochip%d", TACH_GPIOCHIP);
+    char chip_path[32];
+    snprintf(chip_path, sizeof(chip_path), "/dev/gpiochip%d", TACH_GPIOCHIP);
 
-    tach_chip = gpiod_chip_open_by_name(chip_name);
-    if (!tach_chip) {
+    struct gpiod_chip *chip = gpiod_chip_open(chip_path);
+    if (!chip) {
         fprintf(stderr, "Tachometer: failed to open %s. Run 'gpiodetect' "
-                         "to list available chips.\n", chip_name);
+                         "to list available chips.\n", chip_path);
         return -1;
     }
 
-    tach_line = gpiod_chip_get_line(tach_chip, TACH_LINE);
-    if (!tach_line) {
-        fprintf(stderr, "Tachometer: failed to get line %d on %s\n",
-                TACH_LINE, chip_name);
-        gpiod_chip_close(tach_chip);
-        tach_chip = NULL;
+    struct gpiod_line_settings *settings = gpiod_line_settings_new();
+    if (!settings) {
+        fprintf(stderr, "Tachometer: failed to allocate line settings\n");
+        gpiod_chip_close(chip);
+        return -1;
+    }
+    gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT);
+    gpiod_line_settings_set_edge_detection(settings, GPIOD_LINE_EDGE_FALLING);
+    // External 10k pull-up to 3.3V per the wiring notes, so internal
+    // bias is left disabled rather than fighting it.
+    gpiod_line_settings_set_bias(settings, GPIOD_LINE_BIAS_DISABLED);
+    gpiod_line_settings_set_debounce_period_us(settings, TACH_DEBOUNCE_US);
+
+    struct gpiod_line_config *line_cfg = gpiod_line_config_new();
+    if (!line_cfg) {
+        fprintf(stderr, "Tachometer: failed to allocate line config\n");
+        gpiod_line_settings_free(settings);
+        gpiod_chip_close(chip);
         return -1;
     }
 
-    struct gpiod_line_request_config config = {0};
-    config.consumer = "dime_time_tach";
-    config.request_type = GPIOD_LINE_REQUEST_EVENT_FALLING_EDGE;
+    unsigned int offset = TACH_LINE;
+    if (gpiod_line_config_add_line_settings(line_cfg, &offset, 1, settings) < 0) {
+        fprintf(stderr, "Tachometer: failed to add line settings\n");
+        gpiod_line_config_free(line_cfg);
+        gpiod_line_settings_free(settings);
+        gpiod_chip_close(chip);
+        return -1;
+    }
 
-    if (gpiod_line_request(tach_line, &config, 0) < 0) {
-        fprintf(stderr, "Tachometer: gpiod_line_request failed (try sudo, "
-                         "or add yourself to the gpio group)\n");
-        gpiod_chip_close(tach_chip);
-        tach_chip = NULL;
-        tach_line = NULL;
+    struct gpiod_request_config *req_cfg = gpiod_request_config_new();
+    if (req_cfg) {
+        gpiod_request_config_set_consumer(req_cfg, "dime_time_tach");
+    }
+
+    tach_request = gpiod_chip_request_lines(chip, req_cfg, line_cfg);
+
+    if (req_cfg) {
+        gpiod_request_config_free(req_cfg);
+    }
+    gpiod_line_config_free(line_cfg);
+    gpiod_line_settings_free(settings);
+    // The request holds its own fd; the chip handle isn't needed after this.
+    gpiod_chip_close(chip);
+
+    if (!tach_request) {
+        fprintf(stderr, "Tachometer: gpiod_chip_request_lines failed (try "
+                         "sudo, or add yourself to the gpio group)\n");
+        return -1;
+    }
+
+    tach_event_buffer = gpiod_edge_event_buffer_new(1);
+    if (!tach_event_buffer) {
+        fprintf(stderr, "Tachometer: failed to allocate event buffer\n");
+        gpiod_line_request_release(tach_request);
+        tach_request = NULL;
         return -1;
     }
 
     if (pthread_create(&tach_thread, NULL, tach_worker, NULL) != 0) {
         fprintf(stderr, "Tachometer: failed to create thread\n");
-        gpiod_line_release(tach_line);
-        gpiod_chip_close(tach_chip);
-        tach_chip = NULL;
-        tach_line = NULL;
+        gpiod_edge_event_buffer_free(tach_event_buffer);
+        tach_event_buffer = NULL;
+        gpiod_line_request_release(tach_request);
+        tach_request = NULL;
         return -1;
     }
 
@@ -249,9 +302,9 @@ int tach_init() {
     return 0;
 }
 
-// Joins the tach thread and releases the GPIO line/chip. Relies on
-// the global `shutdown` flag being set to 1 already, same as the
-// tilt/yaw threads. Safe to call even if tach_init() was never
+// Joins the tach thread and releases the line request and event buffer.
+// Relies on the global `shutdown` flag being set to 1 already, same as
+// the tilt/yaw threads. Safe to call even if tach_init() was never
 // called or failed.
 void tach_cleanup() {
     if (!tach_running) {
@@ -260,13 +313,13 @@ void tach_cleanup() {
 
     pthread_join(tach_thread, NULL);
 
-    if (tach_line) {
-        gpiod_line_release(tach_line);
-        tach_line = NULL;
+    if (tach_event_buffer) {
+        gpiod_edge_event_buffer_free(tach_event_buffer);
+        tach_event_buffer = NULL;
     }
-    if (tach_chip) {
-        gpiod_chip_close(tach_chip);
-        tach_chip = NULL;
+    if (tach_request) {
+        gpiod_line_request_release(tach_request);
+        tach_request = NULL;
     }
 
     tach_running = 0;
