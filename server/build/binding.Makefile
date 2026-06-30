@@ -3,4 +3,4 @@
 export builddir_name ?= ./build/.
 .PHONY: all
 all:
-	$(MAKE) motor_addon
+	$(MAKE) set_wrapper operation_wrapper calibration_wrapper

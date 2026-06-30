@@ -1,1 +1,0 @@
-cmd_Release/obj.target/motor_addon.node := g++ -o Release/obj.target/motor_addon.node -shared -pthread -rdynamic -m64  -Wl,-soname=motor_addon.node -Wl,--start-group Release/obj.target/motor_addon/motor_addon.o Release/obj.target/motor_addon/../motor_control.o -Wl,--end-group -lnode

@@ -75,6 +75,7 @@
   </div>
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
 // Persistent state
 let randomOn = false;
@@ -82,6 +83,7 @@ let repeatState = 0;
 let selectedMachine = null;
 let selectedTarget  = null;
 let selectedTempo = 1;
+const machineSocket = (typeof io !== 'undefined') ? io() : null;
 const slots = {
   1: null,
   2: null,
@@ -95,6 +97,29 @@ const repeatIcons  = ['ti-repeat', 'ti-repeat', 'ti-repeat-once'];
 
 const machineNames = { L: 'Left', R: 'Right' };
 const targetNames  = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
+
+function emitMachine(eventName, value) {
+  if (!machineSocket) return;
+  machineSocket.emit(eventName, value);
+}
+
+if (machineSocket) {
+  machineSocket.on('connect', () => {
+    machineSocket.emit('page-loaded');
+  });
+}
+
+function onAdvancedAngleInput(value) {
+  const val = parseInt(value, 10);
+  document.getElementById('dev-ang-val').textContent = val + '°';
+  emitMachine('setAngle', val);
+}
+
+function onAdvancedSpeedInput(value) {
+  const val = parseInt(value, 10);
+  document.getElementById('dev-spd-val').textContent = val + '%';
+  emitMachine('setSpeed', val);
+}
 
 function courtPickerHTML(readonly = false) {
   const mSel = selectedMachine;
@@ -268,7 +293,7 @@ const screens = {
             <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
             <div class="vert-slider-track">
               <input type="range" id="dev-ang-range" class="vertical" min="5" max="85" value="5" step="1"
-                oninput="document.getElementById('dev-ang-val').textContent=this.value+'°'">
+                oninput="onAdvancedAngleInput(this.value)">
             </div>
             <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
             <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
@@ -279,7 +304,7 @@ const screens = {
             <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
             <div class="vert-slider-track">
               <input type="range" id="dev-spd-range" class="vertical" min="0" max="100" value="0" step="1"
-                oninput="document.getElementById('dev-spd-val').textContent=this.value+'%'">
+                oninput="onAdvancedSpeedInput(this.value)">
             </div>
             <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
             <span style="font-size:11px;color:var(--text-tertiary)">0 – 100%</span>
@@ -437,13 +462,22 @@ function goBack() {
 }
 
 function setMode(mode) {
+  const previousMode = window._activeMode || 'configure';
+  if (previousMode === 'advanced' && mode !== 'advanced') {
+    emitMachine('advanced-leave');
+  }
+
   document.querySelectorAll('.modetab').forEach(t => t.classList.remove('active'));
   const tab = document.querySelector(`[data-mode="${mode}"]`);
   if (tab) tab.classList.add('active');
   document.getElementById('main-content').innerHTML = screens[mode]();
   const title = document.getElementById('page-title');
   if (title) title.textContent = { configure: 'Configure', advanced: 'Advanced' }[mode] || mode;
-  if (mode === 'advanced') startTelemetry();
+  if (mode === 'advanced') {
+    emitMachine('advanced-enter');
+    startTelemetry();
+  }
+  window._activeMode = mode;
 }
 
 function stepSlider(rangeId, valId, suffix, delta) {
@@ -451,6 +485,13 @@ function stepSlider(rangeId, valId, suffix, delta) {
   if (!input) return;
   input.value = Math.min(input.max, Math.max(input.min, +input.value + delta));
   document.getElementById(valId).textContent = input.value + suffix;
+
+  if (rangeId === 'dev-ang-range') {
+    emitMachine('setAngle', parseInt(input.value, 10));
+  }
+  if (rangeId === 'dev-spd-range') {
+    emitMachine('setSpeed', parseInt(input.value, 10));
+  }
 }
 
 function startTelemetry() {

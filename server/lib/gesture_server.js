@@ -22,6 +22,7 @@ var spawn    = require('child_process').spawn;
 // ---- Configuration (override via environment variables) -------------------
 var UDP_PORT  = parseInt(process.env.GESTURE_UDP_PORT, 10) || 12345;
 var UDP_HOST  = process.env.GESTURE_UDP_HOST || '127.0.0.1';
+var OPERATION_LAZY_INIT = process.env.OPERATION_LAZY_INIT === '1';
 
 // Path to the compiled MediaPipe recogniser binary and its graph config.
 // On the BeagleY-AI these typically point into your cloned MediaPipe repo,
@@ -33,17 +34,53 @@ var CAMERA_INDEX  = process.env.GESTURE_CAMERA || '0';
 
 var io;
 var recognizer = null;   // current child_process, or null
+var operationInitAttempted = false;
+var operationReady = false;
 
-// ---- Motor-control native addon ------------------------------------------
-// motor_addon.node is built by: cd server && npm run build
-var motor = (function() {
+// ---- Native wrappers (built by: cd server && npm run build) --------------
+var operation = (function() {
 	try {
-		var m = require('../build/Release/motor_addon');
-		console.log('[motor] Native addon loaded.');
+		var m = require('../build/Release/operation_wrapper');
+		console.log('[operation] Native addon loaded.');
 		return m;
 	} catch (e) {
-		console.warn('[motor] Native addon not available (' + e.message + '). Motor calls will be no-ops.');
-		return { setSpeed: function(){}, setAngle: function(){}, stopMotors: function(){} };
+		console.warn('[operation] Native addon not available (' + e.message + '). Operation calls will be no-ops.');
+		return {
+			operationInit: function(){},
+			operationCleanup: function(){},
+			homingSequence: function(){},
+			tiltSignal: function(){},
+			speedSignal: function(){},
+			resumeMachine: function(){},
+			pauseMachine: function(){}
+		};
+	}
+}());
+
+var setApi = (function() {
+	try {
+		var m = require('../build/Release/set_wrapper');
+		console.log('[set] Native addon loaded.');
+		return m;
+	} catch (e) {
+		console.warn('[set] Native addon not available (' + e.message + '). Set calls will be no-ops.');
+		return { saveSet: function(){} };
+	}
+}());
+
+var calibration = (function() {
+	try {
+		var m = require('../build/Release/calibration_wrapper');
+		console.log('[calibration] Native addon loaded.');
+		return m;
+	} catch (e) {
+		console.warn('[calibration] Native addon not available (' + e.message + '). Calibration calls will be no-ops.');
+		return {
+			setNetHeight: function(){},
+			setCourtDimensions: function(){},
+			setCourtLength: function(){},
+			setCourtWidth: function(){}
+		};
 	}
 }());
 
@@ -55,8 +92,81 @@ exports.listen = function(server) {
 
 	io.sockets.on('connection', function(socket) {
 		handleCommand(socket);
+
+		socket.on('advanced-enter', function() {
+			initOperation(socket, 'advanced-enter');
+		});
+
+		socket.on('advanced-leave', function() {
+			cleanupOperation(socket, 'advanced-leave');
+		});
 	});
 };
+
+function ensureOperationReady(socket, commandName) {
+	if (!OPERATION_LAZY_INIT) {
+		return true;
+	}
+
+	if (operationReady) {
+		return true;
+	}
+
+	if (operationInitAttempted) {
+		if (socket) socket.emit('machine-error', 'Operation mode is unavailable.');
+		console.log('[operation] Command blocked (' + commandName + '): operation mode unavailable.');
+		return false;
+	}
+
+	return initOperation(socket, commandName);
+}
+
+function initOperation(socket, reason) {
+	if (operationReady) {
+		if (socket) socket.emit('operation-state', 'READY');
+		return true;
+	}
+
+	if (operationInitAttempted) {
+		if (socket) socket.emit('operation-state', 'INITIALIZING');
+		return false;
+	}
+
+	operationInitAttempted = true;
+	try {
+		operation.operationInit();
+		operationReady = true;
+		console.log('[operation] operationInit complete (' + reason + ').');
+		if (socket) socket.emit('operation-state', 'READY');
+		return true;
+	} catch (e) {
+		operationReady = false;
+		console.log('[operation] operationInit failed: ' + e.message);
+		if (socket) socket.emit('machine-error', 'Failed to initialize operation mode.');
+		return false;
+	}
+}
+
+function cleanupOperation(socket, reason) {
+	if (!operationReady && !operationInitAttempted) {
+		if (socket) socket.emit('operation-state', 'IDLE');
+		return true;
+	}
+
+	try {
+		if (operationReady) {
+			operation.operationCleanup();
+		}
+		console.log('[operation] operationCleanup complete (' + reason + ').');
+	} catch (e) {
+		console.log('[operation] operationCleanup failed: ' + e.message);
+	} finally {
+		operationReady = false;
+		operationInitAttempted = false;
+		if (socket) socket.emit('operation-state', 'IDLE');
+	}
+	return true;
+}
 
 // ---- Browser command handling ---------------------------------------------
 function handleCommand(socket) {
@@ -72,23 +182,22 @@ function handleCommand(socket) {
 		stopRecognizer(socket);
 	});
 
-	socket.on('setSpeed', function(speed) {
-		var value = parseInt(speed, 10);
-		if (isNaN(value)) { console.log('setSpeed: invalid value'); return; }
-		console.log('Got setSpeed command: ' + value);
-		motor.setSpeed(value);
+	socket.on('setSpeed', function(value) {
+		if (!ensureOperationReady(socket, 'setSpeed')) return;
+		console.log("Got setSpeed command: " + value);
+		operation.speedSignal(value);
 	});
 
-	socket.on('setAngle', function(angle) {
-		var value = parseInt(angle, 10);
-		if (isNaN(value)) { console.log('setAngle: invalid value'); return; }
-		console.log('Got setAngle command: ' + value);
-		motor.setAngle(value);
+	socket.on('setAngle', function(value) {
+		if (!ensureOperationReady(socket, 'setAngle')) return;
+		console.log("Got setAngle command: " + value);
+		operation.tiltSignal(value);
 	});
 
 	socket.on('stopMotors', function() {
-		console.log('Got stopMotors command.');
-		motor.stopMotors();
+		if (!ensureOperationReady(socket, 'stopMotors')) return;
+		console.log("Got stopMotors command.");
+		operation.pauseMachine();
 	});
 
 	// Report current state to a freshly-connected browser.
@@ -198,6 +307,16 @@ function shutdownRecognizer() {
 	if (recognizer) {
 		recognizer.kill('SIGTERM');
 		recognizer = null;
+	}
+
+	if (operationReady) {
+		try {
+			operation.operationCleanup();
+			console.log('[operation] operationCleanup complete.');
+		} catch (e) {
+			console.log('[operation] operationCleanup failed: ' + e.message);
+		}
+		operationReady = false;
 	}
 }
 process.on('exit', shutdownRecognizer);

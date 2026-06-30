@@ -1,1 +1,0 @@
-cmd_Release/motor_addon.node := ln -f "Release/obj.target/motor_addon.node" "Release/motor_addon.node" 2>/dev/null || (rm -rf "Release/motor_addon.node" && cp -af "Release/obj.target/motor_addon.node" "Release/motor_addon.node")
