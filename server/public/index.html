@@ -83,10 +83,8 @@ let selectedMachine = null;
 let selectedTarget  = null;
 let selectedTempo = 1;
 const slots = {
-  1: null,
-  2: null,
-  3: null,
-  4: null,
+  L: { 1: null, 2: null, 3: null, 4: null },
+  R: { 1: null, 2: null, 3: null, 4: null },
 };
 
 
@@ -166,6 +164,7 @@ function courtPickerHTML(readonly = false) {
 function selectMachine(id) {
   selectedMachine = id;
   refreshCourtPicker();
+  refreshSlots();
 }
 
 function selectTarget(id) {
@@ -357,8 +356,10 @@ function refreshSlots() {
 }
 
 function slotsHTML(readonly = false) {
+  const machineKey = selectedMachine || 'L';
+  const machineSlots = slots[machineKey];
   return [1, 2, 3, 4].map(n => {
-    const s = slots[n];
+    const s = machineSlots[n];
     const clickAttr = readonly ? `onclick="clickSlot(${n})"` : `onclick="saveNewSlot(${n})"`;
     if (s) {
       return `<div class="slot filled" ${clickAttr}>
@@ -375,13 +376,14 @@ function slotsHTML(readonly = false) {
 }
 
 function clickSlot(n) {
-  const slotData = slots[n] || { name: 'Empty', machine: null, target: null, tempo: null };
-  console.log('Slot clicked:', n, slotData);
+  const machineKey = selectedMachine || 'L';
+  const slotData = slots[machineKey][n] || { name: 'Empty', machine: machineKey, target: null, tempo: null };
+  console.log('Slot clicked:', machineKey, n, slotData);
 
   fetch('/api/slot-click', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slot: n, data: slotData })
+    body: JSON.stringify({ machine: machineKey, slot: n, data: slotData })
   })
     .then(res => {
       if (!res.ok) throw new Error('Server responded with ' + res.status);
@@ -392,24 +394,29 @@ function clickSlot(n) {
 }
 
 function loadSlot(n) {
-  const s = slots[n];
+  const machineKey = selectedMachine || 'L';
+  const s = slots[machineKey][n];
+  if (!s) return;
   if (s.machine) { selectedMachine = s.machine; }
   if (s.target)  { selectedTarget  = s.target;  }
   if (s.tempo)   { selectedTempo   = s.tempo;   }
   refreshCourtPicker();
   refreshSlots();
-  // update tempo pills
   document.querySelectorAll('.tempo-pill').forEach(p => {
     p.classList.toggle('active', parseInt(p.textContent) === selectedTempo);
   });
 }
 
 function saveNewSlot(n) {
-  const machinePart = selectedMachine ? `Machine ${selectedMachine}` : null;
+  if (!selectedMachine) {
+    console.warn('No machine selected, cannot save slot');
+    return;
+  }
+  const machinePart = `Machine ${selectedMachine}`;
   const zonePart   = selectedTarget ? `Zone ${selectedTarget}`   : null;
   const tempoPart  = `Tempo ${selectedTempo}`;
   const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
-  slots[n] = {
+  slots[selectedMachine][n] = {
     name,
     machine: selectedMachine,
     target: selectedTarget,
