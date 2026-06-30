@@ -7,5 +7,3 @@
 - maybe change background colour between config mode and launch mode to indicate that the mode changed
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Wire up connected icon
-- Change set summary and position based on what set is being launched
-- Should not be able to save set without selecting position and target

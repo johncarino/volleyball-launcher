@@ -309,7 +309,7 @@ const screens = {
     <div class="section">
       <div class="section-label">Set summary</div>
       <div class="card">
-        <div class="summary-row"><span class="summary-key"><i class="ti ti-metronome" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Tempo</span><span class="summary-val">${selectedTempo}</span></div>
+        <div class="summary-row"><span class="summary-key"><i class="ti ti-metronome" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Tempo</span><span class="summary-val" id="sum-tempo">${selectedTempo}</span></div>
         <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">243 cm</span></div>
         <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">18.0 m × 9.0 m</span></div>
       </div>
@@ -355,32 +355,77 @@ function setPill(el) {
 
 function refreshSlots() {
   const wrap = document.getElementById('slots-wrap');
-  if (wrap) wrap.innerHTML = slotsHTML();
+  if (wrap) {
+    wrap.innerHTML = slotsHTML(false);
+    return;
+  }
+  const launchWrap = document.querySelector('#main-content .save-slots');
+  if (launchWrap) launchWrap.innerHTML = slotsHTML(true);
 }
+
+let activeSlot = null;
+let slotsLocked = false;
 
 function slotsHTML(readonly = false) {
   const machineKey = selectedMachine || 'L';
   const machineSlots = slots[machineKey];
   return [1, 2, 3, 4].map(n => {
     const s = machineSlots[n];
-    const clickAttr = readonly ? `onclick="clickSlot(${n})"` : `onclick="saveNewSlot(${n})"`;
-    if (s) {
-      return `<div class="slot filled" ${clickAttr}>
-        <div class="slot-num">Slot ${n}</div>
-        <div class="slot-name">${s.name}</div>
-      </div>`;
+    const isActive = readonly && activeSlot === n;
+    const isLockedOut = readonly && slotsLocked && activeSlot !== n;
+    const isEmptyReadonly = readonly && !s;
+
+    let clickAttr;
+    if (readonly) {
+      clickAttr = (isLockedOut || isEmptyReadonly) ? '' : `onclick="clickSlot(${n})"`;
     } else {
-      return `<div class="slot empty" ${clickAttr}>
-        <div class="slot-num">Slot ${n}</div>
-        <div class="slot-name">${readonly ? 'Empty' : 'Tap to save current set'}</div>
-      </div>`;
+      clickAttr = `onclick="saveNewSlot(${n})"`;
     }
+
+    const stateClass = isActive ? ' slot-active' : (isLockedOut ? ' locked-out' : (isEmptyReadonly ? ' slot-disabled' : ''));
+    const name = s ? s.name : (readonly ? 'Empty' : 'Tap to save current set');
+    const nameClass = s ? '' : ' empty-name';
+
+    return `<div class="slot${stateClass}" ${clickAttr}>
+      <div class="slot-num">Slot ${n}</div>
+      <div class="slot-name${nameClass}">${name}</div>
+    </div>`;
   }).join('');
 }
 
+const SLOT_HIGHLIGHT_MS = 4000;
+
 function clickSlot(n) {
   const machineKey = selectedMachine || 'L';
-  const slotData = slots[machineKey][n] || { name: 'Empty', machine: machineKey, target: null, tempo: null };
+  const slotData = slots[machineKey][n];
+
+  if (!slotData && !(slotsLocked && activeSlot === n)) return; // empty slots can't be activated
+
+  if (slotsLocked && activeSlot !== n) return; // ignore clicks on other slots while one is active
+
+  if (slotsLocked && activeSlot === n) {
+    // clicking the currently-active slot turns it off
+    console.log('Slot deactivated:', machineKey, n);
+
+    fetch('/api/slot-click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ machine: machineKey, slot: n, action: 'stop' })
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Server responded with ' + res.status);
+        return res.json().catch(() => ({}));
+      })
+      .then(json => console.log('Server ack:', json))
+      .catch(err => console.error('Failed to send slot stop to server:', err));
+
+    clearTimeout(window._slotUnlockTimer);
+    slotsLocked = false;
+    activeSlot = null;
+    refreshSlots();
+    return;
+  }
+
   console.log('Slot clicked:', machineKey, n, slotData);
 
   fetch('/api/slot-click', {
@@ -394,6 +439,23 @@ function clickSlot(n) {
     })
     .then(json => console.log('Server ack:', json))
     .catch(err => console.error('Failed to send slot click to server:', err));
+
+  slotsLocked = true;
+  activeSlot = n;
+  refreshSlots();
+
+  clearTimeout(window._slotUnlockTimer);
+  window._slotUnlockTimer = setTimeout(() => {
+    slotsLocked = false;
+    activeSlot = null;
+    refreshSlots();
+  }, SLOT_HIGHLIGHT_MS);
+
+  if (slotData.machine) selectedMachine = slotData.machine;
+  if (slotData.target)  selectedTarget  = slotData.target;
+  if (slotData.tempo)   selectedTempo   = slotData.tempo;
+
+  refreshLaunchView();
 }
 
 function loadSlot(n) {
@@ -413,6 +475,10 @@ function loadSlot(n) {
 function saveNewSlot(n) {
   if (!selectedMachine) {
     console.warn('No machine selected, cannot save slot');
+    return;
+  }
+  if (!selectedTarget) {
+    console.warn('No target selected, cannot save slot');
     return;
   }
   const machinePart = `Machine ${selectedMachine}`;
