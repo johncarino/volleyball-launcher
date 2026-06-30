@@ -1,4 +1,5 @@
 #include "operation.h"
+#include <gpiod.h>
 
 float curr_tilt_angle = 0.0;
 float curr_yaw_angle = 0.0;
@@ -13,6 +14,26 @@ float d_angle = 0;
 #define TILT_TOLERANCE_DEG 0.5
 #define TILT_TIMEOUT_SEC 10
 #define TILT_LOOP_DELAY_US 50000
+
+// === TACHOMETER ADDITION ===
+// A3144 hall sensor on a GPIO input, wired per the earlier wiring
+// notes (5V supply, 10k pull-up to 3.3V on OUT, OUT to a free GPIO
+// line). These three should really live in set.h next to the other
+// experimentally-determined coefficients, left here as defaults so
+// this file still compiles standalone.
+#ifndef TACH_GPIOCHIP
+#define TACH_GPIOCHIP 2          // gpiochip number, find with gpiodetect
+#endif
+#ifndef TACH_LINE
+#define TACH_LINE 7              // line offset, find with gpioinfo
+#endif
+#ifndef TACH_PULSES_PER_REV
+#define TACH_PULSES_PER_REV 1    // magnets per revolution on the BLDC
+#endif
+#define TACH_DEBOUNCE_US 1000
+#define TACH_STALE_TIMEOUT_SEC 2
+#define TACH_AVG_WINDOW 5
+// === END TACHOMETER ADDITION ===
 
 pthread_t tilt_thread, yaw_thread;
 pthread_mutex_t tilt_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -30,6 +51,20 @@ volatile int shutdown = 0;
 
 tb6600_t motor;
 static mcp4725_t dac1 = MCP4725_INIT_ZERO;
+
+// === TACHOMETER ADDITION ===
+pthread_t tach_thread;
+pthread_mutex_t tach_mutex = PTHREAD_MUTEX_INITIALIZER;
+volatile int tach_running = 0;
+
+static struct gpiod_chip *tach_chip = NULL;
+static struct gpiod_line *tach_line = NULL;
+
+static double tach_periods[TACH_AVG_WINDOW];
+static int tach_period_count = 0;
+static int tach_period_idx = 0;
+static double tach_current_rpm = 0.0;
+// === END TACHOMETER ADDITION ===
 
 void* tilt_worker() {
     while(true) {
@@ -75,6 +110,179 @@ void* yaw_worker() {
     }
 }
 
+// === TACHOMETER ADDITION ===
+// Runs continuously for the life of the program (unlike the tilt/yaw
+// workers, which only do work when signalled). Watches the A3144 line
+// for falling edges, keeps a rolling average over TACH_AVG_WINDOW
+// pulses, prints RPM to the terminal on every pulse, and prints 0 if
+// no pulse arrives for TACH_STALE_TIMEOUT_SEC seconds (motor stopped).
+void* tach_worker(void* arg) {
+    (void)arg;
+
+    struct timespec last_pulse_time;
+    int have_last = 0;
+
+    while (!shutdown) {
+        struct timespec timeout = { TACH_STALE_TIMEOUT_SEC, 0 };
+        int wait_result = gpiod_line_event_wait(tach_line, &timeout);
+
+        if (wait_result < 0) {
+            fprintf(stderr, "Tachometer: gpiod_line_event_wait failed\n");
+            break;
+        }
+        if (wait_result == 0) {
+            // No pulse within timeout: motor is likely stopped.
+            if (have_last) {
+                pthread_mutex_lock(&tach_mutex);
+                tach_current_rpm = 0.0;
+                tach_period_count = 0;
+                tach_period_idx = 0;
+                pthread_mutex_unlock(&tach_mutex);
+
+                printf("Tachometer: RPM = 0.0 (no pulses for %ds)\n",
+                       TACH_STALE_TIMEOUT_SEC);
+                have_last = 0;
+            }
+            continue;
+        }
+
+        struct gpiod_line_event event;
+        if (gpiod_line_event_read(tach_line, &event) < 0) {
+            fprintf(stderr, "Tachometer: gpiod_line_event_read failed\n");
+            break;
+        }
+
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+
+        if (!have_last) {
+            last_pulse_time = now;
+            have_last = 1;
+            continue;
+        }
+
+        double delta_s = (now.tv_sec - last_pulse_time.tv_sec) +
+                          (now.tv_nsec - last_pulse_time.tv_nsec) / 1e9;
+        double delta_us = delta_s * 1e6;
+
+        if (delta_us < TACH_DEBOUNCE_US) {
+            // Bounce/noise, not a real pulse. Don't update
+            // last_pulse_time, so the next real pulse is measured
+            // against the last good one.
+            continue;
+        }
+
+        double inst_rpm = (1.0 / delta_s) / TACH_PULSES_PER_REV * 60.0;
+
+        pthread_mutex_lock(&tach_mutex);
+        tach_periods[tach_period_idx] = delta_s;
+        tach_period_idx = (tach_period_idx + 1) % TACH_AVG_WINDOW;
+        if (tach_period_count < TACH_AVG_WINDOW) {
+            tach_period_count++;
+        }
+
+        double sum = 0.0;
+        for (int i = 0; i < tach_period_count; i++) {
+            sum += tach_periods[i];
+        }
+        double avg_period = sum / tach_period_count;
+        double avg_rpm = (1.0 / avg_period) / TACH_PULSES_PER_REV * 60.0;
+        tach_current_rpm = avg_rpm;
+        pthread_mutex_unlock(&tach_mutex);
+
+        printf("Tachometer: RPM = %.1f (inst %.1f)\n", avg_rpm, inst_rpm);
+
+        last_pulse_time = now;
+    }
+
+    return NULL;
+}
+
+// Opens the GPIO chip/line and starts the tach worker thread. Call
+// from operation_init(), after the other peripherals are set up.
+int tach_init() {
+    char chip_name[32];
+    snprintf(chip_name, sizeof(chip_name), "gpiochip%d", TACH_GPIOCHIP);
+
+    tach_chip = gpiod_chip_open_by_name(chip_name);
+    if (!tach_chip) {
+        fprintf(stderr, "Tachometer: failed to open %s. Run 'gpiodetect' "
+                         "to list available chips.\n", chip_name);
+        return -1;
+    }
+
+    tach_line = gpiod_chip_get_line(tach_chip, TACH_LINE);
+    if (!tach_line) {
+        fprintf(stderr, "Tachometer: failed to get line %d on %s\n",
+                TACH_LINE, chip_name);
+        gpiod_chip_close(tach_chip);
+        tach_chip = NULL;
+        return -1;
+    }
+
+    struct gpiod_line_request_config config = {0};
+    config.consumer = "dime_time_tach";
+    config.request_type = GPIOD_LINE_REQUEST_EVENT_FALLING_EDGE;
+
+    if (gpiod_line_request(tach_line, &config, 0) < 0) {
+        fprintf(stderr, "Tachometer: gpiod_line_request failed (try sudo, "
+                         "or add yourself to the gpio group)\n");
+        gpiod_chip_close(tach_chip);
+        tach_chip = NULL;
+        tach_line = NULL;
+        return -1;
+    }
+
+    if (pthread_create(&tach_thread, NULL, tach_worker, NULL) != 0) {
+        fprintf(stderr, "Tachometer: failed to create thread\n");
+        gpiod_line_release(tach_line);
+        gpiod_chip_close(tach_chip);
+        tach_chip = NULL;
+        tach_line = NULL;
+        return -1;
+    }
+
+    tach_running = 1;
+    printf("Tachometer initialized on gpiochip%d line %d "
+           "(%d pulse(s)/rev, %d-sample average)\n",
+           TACH_GPIOCHIP, TACH_LINE, TACH_PULSES_PER_REV, TACH_AVG_WINDOW);
+    return 0;
+}
+
+// Joins the tach thread and releases the GPIO line/chip. Relies on
+// the global `shutdown` flag being set to 1 already, same as the
+// tilt/yaw threads. Safe to call even if tach_init() was never
+// called or failed.
+void tach_cleanup() {
+    if (!tach_running) {
+        return;
+    }
+
+    pthread_join(tach_thread, NULL);
+
+    if (tach_line) {
+        gpiod_line_release(tach_line);
+        tach_line = NULL;
+    }
+    if (tach_chip) {
+        gpiod_chip_close(tach_chip);
+        tach_chip = NULL;
+    }
+
+    tach_running = 0;
+}
+
+// Thread-safe read of the current smoothed RPM, for anything else in
+// the codebase (e.g. closed-loop speed control) that wants the value
+// without parsing terminal output.
+float get_tach_rpm() {
+    pthread_mutex_lock(&tach_mutex);
+    float rpm = (float)tach_current_rpm;
+    pthread_mutex_unlock(&tach_mutex);
+    return rpm;
+}
+// === END TACHOMETER ADDITION ===
+
 void operation_init() {
 
     shutdown = 0;
@@ -116,6 +324,13 @@ void operation_init() {
         fprintf(stderr, "Failed to create yaw thread\n");
         return;
     }
+
+    // === TACHOMETER ADDITION ===
+    if (tach_init() != 0) {
+        fprintf(stderr, "Failed to initialize tachometer\n");
+        return;
+    }
+    // === END TACHOMETER ADDITION ===
 }
 
 void operation_cleanup() {
@@ -138,6 +353,12 @@ void operation_cleanup() {
 
     pthread_join(tilt_thread, NULL);
     pthread_join(yaw_thread, NULL);
+
+    // === TACHOMETER ADDITION ===
+    // shutdown is already 1 above; tach_worker polls it on a 2s
+    // timeout, so this join returns within ~TACH_STALE_TIMEOUT_SEC.
+    tach_cleanup();
+    // === END TACHOMETER ADDITION ===
 
     tb6600_enable(&motor, 0);
     tb6600_close(&motor);

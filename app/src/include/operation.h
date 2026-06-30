@@ -40,4 +40,12 @@ void stop_machine();
 void repeat_set();
 void shuffle_set_sequence();
 
+int tach_init(void);
+void tach_cleanup(void);
+float get_tach_rpm(void);
+
+extern pthread_t tach_thread;
+extern pthread_mutex_t tach_mutex;
+extern volatile int tach_running;
+
 #endif // OPERATION_H
