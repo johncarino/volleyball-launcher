@@ -1,4 +1,6 @@
 #include "fsm.h"
+#include <time.h>
+#include <unistd.h>
 
 static bool read_token(char *buf) {
     return scanf(" %31s", buf) == 1;
@@ -295,6 +297,20 @@ int fsm_update(fsm_state_t *state) {
                                 continue;
                             }
                             speed_signal(speed);
+                            printf("Motor running at %.0f RPM. Printing tachometer RPM every 3 seconds (to stop, press Ctrl+C):\n", speed);
+                            
+                            time_t start_time = time(NULL);
+                            time_t last_print = start_time - 3; // Print immediately first
+                            
+                            while (true) {
+                                time_t current_time = time(NULL);
+                                if (current_time - last_print >= 3) {
+                                    float rpm = get_tach_rpm();
+                                    printf("[%ld s] Tachometer RPM: %.1f\n", current_time - start_time, rpm);
+                                    last_print = current_time;
+                                }
+                                sleep(1);
+                            }
                             continue;
                         }
                     }
