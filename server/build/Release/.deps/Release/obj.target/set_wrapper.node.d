@@ -1,0 +1,1 @@
+cmd_Release/obj.target/set_wrapper.node := g++ -o Release/obj.target/set_wrapper.node -shared -pthread -rdynamic -m64  -Wl,-soname=set_wrapper.node -Wl,--start-group Release/obj.target/set_wrapper/../app/wrappers/set_wrapper.o Release/obj.target/set_wrapper/../app/src/set.o Release/obj.target/set_wrapper/../app/src/arc_calc.o -Wl,--end-group -lnode -lm

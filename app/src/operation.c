@@ -26,9 +26,52 @@ volatile int tilt_done = 1;
 volatile int yaw_done = 1;
 volatile int shutdown = 0;
 volatile int operation_initialized = 0;
+volatile int hopper_enabled = 1; // 0 = enabled, 1 = disabled
+volatile int hopper_running = 0;
 
 tb6600_t motor;
 static mcp4725_t dac1 = MCP4725_INIT_ZERO;
+pthread_t hopper_thread;
+static const int hopper_step_delay_us = 500;
+
+void* hopper_worker(void *arg) {
+    (void)arg;
+
+    while (!shutdown) {
+        if (!hopper_running) {
+            usleep(10000);
+            continue;
+        }
+
+        // Safety check: motor must be initialized before we try to use it
+        if (!motor.request) {
+            usleep(10000);
+            continue;
+        }
+
+        if (gpiod_line_request_set_value(motor.request,
+                motor.step_pin,
+                GPIOD_LINE_VALUE_ACTIVE) < 0) {
+            perror("hopper step high failed");
+            usleep(10000);
+            continue;
+        }
+
+        usleep(hopper_step_delay_us);
+
+        if (gpiod_line_request_set_value(motor.request,
+                motor.step_pin,
+                GPIOD_LINE_VALUE_INACTIVE) < 0) {
+            perror("hopper step low failed");
+            usleep(10000);
+            continue;
+        }
+
+        usleep(hopper_step_delay_us);
+    }
+
+    return NULL;
+}
 
 static uint16_t rpm_to_mv(float rpm) {
     double value = -0.000542557 * rpm * rpm
@@ -216,6 +259,8 @@ void operation_init() {
     }
 
     shutdown = 0;
+    hopper_enabled = 1;
+    hopper_running = 0;
 
     curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_yaw_angle = 0.0;
@@ -248,6 +293,10 @@ void operation_init() {
         fprintf(stderr, "Failed to create yaw thread\n");
         return;
     }
+    if (pthread_create(&hopper_thread, NULL, hopper_worker, NULL) != 0) {
+        fprintf(stderr, "Failed to create hopper thread\n");
+        return;
+    }
 
     operation_initialized = 1;
 }
@@ -259,6 +308,8 @@ void operation_cleanup() {
     }
 
     shutdown = 1;
+    hopper_enabled = 1;
+    hopper_running = 0;
 
     printf("First reset to default position...\n");
     mcp4725_set_raw(&dac1, 0);
@@ -276,6 +327,7 @@ void operation_cleanup() {
 
     pthread_join(tilt_thread, NULL);
     pthread_join(yaw_thread, NULL);
+    pthread_join(hopper_thread, NULL);
 
     tb6600_enable(&motor, 0);
     tb6600_close(&motor);
@@ -462,6 +514,72 @@ void yaw_signal_advanced(float angle) {
     yaw_done = 0;
     pthread_cond_signal(&yaw_cond);
     pthread_mutex_unlock(&yaw_mutex);
+
+    speed_signal(curr_rpm);
+}
+
+void toggle_hopper() {
+    if (hopper_running) {
+        hopper_stop();
+    } else {
+        hopper_start();
+    }
+}
+
+void hopper_start() {
+    //set rpm to 0
+    mcp4725_set_raw(&dac1, 0);
+
+    if (!motor.request) {
+        fprintf(stderr, "Cannot start hopper: motor not initialized\n");
+        return;
+    }
+
+    tb6600_set_direction(&motor, 1);
+    tb6600_enable(&motor, 1);
+    hopper_enabled = 0;
+    hopper_running = 1;
+    printf("Hopper started\n");
+
+    speed_signal(curr_rpm);
+}
+
+void hopper_stop() {
+    //set rpm to 0
+    mcp4725_set_raw(&dac1, 0);
+
+    if (!motor.request) {
+        fprintf(stderr, "Cannot stop hopper: motor not initialized\n");
+        return;
+    }
+
+    hopper_running = 0;
+    tb6600_enable(&motor, 0);
+    hopper_enabled = 1;
+    printf("Hopper stopped\n");
+
+    speed_signal(curr_rpm);
+}
+
+void hopper_pulse() {
+    //set rpm to 0
+    mcp4725_set_raw(&dac1, 0);
+
+    if (!motor.request) {
+        fprintf(stderr, "Cannot pulse hopper: motor not initialized\n");
+        return;
+    }
+
+    //turn hopper off if it is running
+    if (hopper_running) {
+        hopper_stop();
+    }
+
+    printf("Pulsing hopper...\n");
+    tb6600_enable(&motor, 1);
+    usleep(500000); //pulse for 500ms
+    tb6600_enable(&motor, 0);
+    printf("Hopper pulse complete.\n");
 
     speed_signal(curr_rpm);
 }

@@ -83,6 +83,7 @@ let repeatState = 0;
 let selectedMachine = null;
 let selectedTarget  = null;
 let selectedTempo = 1;
+let hopperOn = false;
 const machineSocket = (typeof io !== 'undefined') ? io() : null;
 const slots = {
   1: null,
@@ -119,6 +120,20 @@ function onAdvancedSpeedInput(value) {
   const val = parseInt(value, 10);
   document.getElementById('dev-spd-val').textContent = val + '%';
   emitMachine('setSpeed', val);
+}
+
+function onHopperControl(action) {
+  emitMachine('hopper-' + action);
+}
+
+function toggleHopper() {
+  hopperOn = !hopperOn;
+  const btn = document.getElementById('hopper-toggle-btn');
+  if (btn) {
+    btn.textContent = hopperOn ? 'Hopper On' : 'Hopper Off';
+    btn.classList.toggle('active', hopperOn);
+  }
+  onHopperControl(hopperOn ? 'on' : 'off');
 }
 
 function courtPickerHTML(readonly = false) {
@@ -313,6 +328,13 @@ const screens = {
       </div>
     </div>
     <div class="section">
+      <div class="section-label">Hopper</div>
+      <div class="hopper-controls">
+        <button class="hopper-btn" id="hopper-toggle-btn" onclick="toggleHopper()">Hopper Off</button>
+        <button class="hopper-btn" onclick="onHopperControl('pulse')">Hopper Pulse</button>
+      </div>
+    </div>
+    <div class="section">
       <div class="section-label">Live telemetry</div>
       <div class="card">
         <div class="dev-row"><span class="dev-label">Flywheel L</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-l" style="width:74%"></div></div><span class="dev-val" id="fw-l-v">3700 rpm</span></div>
@@ -433,10 +455,16 @@ function toggleLaunch(btn) {
     btn.classList.remove('stop'); btn.classList.add('start');
     btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
     clearInterval(window._telem);
+    if (window._activeMode === 'advanced') {
+      emitMachine('stopMotors');
+    }
   } else {
     btn.classList.remove('start'); btn.classList.add('stop');
     btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
     startTelemetry();
+    if (window._activeMode === 'advanced') {
+      emitMachine('resumeMotors');
+    }
   }
 }
 

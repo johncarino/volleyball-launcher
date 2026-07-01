@@ -349,7 +349,7 @@ endif
 
 quiet_cmd_regen_makefile = ACTION Regenerating $@
 cmd_regen_makefile = cd $(srcdir); /usr/share/nodejs/node-gyp/gyp/gyp_main.py -fmake --ignore-environment "-Dlibrary=shared_library" "-Dvisibility=default" "-Dnode_root_dir=/usr/include/nodejs" "-Dnode_gyp_dir=/usr/share/nodejs/node-gyp" "-Dnode_lib_file=/usr/include/nodejs/<(target_arch)/node.lib" "-Dmodule_root_dir=/home/john/Desktop/capstone/JP/volleyball-launcher/server" "-Dnode_engine=v8" "--depth=." "-Goutput_dir=." "--generator-output=build" -I/home/john/Desktop/capstone/JP/volleyball-launcher/server/build/config.gypi -I/usr/share/nodejs/node-gyp/addon.gypi -I/usr/include/nodejs/common.gypi "--toplevel-dir=." binding.gyp
-Makefile: $(srcdir)/../../../../../../../usr/share/nodejs/node-gyp/addon.gypi $(srcdir)/binding.gyp $(srcdir)/../../../../../../../usr/include/nodejs/common.gypi $(srcdir)/build/config.gypi
+Makefile: $(srcdir)/../../../../../../../usr/include/nodejs/common.gypi $(srcdir)/binding.gyp $(srcdir)/../../../../../../../usr/share/nodejs/node-gyp/addon.gypi $(srcdir)/build/config.gypi
 	$(call do_cmd,regen_makefile)
 
 # "all" is a concatenation of the "all" targets from all the included

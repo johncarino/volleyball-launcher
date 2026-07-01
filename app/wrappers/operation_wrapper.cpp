@@ -70,6 +70,27 @@ Value pauseMachine(const CallbackInfo& info) {
     return env.Undefined();
 }
 
+// --- hopperStart() ---
+Value hopperStart(const CallbackInfo& info) {
+    Env env = info.Env();
+    hopper_start();
+    return env.Undefined();
+}
+
+// --- hopperStop() ---
+Value hopperStop(const CallbackInfo& info) {
+    Env env = info.Env();
+    hopper_stop();
+    return env.Undefined();
+}
+
+// --- hopperPulse() ---
+Value hopperPulse(const CallbackInfo& info) {
+    Env env = info.Env();
+    hopper_pulse();
+    return env.Undefined();
+}
+
 // --- Module Init ---
 Object Init(Env env, Object exports) {
     exports.Set("operationInit", Function::New(env, operationInit));
@@ -79,6 +100,9 @@ Object Init(Env env, Object exports) {
     exports.Set("speedSignal", Function::New(env, speedSignal));
     exports.Set("resumeMachine", Function::New(env, resumeMachine));
     exports.Set("pauseMachine", Function::New(env, pauseMachine));
+    exports.Set("hopperStart", Function::New(env, hopperStart));
+    exports.Set("hopperStop", Function::New(env, hopperStop));
+    exports.Set("hopperPulse", Function::New(env, hopperPulse));
     return exports;
 }
 

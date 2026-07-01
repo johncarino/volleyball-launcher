@@ -132,6 +132,34 @@ body {
 .op-btn.stop  { background: var(--red);   color: #fff; padding: 40px 0; }
 .op-btn.continue-style { background: var(--blue); color: #fff; }
 
+.hopper-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hopper-btn {
+  border: 0.5px solid var(--border-secondary);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  padding: 12px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.hopper-btn:active {
+  opacity: 0.85;
+}
+
+.hopper-btn.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
 .save-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .slot {
   border: 0.5px solid var(--border-secondary);

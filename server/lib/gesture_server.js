@@ -51,6 +51,9 @@ var operation = (function() {
 			homingSequence: function(){},
 			tiltSignal: function(){},
 			speedSignal: function(){},
+			hopperStart: function(){},
+			hopperStop: function(){},
+			hopperPulse: function(){},
 			resumeMachine: function(){},
 			pauseMachine: function(){}
 		};
@@ -198,6 +201,30 @@ function handleCommand(socket) {
 		if (!ensureOperationReady(socket, 'stopMotors')) return;
 		console.log("Got stopMotors command.");
 		operation.pauseMachine();
+	});
+
+	socket.on('resumeMotors', function() {
+		if (!ensureOperationReady(socket, 'resumeMotors')) return;
+		console.log("Got resumeMotors command.");
+		operation.resumeMachine();
+	});
+
+	socket.on('hopper-on', function() {
+		if (!ensureOperationReady(socket, 'hopper-on')) return;
+		console.log("Got hopper-on command.");
+		operation.hopperStart();
+	});
+
+	socket.on('hopper-off', function() {
+		if (!ensureOperationReady(socket, 'hopper-off')) return;
+		console.log("Got hopper-off command.");
+		operation.hopperStop();
+	});
+
+	socket.on('hopper-pulse', function() {
+		if (!ensureOperationReady(socket, 'hopper-pulse')) return;
+		console.log("Got hopper-pulse command.");
+		operation.hopperPulse();
 	});
 
 	// Report current state to a freshly-connected browser.

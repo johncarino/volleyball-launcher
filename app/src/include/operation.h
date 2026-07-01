@@ -38,6 +38,10 @@ void set_speed(float speed);
 void set_machine(int set_index);
 void tilt_signal_advanced(float angle);
 void yaw_signal_advanced(float angle);
+void toggle_hopper();
+void hopper_start();
+void hopper_stop();
+void hopper_pulse();
 
 float get_tilt_angle();
 float get_yaw_angle();
