@@ -101,6 +101,7 @@ OBJS := \
 	$(obj).target/$(TARGET)/../app/src/arc_calc.o \
 	$(obj).target/$(TARGET)/../hal/src/bts7960.o \
 	$(obj).target/$(TARGET)/../hal/src/mcp4725.o \
+	$(obj).target/$(TARGET)/../hal/src/mpu6050.o \
 	$(obj).target/$(TARGET)/../hal/src/tb6600.o \
 	$(obj).target/$(TARGET)/../hal/src/pwm.o
 
@@ -115,25 +116,25 @@ $(OBJS): GYP_CXXFLAGS := $(DEFS_$(BUILDTYPE)) $(INCS_$(BUILDTYPE))  $(CFLAGS_$(B
 
 # Suffix rules, putting all outputs into $(obj).
 
-$(obj).$(TOOLSET)/$(TARGET)/%.o: $(srcdir)/%.c FORCE_DO_CMD
-	@$(call do_cmd,cc,1)
-
 $(obj).$(TOOLSET)/$(TARGET)/%.o: $(srcdir)/%.cpp FORCE_DO_CMD
 	@$(call do_cmd,cxx,1)
 
-# Try building from generated source, too.
-
-$(obj).$(TOOLSET)/$(TARGET)/%.o: $(obj).$(TOOLSET)/%.c FORCE_DO_CMD
+$(obj).$(TOOLSET)/$(TARGET)/%.o: $(srcdir)/%.c FORCE_DO_CMD
 	@$(call do_cmd,cc,1)
+
+# Try building from generated source, too.
 
 $(obj).$(TOOLSET)/$(TARGET)/%.o: $(obj).$(TOOLSET)/%.cpp FORCE_DO_CMD
 	@$(call do_cmd,cxx,1)
 
-$(obj).$(TOOLSET)/$(TARGET)/%.o: $(obj)/%.c FORCE_DO_CMD
+$(obj).$(TOOLSET)/$(TARGET)/%.o: $(obj).$(TOOLSET)/%.c FORCE_DO_CMD
 	@$(call do_cmd,cc,1)
 
 $(obj).$(TOOLSET)/$(TARGET)/%.o: $(obj)/%.cpp FORCE_DO_CMD
 	@$(call do_cmd,cxx,1)
+
+$(obj).$(TOOLSET)/$(TARGET)/%.o: $(obj)/%.c FORCE_DO_CMD
+	@$(call do_cmd,cc,1)
 
 # End of this set of suffix rules
 ### Rules for final target.
@@ -150,7 +151,6 @@ LDFLAGS_Release := \
 LIBS := \
 	-lnode \
 	-lm \
-	-lpthread \
 	-lgpiod
 
 $(obj).target/operation_wrapper.node: GYP_LDFLAGS := $(LDFLAGS_$(BUILDTYPE))

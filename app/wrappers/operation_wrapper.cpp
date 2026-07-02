@@ -6,6 +6,7 @@
  */
 
 #include <napi.h>
+#include <iostream>
 
 extern "C" {
 #include "../src/include/operation.h"
@@ -16,7 +17,10 @@ using namespace Napi;
 // --- operationInit() ---
 Value operationInit(const CallbackInfo& info) {
     Env env = info.Env();
+    std::cerr << "[operation] operationInit() entered" << std::endl;
     operation_init();
+    std::cerr << "[operation] control layer initialized" << std::endl;
+    
     return env.Undefined();
 }
 
@@ -41,7 +45,8 @@ Value tiltSignal(const CallbackInfo& info) {
         TypeError::New(env, "tiltSignal expects a number").ThrowAsJavaScriptException();
         return env.Null();
     }
-    tilt_signal_advanced(info[0].As<Number>().FloatValue());
+    tilt_with_feedback(info[0].As<Number>().FloatValue());
+    std::cout << "[operation] tilt signal sent: " << info[0].As<Number>().FloatValue() << std::endl;
     return env.Undefined();
 }
 

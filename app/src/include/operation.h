@@ -4,12 +4,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
 
 #include "set.h"
 #include "bts7960.h"
 #include "mcp4725.h"
 #include "tb6600.h"
+#include "mpu6050.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +38,7 @@ void set_speed(float speed);
 void set_machine(int set_index);
 void tilt_signal_advanced(float angle);
 void yaw_signal_advanced(float angle);
+void tilt_with_feedback(float angle);
 void toggle_hopper();
 void hopper_start();
 void hopper_stop();

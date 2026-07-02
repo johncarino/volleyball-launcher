@@ -7,71 +7,18 @@ int curr_rpm = 0;
 
 float d_angle = 0;
 
-//Defined in set.h
-//#define TILT_COEFF 135.0 //171ms per degree, determined experimentally
-//#define YAW_COEFF 10 //10 steps per degree, determined experimentally
-//#define SPEED_COEFF 2.36
-
-pthread_t tilt_thread, yaw_thread;
-pthread_mutex_t tilt_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t yaw_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t done_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t tilt_cond = PTHREAD_COND_INITIALIZER;
-pthread_cond_t yaw_cond = PTHREAD_COND_INITIALIZER;
-pthread_cond_t done_cond = PTHREAD_COND_INITIALIZER;
-
-volatile float tilt_angle_w = 0;
-volatile float yaw_angle_w = 0;
-volatile int tilt_done = 1;
-volatile int yaw_done = 1;
-volatile int shutdown = 0;
 volatile int operation_initialized = 0;
 volatile int hopper_enabled = 1; // 0 = enabled, 1 = disabled
 volatile int hopper_running = 0;
 
+#define TILT_TOLERANCE_DEG 0.5
+#define TILT_TIMEOUT_SEC 10
+#define TILT_LOOP_DELAY_US 50000
+
+volatile float tilt_angle_w = 0;
+
 tb6600_t motor;
 static mcp4725_t dac1 = MCP4725_INIT_ZERO;
-pthread_t hopper_thread;
-static const int hopper_step_delay_us = 500;
-
-void* hopper_worker(void *arg) {
-    (void)arg;
-
-    while (!shutdown) {
-        if (!hopper_running) {
-            usleep(10000);
-            continue;
-        }
-
-        // Safety check: motor must be initialized before we try to use it
-        if (!motor.request) {
-            usleep(10000);
-            continue;
-        }
-
-        if (gpiod_line_request_set_value(motor.request,
-                motor.step_pin,
-                GPIOD_LINE_VALUE_ACTIVE) < 0) {
-            perror("hopper step high failed");
-            usleep(10000);
-            continue;
-        }
-
-        usleep(hopper_step_delay_us);
-
-        if (gpiod_line_request_set_value(motor.request,
-                motor.step_pin,
-                GPIOD_LINE_VALUE_INACTIVE) < 0) {
-            perror("hopper step low failed");
-            usleep(10000);
-            continue;
-        }
-
-        usleep(hopper_step_delay_us);
-    }
-
-    return NULL;
-}
 
 static uint16_t rpm_to_mv(float rpm) {
     double value = -0.000542557 * rpm * rpm
@@ -206,95 +153,45 @@ static long tilt_angle_to_time(float i_angle, float f_angle) {
     return c_duration;
 }
 
-void* tilt_worker(void *arg) {
-    (void)arg;
-    while(true) {
-        pthread_mutex_lock(&tilt_mutex);
-        while(tilt_done && !shutdown) {
-            pthread_cond_wait(&tilt_cond, &tilt_mutex);
-        }
-        if (shutdown) {
-            pthread_mutex_unlock(&tilt_mutex);
-            return NULL;
-        }
-        float work = tilt_angle_w;
-        pthread_mutex_unlock(&tilt_mutex);
-
-        tilt_signal(work);
-
-        pthread_mutex_lock(&done_mutex);
-        tilt_done = 1;
-        pthread_cond_signal(&done_cond);
-        pthread_mutex_unlock(&done_mutex);
-    }
-}
-
-void* yaw_worker(void *arg) {
-    (void)arg;
-    while(true) {
-        pthread_mutex_lock(&yaw_mutex);
-        while(yaw_done && !shutdown) {
-            pthread_cond_wait(&yaw_cond, &yaw_mutex);
-        }
-        if (shutdown) {
-            pthread_mutex_unlock(&yaw_mutex);
-            return NULL;
-        }
-        float work = yaw_angle_w;
-        pthread_mutex_unlock(&yaw_mutex);
-
-        yaw_signal(work);
-
-        pthread_mutex_lock(&done_mutex);
-        yaw_done = 1;
-        pthread_cond_signal(&done_cond);
-        pthread_mutex_unlock(&done_mutex);
-    }
-}
-
 void operation_init() {
+
+    fprintf(stderr, "[operation] operation_init() entered\n");
 
     if (operation_initialized) {
         return;
     }
-
-    shutdown = 0;
     hopper_enabled = 1;
     hopper_running = 0;
 
     curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_yaw_angle = 0.0;
+    curr_tilt_angle = 0.0;
+    curr_yaw_angle = 0.0;
+    curr_speed = 0;
+    curr_rpm = 0;
 
-    //init tb6600
+    fprintf(stderr, "[operation] initializing MPU6050 IMU\n");
+    if (mpu6050_init(NULL) != 0) {
+        fprintf(stderr, "Failed to initialize MPU6050 — is I2C enabled?\n");
+        return;
+    }
+
+    fprintf(stderr, "[operation] initializing BTS/BTN7960 motor driver\n");
+    if (bts_init() != 0) {
+        fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
+        return;
+    }
+
+    fprintf(stderr, "[operation] initializing TB6600 motor driver\n");
     if (tb6600_init(&motor, 1) < 0) {
         fprintf(stderr, "Failed to initialize TB6600\n");
         return;
     }
     tb6600_enable(&motor, 1);
 
-    //init mcp4725
+    fprintf(stderr, "[operation] initializing MCP4725 DAC\n");
     if (mcp4725_init(&dac1, MCP4725_I2C_BUS1, MCP4725_I2C_ADDR) != 0) {
         fprintf(stderr, "Failed to initialize MCP4725 — is I2C enabled?\n");
-        return;
-    }
-
-    //init bts7960
-    if (bts_init() != 0) {
-        fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
-        return;
-    }
-
-    //init threads
-    if (pthread_create(&tilt_thread, NULL, tilt_worker, NULL) != 0) {
-        fprintf(stderr, "Failed to create tilt thread\n");
-        return;
-    }
-    if (pthread_create(&yaw_thread, NULL, yaw_worker, NULL) != 0) {
-        fprintf(stderr, "Failed to create yaw thread\n");
-        return;
-    }
-    if (pthread_create(&hopper_thread, NULL, hopper_worker, NULL) != 0) {
-        fprintf(stderr, "Failed to create hopper thread\n");
         return;
     }
 
@@ -302,46 +199,25 @@ void operation_init() {
 }
 
 void operation_cleanup() {
-
     if (!operation_initialized) {
         return;
     }
 
-    shutdown = 1;
     hopper_enabled = 1;
     hopper_running = 0;
 
-    printf("First reset to default position...\n");
+
+    mpu6050_close();
     mcp4725_set_raw(&dac1, 0);
-    tilt_signal(INITIAL_TILT_ANGLE);
-
-    printf("Cleaning up operation mode...\n");
-
-    pthread_mutex_lock(&tilt_mutex);
-    pthread_cond_signal(&tilt_cond);
-    pthread_mutex_unlock(&tilt_mutex);
-
-    pthread_mutex_lock(&yaw_mutex);
-    pthread_cond_signal(&yaw_cond);
-    pthread_mutex_unlock(&yaw_mutex);
-
-    pthread_join(tilt_thread, NULL);
-    pthread_join(yaw_thread, NULL);
-    pthread_join(hopper_thread, NULL);
-
     tb6600_enable(&motor, 0);
     tb6600_close(&motor);
-
     mcp4725_cleanup(&dac1);
-
     bts_cleanup();
 
     operation_initialized = 0;
 }
 
 void homing_sequence() {
-    //home the machine to a known position
-    //for now, just set tilt and yaw to 0
     printf("Homing sequence initiated. Moving to default position...\n");
     tilt_signal(INITIAL_TILT_ANGLE);
     yaw_signal(0.0);
@@ -453,9 +329,6 @@ void set_speed(float speed) {
 }
 
 void set_machine(int set_index) {
-    //start the machine for set index
-
-    //set rpm to 0
     mcp4725_set_raw(&dac1, 0);
 
     printf("Setting machine for set %d\n", set_index);
@@ -464,58 +337,63 @@ void set_machine(int set_index) {
             set_seq[set_index]->yaw_angle,
             set_seq[set_index]->rpm_output);
     
-    //signal tilt
-    pthread_mutex_lock(&tilt_mutex);
-    tilt_angle_w = set_seq[set_index]->tilt_angle;
-    tilt_done = 0;
-    pthread_cond_signal(&tilt_cond);
-    pthread_mutex_unlock(&tilt_mutex);
-
-    //signal yaw
-    //pthread_mutex_lock(&yaw_mutex);
-    //yaw_angle_w = set_seq[set_index].yaw_angle;
-    //yaw_done = 0;
-    //pthread_cond_signal(&yaw_cond);
-    //pthread_mutex_unlock(&yaw_mutex);
-
-    //wait for tilt and yaw to finish
-    pthread_mutex_lock(&done_mutex);
-    //while (!tilt_done || !yaw_done) {
-    while (!tilt_done) {
-        pthread_cond_wait(&done_cond, &done_mutex);
-    }
-    pthread_mutex_unlock(&done_mutex);
-
-    //signal speed
+    tilt_signal(set_seq[set_index]->tilt_angle);
+    yaw_signal(set_seq[set_index]->yaw_angle);
     speed_signal(set_seq[set_index]->rpm_output);
 }
 
 void tilt_signal_advanced(float angle) {
-
-    //set rpm to 0
     mcp4725_set_raw(&dac1, 0);
-
-    pthread_mutex_lock(&tilt_mutex);
-    tilt_angle_w = angle;
-    tilt_done = 0;
-    pthread_cond_signal(&tilt_cond);
-    pthread_mutex_unlock(&tilt_mutex);
-
+    tilt_signal(angle);
     speed_signal(curr_rpm);
 }
 
 void yaw_signal_advanced(float angle) {
-
-    //set rpm to 0
     mcp4725_set_raw(&dac1, 0);
-
-    pthread_mutex_lock(&yaw_mutex);
-    yaw_angle_w = angle;
-    yaw_done = 0;
-    pthread_cond_signal(&yaw_cond);
-    pthread_mutex_unlock(&yaw_mutex);
-
+    yaw_signal(angle);
     speed_signal(curr_rpm);
+}
+
+void tilt_with_feedback(float angle) {
+    mpu6050_data_t imu_data;
+    const double target_angle = (double)angle;
+
+    time_t start_time = time(NULL);
+
+    while(1) {
+        if (mpu6050_read(&imu_data) != 0) {
+            fprintf(stderr, "Failed to read from MPU6050\n");
+            bts_stop();
+            return;
+        }
+
+        double current_angle = imu_data.stable_roll_deg;
+        double error = target_angle - current_angle;
+
+        fprintf(stderr, "Current angle: %.2f, Target angle: %.2f, Error: %.2f\n", current_angle, target_angle, error);
+
+        if (fabs(error) <= TILT_TOLERANCE_DEG) {
+            fprintf(stderr, "Target angle reached within tolerance.\n");
+            bts_stop();
+            break;
+        }
+
+        if (error > 0) {
+            printf("Tilting forward...\n");
+            bts_forward_start(50);
+        } else {
+            printf("Tilting backward...\n");
+            bts_reverse_start(50);
+        }
+
+        if (difftime(time(NULL), start_time) >= TILT_TIMEOUT_SEC) {
+            fprintf(stderr, "Tilt operation timed out after %d seconds.\n", TILT_TIMEOUT_SEC);
+            bts_stop();
+            break;
+        }
+
+        usleep(TILT_LOOP_DELAY_US);
+    }
 }
 
 void toggle_hopper() {
@@ -528,7 +406,7 @@ void toggle_hopper() {
 
 void hopper_start() {
     //set rpm to 0
-    mcp4725_set_raw(&dac1, 0);
+    //mcp4725_set_raw(&dac1, 0);
 
     if (!motor.request) {
         fprintf(stderr, "Cannot start hopper: motor not initialized\n");
@@ -541,12 +419,12 @@ void hopper_start() {
     hopper_running = 1;
     printf("Hopper started\n");
 
-    speed_signal(curr_rpm);
+    //speed_signal(curr_rpm);
 }
 
 void hopper_stop() {
     //set rpm to 0
-    mcp4725_set_raw(&dac1, 0);
+    //mcp4725_set_raw(&dac1, 0);
 
     if (!motor.request) {
         fprintf(stderr, "Cannot stop hopper: motor not initialized\n");
@@ -558,12 +436,12 @@ void hopper_stop() {
     hopper_enabled = 1;
     printf("Hopper stopped\n");
 
-    speed_signal(curr_rpm);
+    //speed_signal(curr_rpm);
 }
 
 void hopper_pulse() {
     //set rpm to 0
-    mcp4725_set_raw(&dac1, 0);
+    //mcp4725_set_raw(&dac1, 0);
 
     if (!motor.request) {
         fprintf(stderr, "Cannot pulse hopper: motor not initialized\n");
@@ -581,7 +459,7 @@ void hopper_pulse() {
     tb6600_enable(&motor, 0);
     printf("Hopper pulse complete.\n");
 
-    speed_signal(curr_rpm);
+    //speed_signal(curr_rpm);
 }
 
 float get_tilt_angle() {

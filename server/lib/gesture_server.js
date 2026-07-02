@@ -107,15 +107,11 @@ exports.listen = function(server) {
 };
 
 function ensureOperationReady(socket, commandName) {
-	if (!OPERATION_LAZY_INIT) {
-		return true;
-	}
-
 	if (operationReady) {
 		return true;
 	}
 
-	if (operationInitAttempted) {
+	if (OPERATION_LAZY_INIT && operationInitAttempted) {
 		if (socket) socket.emit('machine-error', 'Operation mode is unavailable.');
 		console.log('[operation] Command blocked (' + commandName + '): operation mode unavailable.');
 		return false;
@@ -137,6 +133,7 @@ function initOperation(socket, reason) {
 
 	operationInitAttempted = true;
 	try {
+		console.log('[operation] initOperation requested (' + reason + ').');
 		operation.operationInit();
 		operationReady = true;
 		console.log('[operation] operationInit complete (' + reason + ').');
@@ -194,6 +191,7 @@ function handleCommand(socket) {
 	socket.on('setAngle', function(value) {
 		if (!ensureOperationReady(socket, 'setAngle')) return;
 		console.log("Got setAngle command: " + value);
+		console.log('[operation] forwarding setAngle to native tiltSignal.');
 		operation.tiltSignal(value);
 	});
 

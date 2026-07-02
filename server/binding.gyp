@@ -45,6 +45,7 @@
         "../app/src/arc_calc.c",
         "../hal/src/bts7960.c",
         "../hal/src/mcp4725.c",
+        "../hal/src/mpu6050.c",
         "../hal/src/tb6600.c",
         "../hal/src/pwm.c"
       ],
@@ -52,13 +53,13 @@
         "<!@(node -p \"require('node-addon-api').include\")",
         "..",
         "../app/src/include",
+        "..",
         "../hal/include"
       ],
       "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
       "cflags_cc!": [ "-fno-exceptions" ],
       "libraries": [
         "-lm",
-        "-lpthread",
         "-lgpiod"
       ]
     }
