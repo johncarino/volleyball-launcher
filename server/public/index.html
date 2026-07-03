@@ -12,7 +12,10 @@
 <div class="app">
   <div class="statusbar">
     <span class="device">AVSS</span>
-    <span class="conn"><i class="ti ti-wifi" style="font-size:13px" aria-hidden="true"></i> Connected</span>
+    <span class="conn" id="conn-status">
+      <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
+      <span id="conn-text">Connected</span>
+    </span>
   </div>
 
   <div class="topbar" id="topbar">
@@ -86,10 +89,8 @@ let selectedTempo = 1;
 let hopperOn = false;
 const machineSocket = (typeof io !== 'undefined') ? io() : null;
 const slots = {
-  1: null,
-  2: null,
-  3: null,
-  4: null,
+  L: { 1: null, 2: null, 3: null, 4: null },
+  R: { 1: null, 2: null, 3: null, 4: null },
 };
 
 
@@ -206,6 +207,7 @@ function courtPickerHTML(readonly = false) {
 function selectMachine(id) {
   selectedMachine = id;
   refreshCourtPicker();
+  refreshSlots();
 }
 
 function selectTarget(id) {
@@ -354,7 +356,7 @@ const screens = {
     <div class="section">
       <div class="section-label">Set summary</div>
       <div class="card">
-        <div class="summary-row"><span class="summary-key"><i class="ti ti-metronome" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Tempo</span><span class="summary-val">${selectedTempo}</span></div>
+        <div class="summary-row"><span class="summary-key"><i class="ti ti-metronome" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Tempo</span><span class="summary-val" id="sum-tempo">${selectedTempo}</span></div>
         <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">243 cm</span></div>
         <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">18.0 m × 9.0 m</span></div>
       </div>
@@ -400,47 +402,137 @@ function setPill(el) {
 
 function refreshSlots() {
   const wrap = document.getElementById('slots-wrap');
-  if (wrap) wrap.innerHTML = slotsHTML();
+  if (wrap) {
+    wrap.innerHTML = slotsHTML(false);
+    return;
+  }
+  const launchWrap = document.querySelector('#main-content .save-slots');
+  if (launchWrap) launchWrap.innerHTML = slotsHTML(true);
 }
 
+let activeSlot = null;
+let slotsLocked = false;
+
 function slotsHTML(readonly = false) {
+  const machineKey = selectedMachine || 'L';
+  const machineSlots = slots[machineKey];
   return [1, 2, 3, 4].map(n => {
-    const s = slots[n];
-    const clickAttr = readonly ? '' : `onclick="saveNewSlot(${n})"`;
-    const style = readonly ? ' style="pointer-events:none"' : '';
-    if (s) {
-      return `<div class="slot filled" ${clickAttr}${style}>
-        <div class="slot-num">Slot ${n}</div>
-        <div class="slot-name">${s.name}</div>
-      </div>`;
+    const s = machineSlots[n];
+    const isActive = readonly && activeSlot === n;
+    const isLockedOut = readonly && slotsLocked && activeSlot !== n;
+    const isEmptyReadonly = readonly && !s;
+
+    let clickAttr;
+    if (readonly) {
+      clickAttr = (isLockedOut || isEmptyReadonly) ? '' : `onclick="clickSlot(${n})"`;
     } else {
-      return `<div class="slot empty" ${clickAttr}${style}>
-        <div class="slot-num">Slot ${n}</div>
-        <div class="slot-name">${readonly ? 'Empty' : 'Tap to save current set'}</div>
-      </div>`;
+      clickAttr = `onclick="saveNewSlot(${n})"`;
     }
+
+    const stateClass = isActive ? ' slot-active' : (isLockedOut ? ' locked-out' : (isEmptyReadonly ? ' slot-disabled' : ''));
+    const name = s ? s.name : (readonly ? 'Empty' : 'Tap to save current set');
+    const nameClass = s ? '' : ' empty-name';
+
+    return `<div class="slot${stateClass}" ${clickAttr}>
+      <div class="slot-num">Slot ${n}</div>
+      <div class="slot-name${nameClass}">${name}</div>
+    </div>`;
   }).join('');
 }
 
+const SLOT_HIGHLIGHT_MS = 4000;
+
+function clickSlot(n) {
+  const machineKey = selectedMachine || 'L';
+  const slotData = slots[machineKey][n];
+
+  if (!slotData && !(slotsLocked && activeSlot === n)) return; // empty slots can't be activated
+
+  if (slotsLocked && activeSlot !== n) return; // ignore clicks on other slots while one is active
+
+  if (slotsLocked && activeSlot === n) {
+    // clicking the currently-active slot turns it off
+    console.log('Slot deactivated:', machineKey, n);
+
+    fetch('/api/slot-click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ machine: machineKey, slot: n, action: 'stop' })
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Server responded with ' + res.status);
+        return res.json().catch(() => ({}));
+      })
+      .then(json => console.log('Server ack:', json))
+      .catch(err => console.error('Failed to send slot stop to server:', err));
+
+    clearTimeout(window._slotUnlockTimer);
+    slotsLocked = false;
+    activeSlot = null;
+    refreshSlots();
+    return;
+  }
+
+  console.log('Slot clicked:', machineKey, n, slotData);
+
+  fetch('/api/slot-click', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ machine: machineKey, slot: n, data: slotData })
+  })
+    .then(res => {
+      if (!res.ok) throw new Error('Server responded with ' + res.status);
+      return res.json().catch(() => ({}));
+    })
+    .then(json => console.log('Server ack:', json))
+    .catch(err => console.error('Failed to send slot click to server:', err));
+
+  slotsLocked = true;
+  activeSlot = n;
+  refreshSlots();
+
+  clearTimeout(window._slotUnlockTimer);
+  window._slotUnlockTimer = setTimeout(() => {
+    slotsLocked = false;
+    activeSlot = null;
+    refreshSlots();
+  }, SLOT_HIGHLIGHT_MS);
+
+  if (slotData.machine) selectedMachine = slotData.machine;
+  if (slotData.target)  selectedTarget  = slotData.target;
+  if (slotData.tempo)   selectedTempo   = slotData.tempo;
+
+  refreshLaunchView();
+}
+
 function loadSlot(n) {
-  const s = slots[n];
+  const machineKey = selectedMachine || 'L';
+  const s = slots[machineKey][n];
+  if (!s) return;
   if (s.machine) { selectedMachine = s.machine; }
   if (s.target)  { selectedTarget  = s.target;  }
   if (s.tempo)   { selectedTempo   = s.tempo;   }
   refreshCourtPicker();
   refreshSlots();
-  // update tempo pills
   document.querySelectorAll('.tempo-pill').forEach(p => {
     p.classList.toggle('active', parseInt(p.textContent) === selectedTempo);
   });
 }
 
 function saveNewSlot(n) {
-  const machinePart = selectedMachine ? `Machine ${selectedMachine}` : null;
+  if (!selectedMachine) {
+    console.warn('No machine selected, cannot save slot');
+    return;
+  }
+  if (!selectedTarget) {
+    console.warn('No target selected, cannot save slot');
+    return;
+  }
+  const machinePart = `Machine ${selectedMachine}`;
   const zonePart   = selectedTarget ? `Zone ${selectedTarget}`   : null;
   const tempoPart  = `Tempo ${selectedTempo}`;
   const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
-  slots[n] = {
+  slots[selectedMachine][n] = {
     name,
     machine: selectedMachine,
     target: selectedTarget,
