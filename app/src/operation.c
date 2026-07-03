@@ -1,5 +1,5 @@
 #include "operation.h"
-#include <gpiod.h>
+#include "hal/tachometer.h"
 
 float curr_tilt_angle = 0.0;
 float curr_yaw_angle = 0.0;
@@ -14,26 +14,6 @@ float d_angle = 0;
 #define TILT_TOLERANCE_DEG 0.5
 #define TILT_TIMEOUT_SEC 10
 #define TILT_LOOP_DELAY_US 50000
-
-// === TACHOMETER ADDITION ===
-// A3144 hall sensor on a GPIO input, wired per the earlier wiring
-// notes (5V supply, 10k pull-up to 3.3V on OUT, OUT to a free GPIO
-// line). These three should really live in set.h next to the other
-// experimentally-determined coefficients, left here as defaults so
-// this file still compiles standalone.
-#ifndef TACH_GPIOCHIP
-#define TACH_GPIOCHIP 0          // gpiochip number, find with gpiodetect
-#endif
-#ifndef TACH_LINE
-#define TACH_LINE 0              // line offset, find with gpioinfo
-#endif
-#ifndef TACH_PULSES_PER_REV
-#define TACH_PULSES_PER_REV 1    // magnets per revolution on the BLDC
-#endif
-#define TACH_DEBOUNCE_US 1000
-#define TACH_STALE_TIMEOUT_SEC 2
-#define TACH_AVG_WINDOW 5
-// === END TACHOMETER ADDITION ===
 
 pthread_t tilt_thread, yaw_thread;
 pthread_mutex_t tilt_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -51,24 +31,6 @@ volatile int shutdown = 0;
 
 tb6600_t motor;
 static mcp4725_t dac1 = MCP4725_INIT_ZERO;
-
-// === TACHOMETER ADDITION ===
-// Uses the libgpiod v2 API (gpiod_chip_request_lines / gpiod_line_request_*).
-// If your board has libgpiod v1 installed instead (older gpiod_line_*
-// functions taking a raw struct gpiod_line*), this won't compile as-is;
-// check with `pkg-config --modversion libgpiod`.
-pthread_t tach_thread;
-pthread_mutex_t tach_mutex = PTHREAD_MUTEX_INITIALIZER;
-volatile int tach_running = 0;
-
-static struct gpiod_line_request *tach_request = NULL;
-static struct gpiod_edge_event_buffer *tach_event_buffer = NULL;
-
-static double tach_periods[TACH_AVG_WINDOW];
-static int tach_period_count = 0;
-static int tach_period_idx = 0;
-static double tach_current_rpm = 0.0;
-// === END TACHOMETER ADDITION ===
 
 void* tilt_worker() {
     while(true) {
@@ -114,228 +76,6 @@ void* yaw_worker() {
     }
 }
 
-// === TACHOMETER ADDITION ===
-// Runs continuously for the life of the program (unlike the tilt/yaw
-// workers, which only do work when signalled). Watches the A3144 line
-// for falling edges, keeps a rolling average over TACH_AVG_WINDOW
-// pulses, prints RPM to the terminal on every pulse, and prints 0 if
-// no pulse arrives for TACH_STALE_TIMEOUT_SEC seconds (motor stopped).
-// Uses kernel-supplied edge timestamps rather than our own clock reads,
-// which avoids skew from scheduling jitter on the calling thread.
-void* tach_worker(void* arg) {
-    (void)arg;
-
-    uint64_t last_pulse_ns = 0;
-    int have_last = 0;
-    const int64_t timeout_ns = (int64_t)TACH_STALE_TIMEOUT_SEC * 1000000000LL;
-
-    while (!shutdown) {
-        int wait_result = gpiod_line_request_wait_edge_events(tach_request,
-                                                                timeout_ns);
-
-        if (wait_result < 0) {
-            fprintf(stderr, "Tachometer: wait_edge_events failed\n");
-            break;
-        }
-        if (wait_result == 0) {
-            // No pulse within timeout: motor is likely stopped.
-            if (have_last) {
-                pthread_mutex_lock(&tach_mutex);
-                tach_current_rpm = 0.0;
-                tach_period_count = 0;
-                tach_period_idx = 0;
-                pthread_mutex_unlock(&tach_mutex);
-
-                printf("Tachometer: RPM = 0.0 (no pulses for %ds)\n",
-                       TACH_STALE_TIMEOUT_SEC);
-                have_last = 0;
-            }
-            continue;
-        }
-
-        int num_events = gpiod_line_request_read_edge_events(
-            tach_request, tach_event_buffer, 1);
-        if (num_events < 0) {
-            fprintf(stderr, "Tachometer: read_edge_events failed\n");
-            break;
-        }
-        if (num_events == 0) {
-            continue;
-        }
-
-        struct gpiod_edge_event *ev =
-            gpiod_edge_event_buffer_get_event(tach_event_buffer, 0);
-        if (!ev) {
-            continue;
-        }
-
-        uint64_t ts_ns = gpiod_edge_event_get_timestamp_ns(ev);
-
-        if (!have_last) {
-            last_pulse_ns = ts_ns;
-            have_last = 1;
-            continue;
-        }
-
-        double delta_s = (double)(ts_ns - last_pulse_ns) / 1e9;
-
-        // Hardware debounce (set via gpiod_line_settings_set_debounce_period_us
-        // in tach_init) already filters short glitches; this is a backstop
-        // in case the kernel driver doesn't support it.
-        if (delta_s * 1e6 < TACH_DEBOUNCE_US) {
-            continue;
-        }
-
-        double inst_rpm = (1.0 / delta_s) / TACH_PULSES_PER_REV * 60.0;
-
-        pthread_mutex_lock(&tach_mutex);
-        tach_periods[tach_period_idx] = delta_s;
-        tach_period_idx = (tach_period_idx + 1) % TACH_AVG_WINDOW;
-        if (tach_period_count < TACH_AVG_WINDOW) {
-            tach_period_count++;
-        }
-
-        double sum = 0.0;
-        for (int i = 0; i < tach_period_count; i++) {
-            sum += tach_periods[i];
-        }
-        double avg_period = sum / tach_period_count;
-        double avg_rpm = (1.0 / avg_period) / TACH_PULSES_PER_REV * 60.0;
-        tach_current_rpm = avg_rpm;
-        pthread_mutex_unlock(&tach_mutex);
-
-        printf("Tachometer: RPM = %.1f (inst %.1f)\n", avg_rpm, inst_rpm);
-
-        last_pulse_ns = ts_ns;
-    }
-
-    return NULL;
-}
-
-// Opens the GPIO chip, configures the line for falling-edge input with
-// an external pull-up (matching the wiring notes), requests it, and
-// starts the tach worker thread. Call from operation_init(), after the
-// other peripherals are set up.
-int tach_init() {
-    char chip_path[32];
-    snprintf(chip_path, sizeof(chip_path), "/dev/gpiochip%d", TACH_GPIOCHIP);
-
-    struct gpiod_chip *chip = gpiod_chip_open(chip_path);
-    if (!chip) {
-        fprintf(stderr, "Tachometer: failed to open %s. Run 'gpiodetect' "
-                         "to list available chips.\n", chip_path);
-        return -1;
-    }
-
-    struct gpiod_line_settings *settings = gpiod_line_settings_new();
-    if (!settings) {
-        fprintf(stderr, "Tachometer: failed to allocate line settings\n");
-        gpiod_chip_close(chip);
-        return -1;
-    }
-    gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT);
-    gpiod_line_settings_set_edge_detection(settings, GPIOD_LINE_EDGE_FALLING);
-    // External 10k pull-up to 3.3V per the wiring notes, so internal
-    // bias is left disabled rather than fighting it.
-    gpiod_line_settings_set_bias(settings, GPIOD_LINE_BIAS_DISABLED);
-    gpiod_line_settings_set_debounce_period_us(settings, TACH_DEBOUNCE_US);
-
-    struct gpiod_line_config *line_cfg = gpiod_line_config_new();
-    if (!line_cfg) {
-        fprintf(stderr, "Tachometer: failed to allocate line config\n");
-        gpiod_line_settings_free(settings);
-        gpiod_chip_close(chip);
-        return -1;
-    }
-
-    unsigned int offset = TACH_LINE;
-    if (gpiod_line_config_add_line_settings(line_cfg, &offset, 1, settings) < 0) {
-        fprintf(stderr, "Tachometer: failed to add line settings\n");
-        gpiod_line_config_free(line_cfg);
-        gpiod_line_settings_free(settings);
-        gpiod_chip_close(chip);
-        return -1;
-    }
-
-    struct gpiod_request_config *req_cfg = gpiod_request_config_new();
-    if (req_cfg) {
-        gpiod_request_config_set_consumer(req_cfg, "dime_time_tach");
-    }
-
-    tach_request = gpiod_chip_request_lines(chip, req_cfg, line_cfg);
-
-    if (req_cfg) {
-        gpiod_request_config_free(req_cfg);
-    }
-    gpiod_line_config_free(line_cfg);
-    gpiod_line_settings_free(settings);
-    // The request holds its own fd; the chip handle isn't needed after this.
-    gpiod_chip_close(chip);
-
-    if (!tach_request) {
-        fprintf(stderr, "Tachometer: gpiod_chip_request_lines failed (try "
-                         "sudo, or add yourself to the gpio group)\n");
-        return -1;
-    }
-
-    tach_event_buffer = gpiod_edge_event_buffer_new(1);
-    if (!tach_event_buffer) {
-        fprintf(stderr, "Tachometer: failed to allocate event buffer\n");
-        gpiod_line_request_release(tach_request);
-        tach_request = NULL;
-        return -1;
-    }
-
-    if (pthread_create(&tach_thread, NULL, tach_worker, NULL) != 0) {
-        fprintf(stderr, "Tachometer: failed to create thread\n");
-        gpiod_edge_event_buffer_free(tach_event_buffer);
-        tach_event_buffer = NULL;
-        gpiod_line_request_release(tach_request);
-        tach_request = NULL;
-        return -1;
-    }
-
-    tach_running = 1;
-    printf("Tachometer initialized on gpiochip%d line %d "
-           "(%d pulse(s)/rev, %d-sample average)\n",
-           TACH_GPIOCHIP, TACH_LINE, TACH_PULSES_PER_REV, TACH_AVG_WINDOW);
-    return 0;
-}
-
-// Joins the tach thread and releases the line request and event buffer.
-// Relies on the global `shutdown` flag being set to 1 already, same as
-// the tilt/yaw threads. Safe to call even if tach_init() was never
-// called or failed.
-void tach_cleanup() {
-    if (!tach_running) {
-        return;
-    }
-
-    pthread_join(tach_thread, NULL);
-
-    if (tach_event_buffer) {
-        gpiod_edge_event_buffer_free(tach_event_buffer);
-        tach_event_buffer = NULL;
-    }
-    if (tach_request) {
-        gpiod_line_request_release(tach_request);
-        tach_request = NULL;
-    }
-
-    tach_running = 0;
-}
-
-// Thread-safe read of the current smoothed RPM, for anything else in
-// the codebase (e.g. closed-loop speed control) that wants the value
-// without parsing terminal output.
-float get_tach_rpm() {
-    pthread_mutex_lock(&tach_mutex);
-    float rpm = (float)tach_current_rpm;
-    pthread_mutex_unlock(&tach_mutex);
-    return rpm;
-}
-// === END TACHOMETER ADDITION ===
-
 void operation_init() {
 
     shutdown = 0;
@@ -343,40 +83,42 @@ void operation_init() {
     curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_yaw_angle = 0.0;
 
+    printf("Initializing operation mode with tachometer...\n");
+
     //init mpu6050
-    if (mpu6050_init(NULL) != 0) {
-        fprintf(stderr, "Failed to initialize MPU6050. Is I2C enabled and the sensor connected?\n");
-        return;
-    }
+    //if (mpu6050_init(NULL) != 0) {
+    //    fprintf(stderr, "Failed to initialize MPU6050. Is I2C enabled and the sensor connected?\n");
+    //    return;
+    //}
 
     //init bts7960
-    if (bts_init() != 0) {
-        fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
-        return;
-    }
+    //if (bts_init() != 0) {
+    //    fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
+    //    return;
+    //}
 
     //init tb6600
-    if (tb6600_init(&motor, 1) < 0) {
-        fprintf(stderr, "Failed to initialize TB6600\n");
-        return;
-    }
-    tb6600_enable(&motor, 1);
+    //if (tb6600_init(&motor, 1) < 0) {
+    //    fprintf(stderr, "Failed to initialize TB6600\n");
+    //    return;
+    //}
+    //tb6600_enable(&motor, 1);
 
     //init mcp4725
-    if (mcp4725_init(&dac1, MCP4725_I2C_BUS1, MCP4725_I2C_ADDR) != 0) {
-        fprintf(stderr, "Failed to initialize MCP4725 — is I2C enabled?\n");
-        return;
-    }
+    //if (mcp4725_init(&dac1, MCP4725_I2C_BUS1, MCP4725_I2C_ADDR) != 0) {
+    //    fprintf(stderr, "Failed to initialize MCP4725 — is I2C enabled?\n");
+    //    return;
+    //}
 
     //init threads
-    if (pthread_create(&tilt_thread, NULL, tilt_worker, NULL) != 0) {
-        fprintf(stderr, "Failed to create tilt thread\n");
-        return;
-    }
-    if (pthread_create(&yaw_thread, NULL, yaw_worker, NULL) != 0) {
-        fprintf(stderr, "Failed to create yaw thread\n");
-        return;
-    }
+    //if (pthread_create(&tilt_thread, NULL, tilt_worker, NULL) != 0) {
+    //    fprintf(stderr, "Failed to create tilt thread\n");
+    //    return;
+    //}
+    //if (pthread_create(&yaw_thread, NULL, yaw_worker, NULL) != 0) {
+    //    fprintf(stderr, "Failed to create yaw thread\n");
+    //    return;
+    //}
 
     // === TACHOMETER ADDITION ===
     if (tach_init() != 0) {

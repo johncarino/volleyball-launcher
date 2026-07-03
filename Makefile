@@ -5,7 +5,7 @@ CFLAGS = -Wall -Werror -Wpedantic -Wextra -std=c11 -pthread -D_DEFAULT_SOURCE
 LDFLAGS = -pthread -lm -lgpiod
 
 # Source files
-HAL_SOURCES = hal/src/bts7960.c hal/src/mcp4725.c hal/src/pwm.c hal/src/tb6600.c
+HAL_SOURCES = hal/src/bts7960.c hal/src/mcp4725.c hal/src/mpu6050.c hal/src/pwm.c hal/src/tachometer.c hal/src/tb6600.c
 APP_SHARED_SOURCES = app/src/advanced.c app/src/arc_calc.c app/src/calibration.c app/src/fsm.c app/src/operation.c app/src/set.c
 FSM_TEST_SOURCES = app/functiontests/fsm_test.c $(APP_SHARED_SOURCES) $(HAL_SOURCES)
 
