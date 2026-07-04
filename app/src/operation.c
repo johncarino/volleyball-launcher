@@ -7,9 +7,9 @@ float curr_yaw_angle = 0.0;
 float d_angle = 0;
 
 //Defined in set.h
-//#define TILT_COEFF 135.0 //171ms per degree, determined experimentally
-//#define YAW_COEFF 10 //10 steps per degree, determined experimentally
-//#define SPEED_COEFF 2.36
+#define TILT_COEFF 135.0 //171ms per degree, determined experimentally
+#define YAW_COEFF 10 //10 steps per degree, determined experimentally
+#define SPEED_COEFF 2.36
 
 #define TILT_TOLERANCE_DEG 0.5
 #define TILT_TIMEOUT_SEC 10
@@ -85,47 +85,49 @@ void operation_init() {
 
     printf("Initializing operation mode with tachometer...\n");
 
-    //init mpu6050
-    //if (mpu6050_init(NULL) != 0) {
-    //    fprintf(stderr, "Failed to initialize MPU6050. Is I2C enabled and the sensor connected?\n");
-    //    return;
-    //}
-
-    //init bts7960
-    //if (bts_init() != 0) {
-    //    fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
-    //    return;
-    //}
-
-    //init tb6600
-    //if (tb6600_init(&motor, 1) < 0) {
-    //    fprintf(stderr, "Failed to initialize TB6600\n");
-    //    return;
-    //}
-    //tb6600_enable(&motor, 1);
-
-    //init mcp4725
-    //if (mcp4725_init(&dac1, MCP4725_I2C_BUS1, MCP4725_I2C_ADDR) != 0) {
-    //    fprintf(stderr, "Failed to initialize MCP4725 — is I2C enabled?\n");
-    //    return;
-    //}
-
-    //init threads
-    //if (pthread_create(&tilt_thread, NULL, tilt_worker, NULL) != 0) {
-    //    fprintf(stderr, "Failed to create tilt thread\n");
-    //    return;
-    //}
-    //if (pthread_create(&yaw_thread, NULL, yaw_worker, NULL) != 0) {
-    //    fprintf(stderr, "Failed to create yaw thread\n");
-    //    return;
-    //}
-
-    // === TACHOMETER ADDITION ===
+        // === TACHOMETER ADDITION ===
     if (tach_init() != 0) {
         fprintf(stderr, "Failed to initialize tachometer\n");
         return;
     }
     // === END TACHOMETER ADDITION ===
+
+    //init mpu6050
+    if (mpu6050_init(NULL) != 0) {
+        fprintf(stderr, "Failed to initialize MPU6050. Is I2C enabled and the sensor connected?\n");
+        return;
+    }
+
+    //init bts7960
+    if (bts_init() != 0) {
+        fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
+        return;
+    }
+
+    //init tb6600
+    if (tb6600_init(&motor, 1) < 0) {
+        fprintf(stderr, "Failed to initialize TB6600\n");
+        return;
+    }
+    tb6600_enable(&motor, 1);
+
+    //init mcp4725
+    if (mcp4725_init(&dac1, MCP4725_I2C_BUS1, MCP4725_I2C_ADDR) != 0) {
+        fprintf(stderr, "Failed to initialize MCP4725 — is I2C enabled?\n");
+        return;
+    }
+
+    //init threads
+    if (pthread_create(&tilt_thread, NULL, tilt_worker, NULL) != 0) {
+        fprintf(stderr, "Failed to create tilt thread\n");
+        return;
+    }
+    if (pthread_create(&yaw_thread, NULL, yaw_worker, NULL) != 0) {
+        fprintf(stderr, "Failed to create yaw thread\n");
+        return;
+    }
+
+
 }
 
 void operation_cleanup() {
@@ -197,7 +199,7 @@ void tilt_signal(float angle) {
         tilt_duration = tilt_angle_to_time(curr_tilt_angle, angle);
         printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
 
-        //(void)duty_cycle; // Avoid unused variable warning
+        (void)duty_cycle; // Avoid unused variable warning
         forward_ms(duty_cycle, tilt_duration);
     }
     else { // if delta_angle < 0
@@ -280,7 +282,7 @@ void yaw_signal(float angle) {
         yaw_steps = delta_angle * YAW_COEFF;
         printf("yaw right by %.2f degrees to %.2f degrees for %d steps\n", delta_angle, angle, yaw_steps);
 
-        //(void)delay; // Avoid unused variable warning
+        (void)delay; // Avoid unused variable warning
         tb6600_step(&motor, yaw_steps, delay);
     }
     else { // if delta_angle < 0
@@ -303,7 +305,7 @@ void speed_signal(float speed) {
     uint16_t mv = 0;
     //convert speed to mv
     mv = rpm_to_mv(speed);
-    //(void)speed;
+    (void)speed;
     printf("setting speed to %.2f mV\n", (float)mv);
     mcp4725_set_mv(&dac1, mv);
 }
@@ -337,16 +339,15 @@ void set_machine(int set_index) {
     pthread_mutex_unlock(&tilt_mutex);
 
     //signal yaw
-    //pthread_mutex_lock(&yaw_mutex);
-    //yaw_angle_w = set_seq[set_index].yaw_angle;
-    //yaw_done = 0;
-    //pthread_cond_signal(&yaw_cond);
-    //pthread_mutex_unlock(&yaw_mutex);
+    pthread_mutex_lock(&yaw_mutex);
+    yaw_angle_w = set_seq[set_index].yaw_angle;
+    yaw_done = 0;
+    pthread_cond_signal(&yaw_cond);
+    pthread_mutex_unlock(&yaw_mutex);
 
     //wait for tilt and yaw to finish
     pthread_mutex_lock(&done_mutex);
-    //while (!tilt_done || !yaw_done) {
-    while (!tilt_done) {
+    while (!tilt_done || !yaw_done) {
         pthread_cond_wait(&done_cond, &done_mutex);
     }
     pthread_mutex_unlock(&done_mutex);
