@@ -7,3 +7,5 @@
 - maybe change background colour between config mode and launch mode to indicate that the mode changed
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Wire up connected icon
+- Remove old-index.html, old-old-index.html, old stylesheets
+- add center machine position
