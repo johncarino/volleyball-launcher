@@ -25,7 +25,7 @@ extern "C" {
 * 4. User can shuffle the set sequence
 */
 
-#define INITIAL_TILT_ANGLE 9.0
+#define INITIAL_TILT_ANGLE 5.0
 
 void operation_init();
 void operation_cleanup();
@@ -35,6 +35,8 @@ void tilt_signal(float angle);
 void yaw_signal(float angle);
 void speed_signal(float speed);
 void set_speed(float speed);
+void set_raw_speed(float mv);
+void percentage_to_mv(float percentage);
 void set_machine(int set_index);
 void tilt_signal_advanced(float angle);
 void yaw_signal_advanced(float angle);
