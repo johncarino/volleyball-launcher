@@ -90,6 +90,7 @@ let hopperOn = false;
 const machineSocket = (typeof io !== 'undefined') ? io() : null;
 const slots = {
   L: { 1: null, 2: null, 3: null, 4: null },
+  C: { 1: null, 2: null, 3: null, 4: null },
   R: { 1: null, 2: null, 3: null, 4: null },
 };
 
@@ -97,7 +98,7 @@ const slots = {
 const repeatLabels = ['Repeat', 'Repeat all', 'Repeat one'];
 const repeatIcons  = ['ti-repeat', 'ti-repeat', 'ti-repeat-once'];
 
-const machineNames = { L: 'Left', R: 'Right' };
+const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
 const targetNames  = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
 
 function emitMachine(eventName, value) {
@@ -143,6 +144,7 @@ function courtPickerHTML(readonly = false) {
 
   const machineSpots = [
     { id: 'L', cx: 22,  cy: 50 },
+    { id: 'C', cx: 160, cy: 50 },
     { id: 'R', cx: 298, cy: 50 },
   ];
   const targetSpots = [
