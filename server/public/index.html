@@ -353,7 +353,7 @@ const screens = {
   launch: () => `
     <div class="section" style="margin-top:8px">
       <div class="section-label">Position</div>
-      ${courtPickerHTML(true)}
+      <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
     </div>
     <div class="section">
       <div class="section-label">Set summary</div>
@@ -410,6 +410,23 @@ function refreshSlots() {
   }
   const launchWrap = document.querySelector('#main-content .save-slots');
   if (launchWrap) launchWrap.innerHTML = slotsHTML(true);
+}
+
+function refreshLaunchView() {
+  const courtWrap = document.getElementById('launch-court-picker-wrap');
+  if (courtWrap) courtWrap.innerHTML = courtPickerHTML(true);
+
+  const tempoEl = document.getElementById('sum-tempo');
+  if (tempoEl) tempoEl.textContent = selectedTempo;
+
+  const netVal = document.getElementById('net-val');
+  const netEl = document.getElementById('sum-net');
+  if (netEl && netVal) netEl.textContent = netVal.textContent;
+
+  const lenVal = document.getElementById('len-val');
+  const widVal = document.getElementById('wid-val');
+  const courtEl = document.getElementById('sum-court');
+  if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
 }
 
 let activeSlot = null;
@@ -489,7 +506,7 @@ function clickSlot(n) {
     .then(json => console.log('Server ack:', json))
     .catch(err => console.error('Failed to send slot click to server:', err));
 
-  slotsLocked = true;
+slotsLocked = true;
   activeSlot = n;
   refreshSlots();
 
@@ -499,6 +516,16 @@ function clickSlot(n) {
     activeSlot = null;
     refreshSlots();
   }, SLOT_HIGHLIGHT_MS);
+
+  activateSlot(machineKey, n);
+}
+
+// Applies a slot's saved settings and refreshes the on-screen position/summary.
+// Called by clickSlot() for manual taps, and will also be called by the
+// future auto-alternate function so both paths update state the same way.
+function activateSlot(machineKey, n) {
+  const slotData = slots[machineKey][n];
+  if (!slotData) return;
 
   if (slotData.machine) selectedMachine = slotData.machine;
   if (slotData.target)  selectedTarget  = slotData.target;
