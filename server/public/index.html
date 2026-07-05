@@ -115,10 +115,20 @@ if (machineSocket) {
 function onAdvancedAngleInput(value) {
   const val = parseInt(value, 10);
   document.getElementById('dev-ang-val').textContent = val + '°';
+}
+
+function onAdvancedAngleChange(value) {
+  const val = parseInt(value, 10);
+  document.getElementById('dev-ang-val').textContent = val + '°';
   emitMachine('setAngle', val);
 }
 
 function onAdvancedSpeedInput(value) {
+  const val = parseInt(value, 10);
+  document.getElementById('dev-spd-val').textContent = val + '%';
+}
+
+function onAdvancedSpeedChange(value) {
   const val = parseInt(value, 10);
   document.getElementById('dev-spd-val').textContent = val + '%';
   emitMachine('setSpeed', val);
@@ -312,7 +322,7 @@ const screens = {
             <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
             <div class="vert-slider-track">
               <input type="range" id="dev-ang-range" class="vertical" min="5" max="85" value="5" step="1"
-                oninput="onAdvancedAngleInput(this.value)">
+                oninput="onAdvancedAngleInput(this.value)" onchange="onAdvancedAngleChange(this.value)">
             </div>
             <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
             <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
@@ -323,7 +333,7 @@ const screens = {
             <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
             <div class="vert-slider-track">
               <input type="range" id="dev-spd-range" class="vertical" min="0" max="100" value="0" step="1"
-                oninput="onAdvancedSpeedInput(this.value)">
+                oninput="onAdvancedSpeedInput(this.value)" onchange="onAdvancedSpeedChange(this.value)">
             </div>
             <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
             <span style="font-size:11px;color:var(--text-tertiary)">0 – 100%</span>
