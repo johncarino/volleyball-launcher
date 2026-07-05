@@ -10,6 +10,7 @@
 #include "mcp4725.h"
 #include "tb6600.h"
 #include "mpu6050.h"
+#include "tachometer.h"
 
 #ifdef __cplusplus
 extern "C" {

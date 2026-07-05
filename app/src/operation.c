@@ -197,6 +197,11 @@ void operation_init() {
         return;
     }
 
+    if (tach_init() != 0) {
+        fprintf(stderr, "Failed to initialize tachometer\n");
+        return;
+    }
+
     operation_initialized = 1;
     
     homing_sequence();
@@ -213,7 +218,7 @@ void operation_cleanup() {
     hopper_enabled = 1;
     hopper_running = 0;
 
-
+    tach_cleanup();
     mpu6050_close();
     mcp4725_set_raw(&dac1, 0);
     tb6600_enable(&motor, 0);
