@@ -197,6 +197,7 @@ void operation_init() {
         return;
     }
 
+    fprintf(stderr, "[operation] initializing A3144 hall effect sensor\n");
     if (tach_init() != 0) {
         fprintf(stderr, "Failed to initialize tachometer\n");
         return;
@@ -326,6 +327,73 @@ void speed_signal(float speed) {
     mcp4725_set_mv(&dac1, mv);
     curr_speed = (float)mv;
     curr_rpm = speed;
+}
+
+#define SPEED_TOLERANCE_RPM   10.0
+#define SPEED_TIMEOUT_SEC     8
+#define SPEED_LOOP_DELAY_US   100000
+#define SPEED_KP              0.5    // mV correction per RPM of error
+#define SPEED_MAX_MV          4095.0
+#define SPEED_MIN_MV          0.0
+
+// Closed-loop speed control using tachometer feedback.
+// Starts from the open-loop rpm_to_mv() estimate, then trims the DAC
+// output proportionally against measured RPM until within tolerance
+// or until the timeout elapses. Falls back to whatever mV value it
+// last reached if the target is never hit, rather than reverting to
+// pure open-loop.
+void speed_signal_with_feedback(float target_rpm) {
+
+    if (target_rpm > 2000.0) {
+        fprintf(stderr, "Invalid RPM: %.2f (must be 2000 or less). Skipping speed.\n", target_rpm);
+        return;
+    }
+
+    if (target_rpm <= 0.0) {
+        mcp4725_set_raw(&dac1, 0);
+        curr_speed = 0;
+        curr_rpm = 0;
+        return;
+    }
+
+    double mv = (double)rpm_to_mv(target_rpm);
+    if (mv > SPEED_MAX_MV) mv = SPEED_MAX_MV;
+    if (mv < SPEED_MIN_MV) mv = SPEED_MIN_MV;
+
+    mcp4725_set_mv(&dac1, (uint16_t)mv);
+
+    time_t start_time = time(NULL);
+
+    while (1) {
+        float measured_rpm = get_tach_rpm();
+        double error = (double)target_rpm - (double)measured_rpm;
+
+        fprintf(stderr, "Speed feedback: target %.1f RPM, measured %.1f RPM, error %.1f, mv %.1f\n",
+                target_rpm, measured_rpm, error, mv);
+
+        if (fabs(error) <= SPEED_TOLERANCE_RPM) {
+            fprintf(stderr, "Target speed reached within tolerance.\n");
+            break;
+        }
+
+        mv += error * SPEED_KP;
+
+        if (mv > SPEED_MAX_MV) mv = SPEED_MAX_MV;
+        if (mv < SPEED_MIN_MV) mv = SPEED_MIN_MV;
+
+        mcp4725_set_mv(&dac1, (uint16_t)mv);
+
+        if (difftime(time(NULL), start_time) >= SPEED_TIMEOUT_SEC) {
+            fprintf(stderr, "Speed control timed out after %d seconds. Holding at %.1f mV (%.1f RPM measured).\n",
+                    SPEED_TIMEOUT_SEC, mv, measured_rpm);
+            break;
+        }
+
+        usleep(SPEED_LOOP_DELAY_US);
+    }
+
+    curr_speed = (float)mv;
+    curr_rpm = target_rpm;
 }
 
 void set_speed(float speed) {
