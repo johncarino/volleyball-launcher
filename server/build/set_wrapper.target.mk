@@ -95,6 +95,7 @@ INCS_Release := \
 OBJS := \
 	$(obj).target/$(TARGET)/../app/wrappers/set_wrapper.o \
 	$(obj).target/$(TARGET)/../app/src/set.o \
+	$(obj).target/$(TARGET)/../app/src/calibration.o \
 	$(obj).target/$(TARGET)/../app/src/arc_calc.o
 
 # Add to the list of files we specially track dependencies for.

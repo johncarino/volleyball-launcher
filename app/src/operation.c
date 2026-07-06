@@ -22,9 +22,8 @@ tb6600_t motor;
 static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 
 static uint16_t rpm_to_mv(float rpm) {
-    double value = -0.000542557 * rpm * rpm
-         + 1.496989 * rpm
-         + 1063.520;
+    // Linear mapping: 0 rpm -> 1380 mV, 1300 rpm -> 2200 mV
+    double value = (820.0 / 1300.0) * rpm + 1380.0;
 
     return (uint16_t)value;
 }
@@ -351,18 +350,20 @@ void percentage_to_mv(float percentage) {
     curr_rpm = 0; // Since we don't know the RPM corresponding to this raw value
 }
 
-void set_machine(int set_index) {
+void set_machine(int machine_position, int set_index) {
     mcp4725_set_raw(&dac1, 0);
 
     printf("Setting machine for set %d\n", set_index);
     printf("Tilt angle: %f, Yaw angle: %f, Speed: %f\n",
-            set_seq[set_index]->tilt_angle,
-            set_seq[set_index]->yaw_angle,
-            set_seq[set_index]->rpm_output);
+            set_seq[machine_position][set_index].tilt_angle,
+            set_seq[machine_position][set_index].yaw_angle,
+            set_seq[machine_position][set_index].rpm_output);
+
+    printf("raw mv value: %d\n", rpm_to_mv(set_seq[machine_position][set_index].rpm_output));
     
-    tilt_signal(set_seq[set_index]->tilt_angle);
-    yaw_signal(set_seq[set_index]->yaw_angle);
-    speed_signal(set_seq[set_index]->rpm_output);
+    //tilt_signal(set_seq[machine_position][set_index].tilt_angle);
+    //yaw_signal(set_seq[machine_position][set_index].yaw_angle);
+    //speed_signal(set_seq[machine_position][set_index].rpm_output);
 }
 
 void tilt_signal_advanced(float angle) {

@@ -23,6 +23,7 @@
       "sources": [
         "../app/wrappers/set_wrapper.cpp",
         "../app/src/set.c",
+        "../app/src/calibration.c",
         "../app/src/arc_calc.c"
       ],
       "include_dirs": [

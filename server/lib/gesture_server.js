@@ -36,6 +36,11 @@ var io;
 var recognizer = null;   // current child_process, or null
 var operationInitAttempted = false;
 var operationReady = false;
+var currentNetHeight = 2.43;
+var currentCourtLength = 18.0;
+var currentCourtWidth = 9.0;
+// Track saved set data indexed by machinePosition and setIndex
+var savedSets = {};  // savedSets[machinePos + '_' + setIdx] = { launch_speed, tilt_angle, yaw_angle, rpm_output, ... }
 
 // ---- Native wrappers (built by: cd server && npm run build) --------------
 var operation = (function() {
@@ -51,6 +56,8 @@ var operation = (function() {
 			homingSequence: function(){},
 			tiltSignal: function(){},
 			speedSignal: function(){},
+			syncSet: function(){},
+			setMachine: function(){},
 			hopperStart: function(){},
 			hopperStop: function(){},
 			hopperPulse: function(){},
@@ -82,7 +89,8 @@ var calibration = (function() {
 			setNetHeight: function(){},
 			setCourtDimensions: function(){},
 			setCourtLength: function(){},
-			setCourtWidth: function(){}
+			setCourtWidth: function(){},
+			defaultCalibration: function(){}
 		};
 	}
 }());
@@ -180,6 +188,159 @@ function handleCommand(socket) {
 	socket.on('stop', function() {
 		console.log("Got stop command.");
 		stopRecognizer(socket);
+	});
+
+	socket.on('page-loaded', function() {
+		console.log("Got page-loaded event. Applying default calibration.");
+		try {
+			calibration.defaultCalibration();
+			currentNetHeight = 2.43;
+			currentCourtLength = 18.0;
+			currentCourtWidth = 9.0;
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+			socket.emit('calibration-state', 'DEFAULT_APPLIED');
+		} catch (e) {
+			console.log('[calibration] defaultCalibration failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to apply default calibration.');
+		}
+	});
+
+	socket.on('setNetHeight', function(value) {
+		console.log("Got setNetHeight command: " + value);
+		try {
+			var netHeight = parseFloat(value);
+			calibration.setNetHeight(netHeight);
+			currentNetHeight = netHeight;
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+		} catch (e) {
+			console.log('[calibration] setNetHeight failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to set net height.');
+		}
+	});
+
+	socket.on('setCourtLength', function(value) {
+		console.log("Got setCourtLength command: " + value);
+		try {
+			var courtLength = parseFloat(value);
+			calibration.setCourtLength(courtLength);
+			currentCourtLength = courtLength;
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+		} catch (e) {
+			console.log('[calibration] setCourtLength failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to set court length.');
+		}
+	});
+
+	socket.on('setCourtWidth', function(value) {
+		console.log("Got setCourtWidth command: " + value);
+		try {
+			var courtWidth = parseFloat(value);
+			calibration.setCourtWidth(courtWidth);
+			currentCourtWidth = courtWidth;
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+		} catch (e) {
+			console.log('[calibration] setCourtWidth failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to set court width.');
+		}
+	});
+
+	socket.on('saveSet', function(payload) {
+		console.log('Got saveSet command:', payload);
+		try {
+			if (!payload || typeof payload !== 'object') {
+				throw new Error('Invalid payload');
+			}
+
+			var setIndex = parseInt(payload.setIndex, 10);
+			var machinePosition = parseInt(payload.machinePosition, 10);
+			var targetLocation = parseInt(payload.targetLocation, 10);
+			var tempo = parseInt(payload.tempo, 10);
+
+			if (Number.isNaN(setIndex) || Number.isNaN(machinePosition) ||
+				Number.isNaN(targetLocation) || Number.isNaN(tempo)) {
+				throw new Error('saveSet payload contains non-numeric fields');
+			}
+
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+
+			// saveSet now returns the saved set data or null if save failed
+			var setData = setApi.saveSet(setIndex, machinePosition, targetLocation, tempo);
+			
+			if (setData) {
+				// Store the set data for later use by setMachine
+				var key = machinePosition + '_' + setIndex;
+				savedSets[key] = setData;
+				socket.emit('set-save-state', 'SAVED');
+			} else {
+				throw new Error('saveSet returned no data (validation may have failed)');
+			}
+		} catch (e) {
+			console.log('[set] saveSet failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to save set slot.');
+		}
+	});
+
+	socket.on('setMachine', function(payload) {
+		console.log('Got setMachine command:', payload);
+		try {
+			if (!payload || typeof payload !== 'object') {
+				throw new Error('Invalid payload');
+			}
+
+			var setIndex = parseInt(payload.setIndex, 10);
+			var machinePosition = parseInt(payload.machinePosition, 10);
+
+			if (Number.isNaN(setIndex) || Number.isNaN(machinePosition)) {
+				throw new Error('setMachine payload contains non-numeric fields');
+			}
+
+			if (typeof operation.syncSet !== 'function') {
+				throw new Error('syncSet is not available in the operation addon');
+			}
+
+			if (typeof operation.setMachine !== 'function') {
+				throw new Error('setMachine is not available in the operation addon');
+			}
+
+			if (!ensureOperationReady(socket, 'setMachine')) return;
+			
+			// Look up the saved set data
+			var key = machinePosition + '_' + setIndex;
+			var setData = savedSets[key];
+			
+			if (!setData) {
+				throw new Error('No saved set data for machine ' + machinePosition + ' set ' + setIndex);
+			}
+			
+			// Sync the set data to operation_wrapper before calling setMachine
+			operation.syncSet(
+				machinePosition,
+				setIndex,
+				setData.launch_speed,
+				setData.tilt_angle,
+				setData.yaw_angle,
+				setData.rpm_output,
+				setData.target_location,
+				setData.tempo
+			);
+			
+			// Now call setMachine to apply it
+			operation.setMachine(machinePosition, setIndex);
+			socket.emit('set-machine-state', 'APPLIED');
+		} catch (e) {
+			console.log('[operation] setMachine failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to apply set machine.');
+		}
 	});
 
 	socket.on('setSpeed', function(value) {

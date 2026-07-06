@@ -37,7 +37,7 @@ void speed_signal(float speed);
 void set_speed(float speed);
 void set_raw_speed(float mv);
 void percentage_to_mv(float percentage);
-void set_machine(int set_index);
+void set_machine(int machine_position, int set_index);
 void tilt_signal_advanced(float angle);
 void yaw_signal_advanced(float angle);
 void tilt_with_feedback(float angle);

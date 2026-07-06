@@ -25,22 +25,22 @@ float rpm_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
 
 void arc_calc_params(float net_height, float court_width, float court_length) {
     //launch positions (metre)
-    machine_x[0] = 0 + 0.5; // left target
+    machine_x[0] = 0; // left target
     machine_x[1] = court_width / 2; // center target
-    machine_x[2] = court_width - 0.5; // right target
+    machine_x[2] = court_width; // right target
 
     //target positions (metre)
     target_x[0] = 0 + 0.5; // left target
     target_x[1] = court_width / 4; // left center target
-    target_x[2] = court_width / 2; // center target
-    target_x[3] = 3 * court_width / 4; // right center
-    target_x[4] = court_width - 0.5; // right target
+    target_x[2] = 3 * court_width / 4; // right center target
+    target_x[3] = court_width - 0.5; // right target
 
     //tempo heights (metre)
     peak_height[0] = net_height + 0.5; // tempo 1
     peak_height[1] = net_height + 1.0; // tempo 2
     peak_height[2] = net_height + 1.5; // tempo 3
     peak_height[3] = net_height + 2.0; // tempo 4
+    peak_height[4] = net_height + 2.5; // tempo 5
 
     //court length unused
     (void)court_length;
@@ -92,6 +92,9 @@ void calculation() {
                 //printf("vy0: %.2f, vx0: %.2f\n", vy0, vx0); // Debugging output
                 
                 theta = atan(vy0 / vx0);
+
+                //convert to degrees
+                theta = theta * 180 / M_PI;
 
                 rpm = (v0 / (2*M_PI*WHEEL_R)) * 60 / EFF_K;
 

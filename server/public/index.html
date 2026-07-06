@@ -46,7 +46,8 @@
                 <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="net-val">243 cm</strong>
               </div>
               <input type="range" min="220" max="260" value="243" step="1" style="width:100%"
-                oninput="document.getElementById('net-val').textContent=this.value+' cm'; updateCourtBtn()">
+                oninput="document.getElementById('net-val').textContent=this.value+' cm'; updateCourtBtn()"
+                onchange="onNetHeightChange(this.value)">
             </div>
             <div style="margin-top:4px;font-size:11px;color:var(--text-tertiary)">Standard men's: 243 cm · Women's: 224 cm</div>
           </div>
@@ -60,7 +61,8 @@
                 <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="len-val">18.0 m</strong>
               </div>
               <input type="range" min="10" max="22" value="18" step="0.5" style="width:100%"
-                oninput="document.getElementById('len-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()">
+                oninput="document.getElementById('len-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()"
+                onchange="onCourtLengthChange(this.value)">
             </div>
             <div>
               <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
@@ -68,7 +70,8 @@
                 <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="wid-val">9.0 m</strong>
               </div>
               <input type="range" min="5" max="12" value="9" step="0.5" style="width:100%"
-                oninput="document.getElementById('wid-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()">
+                oninput="document.getElementById('wid-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()"
+                onchange="onCourtWidthChange(this.value)">
             </div>
           </div>
         </div>
@@ -132,6 +135,22 @@ function onAdvancedSpeedChange(value) {
   const val = parseInt(value, 10);
   document.getElementById('dev-spd-val').textContent = val + '%';
   emitMachine('setSpeed', val);
+}
+
+function onNetHeightChange(value) {
+  const centimeters = parseInt(value, 10);
+  const meters = centimeters / 100;
+  emitMachine('setNetHeight', meters);
+}
+
+function onCourtLengthChange(value) {
+  const meters = parseFloat(value);
+  emitMachine('setCourtLength', meters);
+}
+
+function onCourtWidthChange(value) {
+  const meters = parseFloat(value);
+  emitMachine('setCourtWidth', meters);
 }
 
 function onHopperControl(action) {
@@ -477,6 +496,8 @@ function clickSlot(n) {
 
   if (!slotData && !(slotsLocked && activeSlot === n)) return; // empty slots can't be activated
 
+  if (!slotData) return;
+
   if (slotsLocked && activeSlot !== n) return; // ignore clicks on other slots while one is active
 
   if (slotsLocked && activeSlot === n) {
@@ -503,6 +524,15 @@ function clickSlot(n) {
   }
 
   console.log('Slot clicked:', machineKey, n, slotData);
+
+  const machineToIndex = { L: 0, C: 1, R: 2 };
+  const machineIndex = machineToIndex[machineKey];
+  if (machineIndex !== undefined) {
+    emitMachine('setMachine', {
+      machinePosition: machineIndex,
+      setIndex: n - 1,
+    });
+  }
 
   fetch('/api/slot-click', {
     method: 'POST',
@@ -577,6 +607,25 @@ function saveNewSlot(n) {
     target: selectedTarget,
     tempo: selectedTempo,
   };
+
+  const machineToIndex = { L: 0, C: 1, R: 2 };
+  const machineIndex = machineToIndex[selectedMachine];
+  const targetLocation = parseInt(selectedTarget, 10);
+  const tempo = parseInt(selectedTempo, 10);
+
+  if (machineIndex === undefined || Number.isNaN(targetLocation) || Number.isNaN(tempo)) {
+    console.warn('Invalid slot data, skipping backend save');
+    refreshSlots();
+    return;
+  }
+
+  emitMachine('saveSet', {
+    setIndex: n - 1,
+    machinePosition: machineIndex,
+    targetLocation,
+    tempo,
+  });
+
   refreshSlots();
 }
 

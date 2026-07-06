@@ -23,11 +23,11 @@
 //GLOBAL CONSTANTS
 #define GRAVITY 9.81
 
-#define WHEEL_R 0.1
+#define WHEEL_R 0.075
 #define EFF_K 0.9
 
-#define NUM_TARGETS 5
-#define NUM_TEMPOS 4
+#define NUM_TARGETS 4
+#define NUM_TEMPOS 5
 #define NUM_MACHINE_POSITIONS 3
 
 #define M_PI 3.14159265358979323846
