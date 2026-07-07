@@ -4,7 +4,7 @@ Release/obj.target/operation_wrapper/../app/src/operation.o: \
  ../../app/src/include/set.h ../../app/src/include/arc_calc.h \
  ../../hal/include/bts7960.h ../../hal/include/pwm.h \
  ../../hal/include/mcp4725.h ../../hal/include/tb6600.h \
- ../../hal/include/mpu6050.h
+ ../../hal/include/mpu6050.h ../../hal/include/tachometer.h
 ../../app/src/operation.c:
 ../../app/src/include/operation.h:
 ../../app/src/include/set.h:
@@ -14,3 +14,4 @@ Release/obj.target/operation_wrapper/../app/src/operation.o: \
 ../../hal/include/mcp4725.h:
 ../../hal/include/tb6600.h:
 ../../hal/include/mpu6050.h:
+../../hal/include/tachometer.h:

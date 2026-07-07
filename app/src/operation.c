@@ -171,6 +171,19 @@ void operation_init() {
     curr_speed = 0;
     curr_rpm = 0;
 
+    fprintf(stderr, "[operation] initializing TB6600 motor driver\n");
+    if (tb6600_init(&motor, 1) < 0) {
+        fprintf(stderr, "Failed to initialize TB6600\n");
+        return;
+    }
+    tb6600_enable(&motor, 1);
+
+    fprintf(stderr, "[operation] initializing tachometer\n");
+    if (tach_init() != 0) {
+        fprintf(stderr, "Failed to initialize tachometer\n");
+        return;
+    }
+
     fprintf(stderr, "[operation] initializing MPU6050 IMU\n");
     if (mpu6050_init(NULL) != 0) {
         fprintf(stderr, "Failed to initialize MPU6050 — is I2C enabled?\n");
@@ -182,13 +195,6 @@ void operation_init() {
         fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
         return;
     }
-
-    fprintf(stderr, "[operation] initializing TB6600 motor driver\n");
-    if (tb6600_init(&motor, 1) < 0) {
-        fprintf(stderr, "Failed to initialize TB6600\n");
-        return;
-    }
-    tb6600_enable(&motor, 1);
 
     fprintf(stderr, "[operation] initializing MCP4725 DAC\n");
     if (mcp4725_init(&dac1, MCP4725_I2C_BUS1, MCP4725_I2C_ADDR) != 0) {
@@ -212,7 +218,7 @@ void operation_cleanup() {
     hopper_enabled = 1;
     hopper_running = 0;
 
-
+    tach_cleanup();
     mpu6050_close();
     mcp4725_set_raw(&dac1, 0);
     tb6600_enable(&motor, 0);
@@ -527,6 +533,12 @@ void resume_machine() {
     launcher_running = 1;
 
     return;
+}
+
+int get_tach_reading() {
+    int rpm = (int)get_tach_rpm();
+    printf("Current RPM: %d\n", rpm);
+    return rpm;
 }
 
 /*

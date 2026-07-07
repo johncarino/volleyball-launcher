@@ -56,6 +56,7 @@ var operation = (function() {
 			homingSequence: function(){},
 			tiltSignal: function(){},
 			speedSignal: function(){},
+			getTachReading: function(){ return 0; },
 			syncSet: function(){},
 			setMachine: function(){},
 			hopperStart: function(){},
@@ -384,6 +385,20 @@ function handleCommand(socket) {
 		if (!ensureOperationReady(socket, 'hopper-pulse')) return;
 		console.log("Got hopper-pulse command.");
 		operation.hopperPulse();
+	});
+
+	socket.on('requestTelemetry', function() {
+		if (!ensureOperationReady(socket, 'requestTelemetry')) return;
+		try {
+			var rpm = 0;
+			if (typeof operation.getTachReading === 'function') {
+				rpm = parseInt(operation.getTachReading(), 10) || 0;
+			}
+			socket.emit('telemetry-update', { rpm: rpm });
+		} catch (e) {
+			console.log('[operation] requestTelemetry failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to get telemetry.');
+		}
 	});
 
 	// Report current state to a freshly-connected browser.

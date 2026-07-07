@@ -144,6 +144,13 @@ Value hopperPulse(const CallbackInfo& info) {
     return env.Undefined();
 }
 
+// --- getTachReading() ---
+Value getTachReading(const CallbackInfo& info) {
+    Env env = info.Env();
+    int rpm = get_tach_reading();
+    return Number::New(env, rpm);
+}
+
 // --- Module Init ---
 Object Init(Env env, Object exports) {
     exports.Set("operationInit", Function::New(env, operationInit));
@@ -151,6 +158,7 @@ Object Init(Env env, Object exports) {
     exports.Set("homingSequence", Function::New(env, homingSequence));
     exports.Set("tiltSignal", Function::New(env, tiltSignal));
     exports.Set("speedSignal", Function::New(env, speedSignal));
+    exports.Set("getTachReading", Function::New(env, getTachReading));
     exports.Set("syncSet", Function::New(env, syncSet));
     exports.Set("setMachine", Function::New(env, setMachine));
     exports.Set("resumeMachine", Function::New(env, resumeMachine));

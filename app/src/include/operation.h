@@ -10,6 +10,7 @@
 #include "mcp4725.h"
 #include "tb6600.h"
 #include "mpu6050.h"
+#include "tachometer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,6 +46,7 @@ void toggle_hopper();
 void hopper_start();
 void hopper_stop();
 void hopper_pulse();
+int get_tach_reading();
 
 float get_tilt_angle();
 float get_yaw_angle();

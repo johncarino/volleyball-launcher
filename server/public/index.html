@@ -113,6 +113,21 @@ if (machineSocket) {
   machineSocket.on('connect', () => {
     machineSocket.emit('page-loaded');
   });
+
+  machineSocket.on('telemetry-update', (data) => {
+    const rpm = Math.max(0, parseInt(data && data.rpm, 10) || 0);
+    const pct = Math.max(0, Math.min(100, (rpm / 1300) * 100));
+
+    const fwl = document.getElementById('fw-l');
+    const fwr = document.getElementById('fw-r');
+    const fwlVal = document.getElementById('fw-l-v');
+    const fwrVal = document.getElementById('fw-r-v');
+
+    if (fwl) fwl.style.width = pct.toFixed(0) + '%';
+    if (fwr) fwr.style.width = pct.toFixed(0) + '%';
+    if (fwlVal) fwlVal.textContent = rpm + ' rpm';
+    if (fwrVal) fwrVal.textContent = rpm + ' rpm';
+  });
 }
 
 function onAdvancedAngleInput(value) {
@@ -704,16 +719,18 @@ function stepSlider(rangeId, valId, suffix, delta) {
 
 function startTelemetry() {
   clearInterval(window._telem);
+
+  if (machineSocket) {
+    machineSocket.emit('requestTelemetry');
+  }
+
   window._telem = setInterval(() => {
     const fwl = document.getElementById('fw-l');
     if (!fwl) return clearInterval(window._telem);
-    const jitter = v => Math.max(0, Math.min(100, v + (Math.random() - 0.5) * 4));
-    const lPct = jitter(74), rPct = jitter(71);
-    fwl.style.width = lPct.toFixed(0) + '%';
-    document.getElementById('fw-r').style.width = rPct.toFixed(0) + '%';
-    document.getElementById('fw-l-v').textContent = Math.round(lPct * 40) + ' rpm';
-    document.getElementById('fw-r-v').textContent = Math.round(rPct * 40) + ' rpm';
-  }, 800);
+    if (machineSocket) {
+      machineSocket.emit('requestTelemetry');
+    }
+  }, 3000);
 }
 
 document.querySelectorAll('.modetab').forEach(t => t.addEventListener('click', () => {
