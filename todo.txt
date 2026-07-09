@@ -1,4 +1,3 @@
-- Going back to configure from advanced stops the machine
 - Move JS to separate file
 - in launch mode, the set slot that is being executed should be highlighted in some way
 - in launch mode, the back button may be too small, a little unintuitive perhaps
@@ -7,4 +6,4 @@
 - maybe change background colour between config mode and launch mode to indicate that the mode changed
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Wire up connected icon
-- Remove old-index.html, old-old-index.html, old stylesheets
+- Remove old-old-index.html, old stylesheets
