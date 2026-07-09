@@ -351,8 +351,7 @@ const screens = {
     <div class="section">
       <div class="section-label">Live telemetry</div>
       <div class="card">
-        <div class="dev-row"><span class="dev-label">Flywheel L</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-l" style="width:74%"></div></div><span class="dev-val" id="fw-l-v">3700 rpm</span></div>
-        <div class="dev-row"><span class="dev-label">Flywheel R</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-r" style="width:71%"></div></div><span class="dev-val" id="fw-r-v">3550 rpm</span></div>
+        <div class="dev-row"><span class="dev-label">Flywheel</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-l" style="width:74%"></div></div><span class="dev-val" id="fw-l-v">3700 rpm</span></div>
       </div>
     </div>
     <div class="section">
@@ -671,11 +670,9 @@ function startTelemetry() {
     const fwl = document.getElementById('fw-l');
     if (!fwl) return clearInterval(window._telem);
     const jitter = v => Math.max(0, Math.min(100, v + (Math.random() - 0.5) * 4));
-    const lPct = jitter(74), rPct = jitter(71);
+    const lPct = jitter(74);
     fwl.style.width = lPct.toFixed(0) + '%';
-    document.getElementById('fw-r').style.width = rPct.toFixed(0) + '%';
     document.getElementById('fw-l-v').textContent = Math.round(lPct * 40) + ' rpm';
-    document.getElementById('fw-r-v').textContent = Math.round(rPct * 40) + ' rpm';
   }, 800);
 }
 
