@@ -22,8 +22,8 @@
     <h1 id="page-title">Configure</h1>
   </div>
 
-  <div class="modenav" id="modenav" role="tablist" aria-label="Modes">
-    <button class="modetab" role="tab" data-mode="configure">Configure</button>
+  <div class="modenav" id="modenav" role="tablist" aria-label="Modes" style="display:none">
+    <button class="modetab" role="tab" data-mode="launch">Launch</button>
     <button class="modetab" role="tab" data-mode="advanced">Advanced</button>
   </div>
 
@@ -601,27 +601,36 @@ function toggleLaunch(btn) {
 
 function goToLaunch() {
   clearInterval(window._telem);
-  document.getElementById('modenav').style.display = 'none';
+  document.getElementById('modenav').style.display = 'flex';
   const topbar = document.getElementById('topbar');
   topbar.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button><h1 id="page-title">Launch</h1>`;
-  document.getElementById('main-content').innerHTML = screens.launch();
-  const netVal = document.getElementById('net-val');
-  const lenVal = document.getElementById('len-val');
-  const widVal = document.getElementById('wid-val');
-  if (netVal) document.getElementById('sum-net').textContent = netVal.textContent;
-  if (lenVal && widVal) document.getElementById('sum-court').textContent = `${lenVal.textContent} × ${widVal.textContent}`;
+  setMode('launch');
 }
 
 function goBack() {
   clearInterval(window._telem);
-  document.getElementById('modenav').style.display = 'flex';
+  if (window._activeMode === 'advanced') {
+    emitMachine('advanced-leave');
+  }
+  window._activeMode = null;
+  document.getElementById('modenav').style.display = 'none';
   const topbar = document.getElementById('topbar');
   topbar.innerHTML = `<h1 id="page-title">Configure</h1>`;
-  setMode('configure');
+  document.getElementById('main-content').innerHTML = screens.configure();
+}
+
+function syncLaunchSummary() {
+  const netVal = document.getElementById('net-val');
+  const lenVal = document.getElementById('len-val');
+  const widVal = document.getElementById('wid-val');
+  const netEl = document.getElementById('sum-net');
+  const courtEl = document.getElementById('sum-court');
+  if (netEl && netVal) netEl.textContent = netVal.textContent;
+  if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
 }
 
 function setMode(mode) {
-  const previousMode = window._activeMode || 'configure';
+  const previousMode = window._activeMode || 'launch';
   if (previousMode === 'advanced' && mode !== 'advanced') {
     emitMachine('advanced-leave');
   }
@@ -631,10 +640,13 @@ function setMode(mode) {
   if (tab) tab.classList.add('active');
   document.getElementById('main-content').innerHTML = screens[mode]();
   const title = document.getElementById('page-title');
-  if (title) title.textContent = { configure: 'Configure', advanced: 'Advanced' }[mode] || mode;
+  if (title) title.textContent = { launch: 'Launch', advanced: 'Advanced' }[mode] || mode;
   if (mode === 'advanced') {
     emitMachine('advanced-enter');
     startTelemetry();
+  }
+  if (mode === 'launch') {
+    syncLaunchSummary();
   }
   window._activeMode = mode;
 }
@@ -671,7 +683,7 @@ document.querySelectorAll('.modetab').forEach(t => t.addEventListener('click', (
   clearInterval(window._telem);
   setMode(t.dataset.mode);
 }));
-setMode('configure');
+document.getElementById('main-content').innerHTML = screens.configure();
 </script>
 </body>
 </html>
