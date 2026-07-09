@@ -90,6 +90,7 @@ let hopperOn = false;
 const machineSocket = (typeof io !== 'undefined') ? io() : null;
 const slots = {
   L: { 1: null, 2: null, 3: null, 4: null },
+  C: { 1: null, 2: null, 3: null, 4: null },
   R: { 1: null, 2: null, 3: null, 4: null },
 };
 
@@ -97,7 +98,7 @@ const slots = {
 const repeatLabels = ['Repeat', 'Repeat all', 'Repeat one'];
 const repeatIcons  = ['ti-repeat', 'ti-repeat', 'ti-repeat-once'];
 
-const machineNames = { L: 'Left', R: 'Right' };
+const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
 const targetNames  = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
 
 function emitMachine(eventName, value) {
@@ -114,10 +115,20 @@ if (machineSocket) {
 function onAdvancedAngleInput(value) {
   const val = parseInt(value, 10);
   document.getElementById('dev-ang-val').textContent = val + '°';
+}
+
+function onAdvancedAngleChange(value) {
+  const val = parseInt(value, 10);
+  document.getElementById('dev-ang-val').textContent = val + '°';
   emitMachine('setAngle', val);
 }
 
 function onAdvancedSpeedInput(value) {
+  const val = parseInt(value, 10);
+  document.getElementById('dev-spd-val').textContent = val + '%';
+}
+
+function onAdvancedSpeedChange(value) {
   const val = parseInt(value, 10);
   document.getElementById('dev-spd-val').textContent = val + '%';
   emitMachine('setSpeed', val);
@@ -143,6 +154,7 @@ function courtPickerHTML(readonly = false) {
 
   const machineSpots = [
     { id: 'L', cx: 22,  cy: 50 },
+    { id: 'C', cx: 160, cy: 50 },
     { id: 'R', cx: 298, cy: 50 },
   ];
   const targetSpots = [
@@ -310,7 +322,7 @@ const screens = {
             <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
             <div class="vert-slider-track">
               <input type="range" id="dev-ang-range" class="vertical" min="5" max="85" value="5" step="1"
-                oninput="onAdvancedAngleInput(this.value)">
+                oninput="onAdvancedAngleInput(this.value)" onchange="onAdvancedAngleChange(this.value)">
             </div>
             <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
             <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
@@ -321,7 +333,7 @@ const screens = {
             <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
             <div class="vert-slider-track">
               <input type="range" id="dev-spd-range" class="vertical" min="0" max="100" value="0" step="1"
-                oninput="onAdvancedSpeedInput(this.value)">
+                oninput="onAdvancedSpeedInput(this.value)" onchange="onAdvancedSpeedChange(this.value)">
             </div>
             <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
             <span style="font-size:11px;color:var(--text-tertiary)">0 – 100%</span>
@@ -351,7 +363,7 @@ const screens = {
   launch: () => `
     <div class="section" style="margin-top:8px">
       <div class="section-label">Position</div>
-      ${courtPickerHTML(true)}
+      <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
     </div>
     <div class="section">
       <div class="section-label">Set summary</div>
@@ -408,6 +420,23 @@ function refreshSlots() {
   }
   const launchWrap = document.querySelector('#main-content .save-slots');
   if (launchWrap) launchWrap.innerHTML = slotsHTML(true);
+}
+
+function refreshLaunchView() {
+  const courtWrap = document.getElementById('launch-court-picker-wrap');
+  if (courtWrap) courtWrap.innerHTML = courtPickerHTML(true);
+
+  const tempoEl = document.getElementById('sum-tempo');
+  if (tempoEl) tempoEl.textContent = selectedTempo;
+
+  const netVal = document.getElementById('net-val');
+  const netEl = document.getElementById('sum-net');
+  if (netEl && netVal) netEl.textContent = netVal.textContent;
+
+  const lenVal = document.getElementById('len-val');
+  const widVal = document.getElementById('wid-val');
+  const courtEl = document.getElementById('sum-court');
+  if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
 }
 
 let activeSlot = null;
@@ -487,7 +516,7 @@ function clickSlot(n) {
     .then(json => console.log('Server ack:', json))
     .catch(err => console.error('Failed to send slot click to server:', err));
 
-  slotsLocked = true;
+slotsLocked = true;
   activeSlot = n;
   refreshSlots();
 
@@ -497,6 +526,16 @@ function clickSlot(n) {
     activeSlot = null;
     refreshSlots();
   }, SLOT_HIGHLIGHT_MS);
+
+  activateSlot(machineKey, n);
+}
+
+// Applies a slot's saved settings and refreshes the on-screen position/summary.
+// Called by clickSlot() for manual taps, and will also be called by the
+// future auto-alternate function so both paths update state the same way.
+function activateSlot(machineKey, n) {
+  const slotData = slots[machineKey][n];
+  if (!slotData) return;
 
   if (slotData.machine) selectedMachine = slotData.machine;
   if (slotData.target)  selectedTarget  = slotData.target;

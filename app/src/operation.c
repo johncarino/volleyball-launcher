@@ -10,6 +10,7 @@ float d_angle = 0;
 volatile int operation_initialized = 0;
 volatile int hopper_enabled = 1; // 0 = enabled, 1 = disabled
 volatile int hopper_running = 0;
+volatile int launcher_running = 0;
 
 #define TILT_TOLERANCE_DEG 0.5
 #define TILT_TIMEOUT_SEC 10
@@ -162,6 +163,7 @@ void operation_init() {
     }
     hopper_enabled = 1;
     hopper_running = 0;
+    launcher_running = 0;
 
     curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_yaw_angle = 0.0;
@@ -196,9 +198,14 @@ void operation_init() {
     }
 
     operation_initialized = 1;
+    
+    homing_sequence();
 }
 
 void operation_cleanup() {
+
+    homing_sequence();
+
     if (!operation_initialized) {
         return;
     }
@@ -219,8 +226,9 @@ void operation_cleanup() {
 
 void homing_sequence() {
     printf("Homing sequence initiated. Moving to default position...\n");
-    tilt_signal(INITIAL_TILT_ANGLE);
-    yaw_signal(0.0);
+    //tilt_signal(INITIAL_TILT_ANGLE);
+    //yaw_signal(0.0);
+    tilt_with_feedback(INITIAL_TILT_ANGLE);
     curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_yaw_angle = 0.0;
 }
@@ -328,6 +336,21 @@ void set_speed(float speed) {
     curr_rpm = speed;
 }
 
+void percentage_to_mv(float percentage) {
+    if (percentage > 100.0) {
+        fprintf(stderr, "Invalid percentage: %.2f (must be 100 or less). Skipping speed.\n", percentage);
+        return;
+    }
+    float mv = 1350.0 + (percentage / 100.0) * (4095.0 - 1350.0);
+    printf("setting speed to %.2f mV\n", mv);
+    
+    if (launcher_running) {
+        mcp4725_set_mv(&dac1, (uint16_t)mv);
+    }
+    curr_speed = mv;
+    curr_rpm = 0; // Since we don't know the RPM corresponding to this raw value
+}
+
 void set_machine(int set_index) {
     mcp4725_set_raw(&dac1, 0);
 
@@ -355,6 +378,10 @@ void yaw_signal_advanced(float angle) {
 }
 
 void tilt_with_feedback(float angle) {
+
+    //first set speed to 0
+    mcp4725_set_raw(&dac1, 0);
+
     mpu6050_data_t imu_data;
     const double target_angle = (double)angle;
 
@@ -394,6 +421,9 @@ void tilt_with_feedback(float angle) {
 
         usleep(TILT_LOOP_DELAY_US);
     }
+
+    //resume the speed after tilt operation
+    mcp4725_set_mv(&dac1, (uint16_t)curr_speed);
 }
 
 void toggle_hopper() {
@@ -480,15 +510,20 @@ int get_rpm() {
 
 void pause_machine() {
     //pause the machine
+    //printf("Pausing machine...\n");
     mcp4725_set_raw(&dac1, 0);
+
+    launcher_running = 0;
 
     return;
 }
 
 void resume_machine() {
     //signal speed
-    printf("Resuming machine at %.2f RPM\n", (float)curr_rpm);
-    speed_signal(curr_rpm);
+    //printf("Resuming machine at %.2f mv\n", (float)curr_speed);
+    mcp4725_set_mv(&dac1, (uint16_t)curr_speed);
+
+    launcher_running = 1;
 
     return;
 }

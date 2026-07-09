@@ -57,7 +57,8 @@ Value speedSignal(const CallbackInfo& info) {
         TypeError::New(env, "speedSignal expects a number").ThrowAsJavaScriptException();
         return env.Null();
     }
-    speed_signal(info[0].As<Number>().FloatValue());
+    percentage_to_mv(info[0].As<Number>().FloatValue());
+    std::cout << "[operation] speed signal sent: " << info[0].As<Number>().FloatValue() << std::endl;
     return env.Undefined();
 }
 
