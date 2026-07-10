@@ -25,7 +25,7 @@ extern "C" {
 * 4. User can shuffle the set sequence
 */
 
-#define INITIAL_TILT_ANGLE 5.0
+#define INITIAL_TILT_ANGLE 8.0
 
 void operation_init();
 void operation_cleanup();

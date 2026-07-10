@@ -1,4 +1,5 @@
 #include "app/src/include/operation.h"
+#include <pthread.h>
 
 float curr_tilt_angle = 0.0;
 float curr_yaw_angle = 0.0;
@@ -12,14 +13,28 @@ volatile int hopper_enabled = 1; // 0 = enabled, 1 = disabled
 volatile int hopper_running = 0;
 volatile int launcher_running = 0;
 
-#define TILT_TOLERANCE_DEG 0.5
+#define TILT_TOLERANCE_DEG 0.2
 #define TILT_TIMEOUT_SEC 10
 #define TILT_LOOP_DELAY_US 50000
+
+#define HOPPER_PULSE_STEPS 11900
+#define HOPPER_PULSE_START_DELAY_US 700
+#define HOPPER_PULSE_END_DELAY_US 450
+#define HOPPER_PULSE_ACCEL_STEPS 300
+#define HOPPER_CONTINUOUS_DELAY_US 500
 
 volatile float tilt_angle_w = 0;
 
 tb6600_t motor;
 static mcp4725_t dac1 = MCP4725_INIT_ZERO;
+static pthread_t hopper_thread;
+static volatile int hopper_thread_created = 0;
+
+static void* hopper_step_thread(void *arg) {
+    (void)arg;
+    tb6600_step_continuous(&motor, HOPPER_CONTINUOUS_DELAY_US, &hopper_running);
+    return NULL;
+}
 
 static uint16_t rpm_to_mv(float rpm) {
     double value = -0.000542557 * rpm * rpm
@@ -189,6 +204,7 @@ void operation_init() {
         fprintf(stderr, "Failed to initialize TB6600\n");
         return;
     }
+    tb6600_set_direction(&motor, 0);
     tb6600_enable(&motor, 1);
 
     fprintf(stderr, "[operation] initializing MCP4725 DAC\n");
@@ -199,24 +215,23 @@ void operation_init() {
 
     operation_initialized = 1;
     
-    homing_sequence();
+    //homing_sequence();
 }
 
 void operation_cleanup() {
 
-    homing_sequence();
+    //homing_sequence();
 
     if (!operation_initialized) {
         return;
     }
 
-    hopper_enabled = 1;
-    hopper_running = 0;
+    hopper_stop();
 
 
     mpu6050_close();
     mcp4725_set_raw(&dac1, 0);
-    tb6600_enable(&motor, 0);
+    tb6600_enable(&motor, 1);
     tb6600_close(&motor);
     mcp4725_cleanup(&dac1);
     bts_cleanup();
@@ -360,9 +375,9 @@ void set_machine(int set_index) {
             set_seq[set_index]->yaw_angle,
             set_seq[set_index]->rpm_output);
     
-    tilt_signal(set_seq[set_index]->tilt_angle);
-    yaw_signal(set_seq[set_index]->yaw_angle);
-    speed_signal(set_seq[set_index]->rpm_output);
+    //tilt_signal(set_seq[set_index]->tilt_angle);
+    //yaw_signal(set_seq[set_index]->yaw_angle);
+    //speed_signal(set_seq[set_index]->rpm_output);
 }
 
 void tilt_signal_advanced(float angle) {
@@ -422,8 +437,10 @@ void tilt_with_feedback(float angle) {
         usleep(TILT_LOOP_DELAY_US);
     }
 
-    //resume the speed after tilt operation
-    mcp4725_set_mv(&dac1, (uint16_t)curr_speed);
+    //resume the speed after tilt operation if the machine was running
+    if (launcher_running) {
+        mcp4725_set_mv(&dac1, (uint16_t)curr_speed);
+    }
 }
 
 void toggle_hopper() {
@@ -443,10 +460,25 @@ void hopper_start() {
         return;
     }
 
-    tb6600_set_direction(&motor, 1);
-    tb6600_enable(&motor, 1);
-    hopper_enabled = 0;
+    if (hopper_running) {
+        printf("Hopper already running\n");
+        return;
+    }
+
     hopper_running = 1;
+
+    tb6600_enable(&motor, 1);
+
+    if (pthread_create(&hopper_thread, NULL, hopper_step_thread, NULL) != 0) {
+        perror("Failed to start hopper thread");
+        hopper_running = 0;
+        tb6600_enable(&motor, 0);
+        return;
+    }
+
+    hopper_thread_created = 1;
+    
+    hopper_enabled = 0;
     printf("Hopper started\n");
 
     //speed_signal(curr_rpm);
@@ -456,13 +488,17 @@ void hopper_stop() {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
 
-    if (!motor.request) {
-        fprintf(stderr, "Cannot stop hopper: motor not initialized\n");
-        return;
+    hopper_running = 0;
+
+    if (hopper_thread_created) {
+        pthread_join(hopper_thread, NULL);
+        hopper_thread_created = 0;
     }
 
-    hopper_running = 0;
-    tb6600_enable(&motor, 0);
+    if (motor.request) {
+        tb6600_enable(&motor, 0);
+    }
+
     hopper_enabled = 1;
     printf("Hopper stopped\n");
 
@@ -485,8 +521,9 @@ void hopper_pulse() {
 
     printf("Pulsing hopper...\n");
     tb6600_enable(&motor, 1);
-    usleep(500000); //pulse for 500ms
+    tb6600_step_accel(&motor, HOPPER_PULSE_STEPS, HOPPER_PULSE_START_DELAY_US, HOPPER_PULSE_END_DELAY_US, HOPPER_PULSE_ACCEL_STEPS);
     tb6600_enable(&motor, 0);
+    
     printf("Hopper pulse complete.\n");
 
     //speed_signal(curr_rpm);

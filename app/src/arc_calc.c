@@ -3,7 +3,7 @@
 // Global variable definitions
 int machine_position = 0;
 float machine_x[NUM_MACHINE_POSITIONS];
-const float machine_y = 1.75;
+const float machine_y = 1.80;
 
 int target_position = 0;
 float target_x[NUM_TARGETS];
@@ -25,9 +25,9 @@ float rpm_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
 
 void arc_calc_params(float net_height, float court_width, float court_length) {
     //launch positions (metre)
-    machine_x[0] = 0 + 0.5; // left target
+    machine_x[0] = 0; // left target
     machine_x[1] = court_width / 2; // center target
-    machine_x[2] = court_width - 0.5; // right target
+    machine_x[2] = court_width; // right target
 
     //target positions (metre)
     target_x[0] = 0 + 0.5; // left target

@@ -42,6 +42,8 @@ void tb6600_set_direction(tb6600_t *motor, int dir);
 // enable: non-zero enables driver output, 0 disables output
 void tb6600_enable(tb6600_t *motor, int enable);
 
+void tb6600_step_continuous(tb6600_t *motor, int delay_us, volatile int *run_flag);
+
 // Generate STEP pulses to move the motor.
 // steps: number of step pulses to output
 // delay_us: microsecond delay between pulse edges (speed control)

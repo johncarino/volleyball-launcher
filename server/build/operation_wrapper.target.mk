@@ -151,7 +151,8 @@ LDFLAGS_Release := \
 LIBS := \
 	-lnode \
 	-lm \
-	-lgpiod
+	-lgpiod \
+	-lpthread
 
 $(obj).target/operation_wrapper.node: GYP_LDFLAGS := $(LDFLAGS_$(BUILDTYPE))
 $(obj).target/operation_wrapper.node: LIBS := $(LIBS)

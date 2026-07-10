@@ -60,7 +60,8 @@
       "cflags_cc!": [ "-fno-exceptions" ],
       "libraries": [
         "-lm",
-        "-lgpiod"
+        "-lgpiod",
+        "-lpthread"
       ]
     }
   ]
