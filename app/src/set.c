@@ -23,24 +23,27 @@ int save_set(int set_index, int mp, int tl, int t) {
         return 0;
     }
 
-    float angle = tilt_angle[mp][tl][t];
-    if (angle > 81.0 || angle < 9.0) {
-        fprintf(stderr, "Invalid tilt angle for set %d: %.2f degrees (must be between 9 and 81 degrees).\n", set_index, angle);
+    float angle = tilt_angle[mp][tl-1][t-1];
+    if (angle > 81.0 || angle < 5.0) {
+        fprintf(stderr, "Invalid tilt angle for set %d: %.2f degrees (must be between 5 and 81 degrees).\n", set_index, angle);
         return 0;
     }
 
-    float rpm = rpm_output[mp][tl][t];
+    float rpm = rpm_output[mp][tl-1][t-1];
     if (rpm > 2000.0) {
         fprintf(stderr, "Invalid RPM output for set %d: %.2f (must be 2000 or less).\n", set_index, rpm);
         return 0;
     }
 
-    set_seq[mp][set_index].launch_speed = launch_speed[mp][tl][t];
+    set_seq[mp][set_index].launch_speed = launch_speed[mp][tl-1][t-1];
     set_seq[mp][set_index].tilt_angle = angle;
-    set_seq[mp][set_index].yaw_angle = yaw_angle[mp][tl][t];
+    set_seq[mp][set_index].yaw_angle = yaw_angle[mp][tl-1][t-1];
     set_seq[mp][set_index].rpm_output = rpm;
     set_seq[mp][set_index].target_location = tl;
     set_seq[mp][set_index].tempo = t;
+
+    fprintf(stdout, "Set %d saved for machine position %d: Target Location %d, Tempo %d, Tilt Angle %.2f degrees, Yaw Angle %.2f degrees, Launch Speed %.2f m/s, RPM Output %.2f\n",
+            set_index, mp, tl, t, angle, yaw_angle[mp][tl-1][t-1], launch_speed[mp][tl-1][t-1], rpm);
 
     return 1;
 }

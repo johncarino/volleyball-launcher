@@ -37,9 +37,8 @@ static void* hopper_step_thread(void *arg) {
 }
 
 static uint16_t rpm_to_mv(float rpm) {
-    double value = -0.000542557 * rpm * rpm
-         + 1.496989 * rpm
-         + 1063.520;
+    // Linear mapping: 0 rpm -> 1380 mV, 1300 rpm -> 2200 mV
+    double value = (820.0 / 1300.0) * rpm + 1380.0;
 
     return (uint16_t)value;
 }
@@ -187,6 +186,19 @@ void operation_init() {
     curr_speed = 0;
     curr_rpm = 0;
 
+    fprintf(stderr, "[operation] initializing TB6600 motor driver\n");
+    if (tb6600_init(&motor, 1) < 0) {
+        fprintf(stderr, "Failed to initialize TB6600\n");
+        return;
+    }
+    tb6600_enable(&motor, 1);
+
+    fprintf(stderr, "[operation] initializing tachometer\n");
+    if (tach_init() != 0) {
+        fprintf(stderr, "Failed to initialize tachometer\n");
+        return;
+    }
+
     fprintf(stderr, "[operation] initializing MPU6050 IMU\n");
     if (mpu6050_init(NULL) != 0) {
         fprintf(stderr, "Failed to initialize MPU6050 — is I2C enabled?\n");
@@ -228,7 +240,7 @@ void operation_cleanup() {
 
     hopper_stop();
 
-
+    tach_cleanup();
     mpu6050_close();
     mcp4725_set_raw(&dac1, 0);
     tb6600_enable(&motor, 1);
@@ -366,7 +378,7 @@ void percentage_to_mv(float percentage) {
     curr_rpm = 0; // Since we don't know the RPM corresponding to this raw value
 }
 
-void set_machine(int set_index) {
+void set_machine(int machine_position, int set_index) {
     mcp4725_set_raw(&dac1, 0);
 
     printf("Setting machine for set %d\n", set_index);
@@ -563,6 +575,12 @@ void resume_machine() {
     launcher_running = 1;
 
     return;
+}
+
+int get_tach_reading() {
+    int rpm = (int)get_tach_rpm();
+    printf("Current RPM: %d\n", rpm);
+    return rpm;
 }
 
 /*

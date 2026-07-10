@@ -23,6 +23,7 @@
       "sources": [
         "../app/wrappers/set_wrapper.cpp",
         "../app/src/set.c",
+        "../app/src/calibration.c",
         "../app/src/arc_calc.c"
       ],
       "include_dirs": [
@@ -47,7 +48,8 @@
         "../hal/src/mcp4725.c",
         "../hal/src/mpu6050.c",
         "../hal/src/tb6600.c",
-        "../hal/src/pwm.c"
+        "../hal/src/pwm.c",
+        "../hal/src/tachometer.c"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",

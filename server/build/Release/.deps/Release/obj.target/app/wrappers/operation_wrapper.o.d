@@ -13,7 +13,8 @@ Release/obj.target/operation_wrapper/../app/wrappers/operation_wrapper.o: \
  ../../app/wrappers/../src/include/set.h \
  ../../app/wrappers/../src/include/arc_calc.h ../../hal/include/bts7960.h \
  ../../hal/include/pwm.h ../../hal/include/mcp4725.h \
- ../../hal/include/tb6600.h ../../hal/include/mpu6050.h
+ ../../hal/include/tb6600.h ../../hal/include/mpu6050.h \
+ ../../hal/include/tachometer.h
 ../../app/wrappers/operation_wrapper.cpp:
 /home/john/Desktop/capstone/JP/volleyball-launcher/server/node_modules/node-addon-api/napi.h:
 /usr/include/nodejs/src/node_api.h:
@@ -31,3 +32,4 @@ Release/obj.target/operation_wrapper/../app/wrappers/operation_wrapper.o: \
 ../../hal/include/mcp4725.h:
 ../../hal/include/tb6600.h:
 ../../hal/include/mpu6050.h:
+../../hal/include/tachometer.h:
