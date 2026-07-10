@@ -121,6 +121,10 @@ body {
   cursor: pointer; font-family: inherit;
 }
 .tempo-pill.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.tempo-pill:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 
 .op-btn {
   width: 100%; padding: 20px 0;

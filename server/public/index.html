@@ -86,6 +86,7 @@ let repeatState = 0;
 let selectedMachine = null;
 let selectedTarget  = null;
 let selectedTempo = 1;
+let hoveredTempo = null;
 let hopperOn = false;
 const machineSocket = (typeof io !== 'undefined') ? io() : null;
 const slots = {
@@ -153,17 +154,19 @@ function courtPickerHTML(readonly = false) {
   const tSel = selectedTarget;
 
   const machineSpots = [
-    { id: 'L', cx: 22,  cy: 50 },
-    { id: 'C', cx: 160, cy: 50 },
-    { id: 'R', cx: 298, cy: 50 },
+    { id: 'L', cx: 18,  cy: 133 },
+    { id: 'C', cx: 160, cy: 133 },
+    { id: 'R', cx: 302, cy: 133 },
   ];
   const targetSpots = [
-    { id: '1', cx: 70,  cy: 38 },
-    { id: '2', cx: 130, cy: 38 },
-    { id: '3', cx: 190, cy: 38 },
-    { id: '4', cx: 250, cy: 38 },
+    { id: '1', cx: 70,  cy: 20 },
+    { id: '2', cx: 130, cy: 20 },
+    { id: '3', cx: 190, cy: 20 },
+    { id: '4', cx: 250, cy: 20 },
   ];
 
+  const machineRectW = 32;
+  const machineRectH = 74;
   const mCircles = machineSpots.map(s => {
     const active   = mSel === s.id;
     const fill     = active ? '#b52a2a' : 'transparent';
@@ -172,38 +175,85 @@ function courtPickerHTML(readonly = false) {
     const opacity  = active ? 1 : (readonly ? 0 : 0.7);
     const onclick  = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
     const cursor   = readonly ? 'default' : 'pointer';
+    const rx       = s.cx - machineRectW / 2;
+    const ry       = s.cy - machineRectH / 2;
     return `<g ${onclick} style="cursor:${cursor}">
-      <circle cx="${s.cx}" cy="${s.cy}" r="16" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}"/>
+      <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}"/>
       ${active ? `<text x="${s.cx}" y="${s.cy + 4}" text-anchor="middle" font-size="9" fill="${textFill}" font-family="system-ui,sans-serif" font-weight="500">${s.id}</text>` : ''}
     </g>`;
   }).join('');
 
   const tCircles = targetSpots.map(s => {
-    const active   = tSel === s.id;
-    const fill     = active ? '#1a7a3a' : 'transparent';
-    const stroke   = active ? '#1a7a3a' : (readonly ? 'transparent' : '#1a7a3a');
-    const textFill = active ? '#fff' : '#1a7a3a';
-    const opacity  = active ? 1 : (readonly ? 0 : 0.75);
-    const onclick  = readonly ? '' : `onclick="selectTarget('${s.id}')"`;
-    const cursor   = readonly ? 'default' : 'pointer';
+    const active      = tSel === s.id;
+    const fill        = active ? '#1a7a3a' : 'transparent';
+    const stroke      = active ? '#1a7a3a' : (readonly ? 'transparent' : '#1a7a3a');
+    const textFill    = active ? '#fff' : '#1a7a3a';
+    const opacity     = active ? 1 : (readonly ? 0 : 0.75);
+    const lineOpacity = active ? 0.6 : (readonly ? 0 : 0.35);
+    const onclick     = readonly ? '' : `onclick="selectTarget('${s.id}')"`;
+    const cursor      = readonly ? 'default' : 'pointer';
     return `<g ${onclick} style="cursor:${cursor}">
+      <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="46" stroke="#1a7a3a" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
       <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}"/>
       ${active ? `<text x="${s.cx}" y="${s.cy + 4}" text-anchor="middle" font-size="9" fill="${textFill}" font-family="system-ui,sans-serif" font-weight="500">${s.id}</text>` : ''}
     </g>`;
   }).join('');
 
+  let tempoArcs = '';
+  if (mSel && tSel) {
+    const m = machineSpots.find(s => s.id === mSel);
+    const t = targetSpots.find(s => s.id === tSel);
+    const startX = m.cx;
+    const startY = m.cy - machineRectH / 2; // top of the machine rectangle
+    const endX   = t.cx;
+    const endY   = t.cy;
+    const midX   = (startX + endX) / 2;
+    const baseMidY = (startY + endY) / 2;
+
+    const highlightTempo = hoveredTempo || selectedTempo;
+    tempoArcs = [1, 2, 3, 4, 5].map(tempo => {
+      const active      = tempo === highlightTempo;
+      const isSelected  = tempo === selectedTempo;
+      const arcHeight   = 16 + tempo * 50; // higher tempo = taller arc
+      const ctrlY       = baseMidY - arcHeight;
+      const stroke      = active ? '#e08a1e' : '#c2b8ab';
+      const strokeWidth = active ? 2.5 : 1;
+      const opacity     = active ? 0.95 : 0.4;
+      const hitProps    = readonly
+        ? ''
+        : `onclick="selectTempo(${tempo})" onmouseenter="onTempoHover(${tempo})" onmouseleave="onTempoHover(null)" style="cursor:pointer"`;
+      // Wider, invisible path underneath for an easier click/hover target
+      const hitArea = readonly ? '' : `<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="transparent" stroke-width="14" ${hitProps}/>`;
+      // Peak point of the curve (quadratic bezier at t=0.5), used to place the tempo label
+      const peakX = midX;
+      const peakY = 0.25 * startY + 0.5 * ctrlY + 0.25 * endY;
+      const label = isSelected
+        ? `<g>
+            <circle cx="${peakX}" cy="${peakY - 9}" r="8" fill="#e08a1e"/>
+            <text x="${peakX}" y="${peakY - 6}" text-anchor="middle" font-size="9" fill="#fff" font-family="system-ui,sans-serif" font-weight="600">${tempo}</text>
+          </g>`
+        : '';
+      return `${hitArea}<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="${opacity}" style="pointer-events:none"/>${label}`;
+    }).join('');
+  }
+
   return `
     <div class="court-picker" style="${readonly ? 'pointer-events:none;' : ''}">
       <div class="court-svg-wrap">
         <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
-          <rect x="40" y="20" width="240" height="160" fill="#d4e8f0" rx="2" opacity="0.35"/>
-          <rect x="40" y="20" width="240" height="160" fill="none" stroke="#888" stroke-width="1.5" rx="2"/>
-          <line x1="40" y1="100" x2="280" y2="100" stroke="#888" stroke-width="1" stroke-dasharray="4 3"/>
-          <line x1="40" y1="20" x2="280" y2="20" stroke="#555" stroke-width="3"/>
-          <text x="160" y="14" text-anchor="middle" font-size="9" fill="#888" font-family="system-ui,sans-serif" letter-spacing="1">NET</text>
-          <line x1="100" y1="20" x2="100" y2="180" stroke="#aaa" stroke-width="0.5" stroke-dasharray="3 4" opacity="0.5"/>
-          <line x1="160" y1="20" x2="160" y2="180" stroke="#aaa" stroke-width="0.5" stroke-dasharray="3 4" opacity="0.5"/>
-          <line x1="220" y1="20" x2="220" y2="180" stroke="#aaa" stroke-width="0.5" stroke-dasharray="3 4" opacity="0.5"/>
+          <defs>
+            <pattern id="netMesh" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="8" stroke="#9ab0bb" stroke-width="0.6"/>
+              <line x1="0" y1="0" x2="8" y2="0" stroke="#9ab0bb" stroke-width="0.6"/>
+            </pattern>
+          </defs>
+          <line x1="20" y1="170" x2="300" y2="170" stroke="#aaa" stroke-width="1.5"/>
+          <line x1="40" y1="30" x2="40" y2="170" stroke="#555" stroke-width="3"/>
+          <line x1="280" y1="30" x2="280" y2="170" stroke="#555" stroke-width="3"/>
+          <rect x="40" y="44" width="240" height="40" fill="url(#netMesh)" opacity="0.55"/>
+          <rect x="40" y="44" width="240" height="40" fill="none" stroke="#8a9aa3" stroke-width="1"/>
+          <rect x="38" y="40" width="244" height="4" fill="#fdfdfd" stroke="#555" stroke-width="1" rx="1"/>
+          ${tempoArcs}
           ${tCircles}
           ${mCircles}
         </svg>
@@ -220,11 +270,13 @@ function selectMachine(id) {
   selectedMachine = id;
   refreshCourtPicker();
   refreshSlots();
+  refreshTempo();
 }
 
 function selectTarget(id) {
   selectedTarget = id;
   refreshCourtPicker();
+  refreshTempo();
 }
 
 function refreshCourtPicker() {
@@ -279,15 +331,7 @@ const screens = {
     </div>
     <div class="section">
       <div class="section-label">Tempo</div>
-      <div class="card">
-        <div class="tempo-pills">
-          <button class="tempo-pill ${selectedTempo == 1 ? 'active' : ''}" onclick="setPill(this)">1</button>
-          <button class="tempo-pill ${selectedTempo == 2 ? 'active' : ''}" onclick="setPill(this)">2</button>
-          <button class="tempo-pill ${selectedTempo == 3 ? 'active' : ''}" onclick="setPill(this)">3</button>
-          <button class="tempo-pill ${selectedTempo == 4 ? 'active' : ''}" onclick="setPill(this)">4</button>
-          <button class="tempo-pill ${selectedTempo == 5 ? 'active' : ''}" onclick="setPill(this)">5</button>
-        </div>
-      </div>
+      <div class="card" id="tempo-wrap">${tempoPillsHTML()}</div>
     </div>
     <div class="section">
       <div class="section-label">Set Slots</div>
@@ -405,10 +449,37 @@ function getCourtSummary() {
   return `Net ${netTxt} · ${lenTxt} × ${widTxt}`;
 }
 
+function tempoPillsHTML() {
+  const enabled = !!(selectedMachine && selectedTarget);
+  const pills = [1, 2, 3, 4, 5].map(n =>
+    `<button class="tempo-pill ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
+      ${enabled ? `onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)"` : ''}
+      ${enabled ? '' : 'disabled'}>${n}</button>`
+  ).join('');
+  return `
+    <div class="tempo-pills">${pills}</div>
+    ${!enabled ? `<div style="font-size:11px;color:var(--text-tertiary);margin-top:8px">Select a machine and target zone first</div>` : ''}`;
+}
+
+function onTempoHover(n) {
+  hoveredTempo = n;
+  refreshCourtPicker();
+}
+
+function refreshTempo() {
+  const wrap = document.getElementById('tempo-wrap');
+  if (wrap) wrap.innerHTML = tempoPillsHTML();
+}
+
 function setPill(el) {
-  el.closest('.tempo-pills').querySelectorAll('.tempo-pill').forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
-  selectedTempo = parseInt(el.textContent);
+  selectTempo(parseInt(el.textContent));
+}
+
+function selectTempo(n) {
+  console.log('selectTempo called with', n);
+  selectedTempo = n;
+  refreshTempo();
+  refreshCourtPicker();
 }
 
 function refreshSlots() {
