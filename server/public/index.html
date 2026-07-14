@@ -340,7 +340,6 @@ const screens = {
       <div class="save-slots" id="slots-wrap">${slotsHTML()}</div>
     </div>
     <div class="section" style="margin-top:8px">
-      <div class="section-label">Court</div>
       <button class="court-btn" onclick="openModal()">
         <div class="court-btn-left">
           <i class="ti ti-ruler-measure" style="font-size:18px;color:var(--text-tertiary)" aria-hidden="true"></i>
@@ -353,7 +352,6 @@ const screens = {
       </button>
     </div>
     <div class="section" style="margin-top:8px">
-      <div class="section-label">Continue</div>
       <button class="op-btn continue-style" onclick="goToLaunch()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue</button>
     </div>`,
 
@@ -411,7 +409,6 @@ const screens = {
       <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
     </div>
     <div class="section">
-      <div class="section-label">Set summary</div>
       <div class="card">
         <div class="summary-row"><span class="summary-key"><i class="ti ti-metronome" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Tempo</span><span class="summary-val" id="sum-tempo">${selectedTempo}</span></div>
         <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">243 cm</span></div>
