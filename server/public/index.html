@@ -737,6 +737,8 @@ function goBack() {
   const topbar = document.getElementById('topbar');
   topbar.innerHTML = `<h1 id="page-title">Configure</h1>`;
   document.getElementById('main-content').innerHTML = screens.configure();
+  const appEl = document.querySelector('.app');
+  if (appEl) appEl.classList.remove('mode-launch', 'mode-advanced');
 }
 
 function syncLaunchSummary() {
@@ -753,6 +755,11 @@ function setMode(mode) {
   const previousMode = window._activeMode || 'launch';
   if (previousMode === 'advanced' && mode !== 'advanced') {
     emitMachine('advanced-leave');
+  }
+  const appEl = document.querySelector('.app');
+  if (appEl) {
+    appEl.classList.toggle('mode-launch', mode === 'launch');
+    appEl.classList.toggle('mode-advanced', mode === 'advanced');
   }
 
   document.querySelectorAll('.modetab').forEach(t => t.classList.remove('active'));

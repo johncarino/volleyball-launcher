@@ -1,6 +1,5 @@
 - Move JS to separate file
 - in launch mode, the back button may be too small, a little unintuitive perhaps
-- maybe change background colour between config mode and launch mode to indicate that the mode changed
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Remove old-old-index.html, old stylesheets
 - Make it so selection instructions are not repeated every time

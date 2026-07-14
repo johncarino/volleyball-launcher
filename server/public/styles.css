@@ -60,6 +60,25 @@ body {
   position: relative;
 }
 
+/* added: distinct background for Launch mode */
+.app.mode-launch {
+  --bg-primary: #eef5f0;
+}
+@media (prefers-color-scheme: dark) {
+  .app.mode-launch {
+    --bg-primary: #17231c;
+  }
+}
+
+.app.mode-advanced {
+  --bg-primary: #f6f1e8;
+}
+@media (prefers-color-scheme: dark) {
+  .app.mode-advanced {
+    --bg-primary: #241f16;
+  }
+}
+
 .statusbar {
   background: var(--bg-secondary);
   padding: 8px 16px;
