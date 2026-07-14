@@ -245,8 +245,8 @@ void advanced_save_set(int set_index, float launch_speed, float tilt_angle, floa
         return;
     }
     set_seq[0][set_index].launch_speed = launch_speed;
-    if (tilt_angle > 81.0) {
-        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be 81 degrees or less).\n", tilt_angle);
+    if (tilt_angle > 90.0) {
+        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be 90 degrees or less).\n", tilt_angle);
         return;
     }
     set_seq[0][set_index].tilt_angle = tilt_angle;
@@ -270,8 +270,8 @@ void advanced_save_set(int set_index, float launch_speed, float tilt_angle, floa
 
 int save_set(int set_index, int print_info) {
     float angle = tilt_angle[curr_machine_position][curr_target_location][curr_tempo];
-    if (angle > 81.0 || angle < 9.0) {
-        fprintf(stderr, "Invalid tilt angle for set %d: %.2f degrees (must be between 9 and 81 degrees).\n", set_index, angle);
+    if (angle > 90.0 || angle < 9.0) {
+        fprintf(stderr, "Invalid tilt angle for set %d: %.2f degrees (must be between 9 and 90 degrees).\n", set_index, angle);
         return 0;
     }
     set_seq[curr_machine_position][set_index].launch_speed = launch_speed[curr_machine_position][curr_target_location][curr_tempo];

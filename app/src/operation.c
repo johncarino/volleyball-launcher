@@ -1,4 +1,5 @@
 #include "app/src/include/operation.h"
+#include <math.h>
 #include <pthread.h>
 
 float curr_tilt_angle = 0.0;
@@ -14,8 +15,15 @@ volatile int hopper_running = 0;
 volatile int launcher_running = 0;
 
 #define TILT_TOLERANCE_DEG 0.2
-#define TILT_TIMEOUT_SEC 10
+#define TILT_TIMEOUT_SEC 15
 #define TILT_LOOP_DELAY_US 50000
+#define TILT_SETTLE_DELAY_US 120000
+#define TILT_SAMPLE_COUNT 3
+#define TILT_SAMPLE_DELAY_US 15000
+#define TILT_TOLERANCE_HOLD_COUNT 2
+#define TILT_FINE_WINDOW_DEG 1.5
+#define TILT_MEDIUM_WINDOW_DEG 5.0
+#define TILT_COARSE_WINDOW_DEG 15.0
 
 #define HOPPER_PULSE_STEPS 11900
 #define HOPPER_PULSE_START_DELAY_US 700
@@ -41,6 +49,51 @@ static uint16_t rpm_to_mv(float rpm) {
     double value = (820.0 / 1300.0) * rpm + 1380.0;
 
     return (uint16_t)value;
+}
+
+static double calibrate_tilt_angle(double raw_angle) {
+    return (0.0008655 * raw_angle * raw_angle) + (0.9043201 * raw_angle) + 0.4493167;
+}
+
+static int read_tilt_feedback_angle(double *angle_out) {
+    mpu6050_data_t imu_data;
+    double angle_sum = 0.0;
+
+    if (angle_out == NULL) {
+        return -1;
+    }
+
+    for (int i = 0; i < TILT_SAMPLE_COUNT; i++) {
+        if (mpu6050_read(&imu_data) != 0) {
+            return -1;
+        }
+
+        angle_sum += (imu_data.roll_deg * 0.75) + (imu_data.stable_roll_deg * 0.25);
+
+        if (i + 1 < TILT_SAMPLE_COUNT) {
+            usleep(TILT_SAMPLE_DELAY_US);
+        }
+    }
+
+    *angle_out = calibrate_tilt_angle(angle_sum / TILT_SAMPLE_COUNT);
+    return 0;
+}
+
+static int get_tilt_duty_cycle(double error_deg) {
+    double abs_error = fabs(error_deg);
+
+    if (abs_error > TILT_COARSE_WINDOW_DEG) {
+        return 100;
+    }
+    else if (abs_error > TILT_MEDIUM_WINDOW_DEG) {
+        return 70;
+    }
+    else if (abs_error > TILT_FINE_WINDOW_DEG) {
+        return 30;
+    }
+    else {
+        return 20;
+    }
 }
 
 static long tilt_angle_to_time(float i_angle, float f_angle) {
@@ -186,18 +239,11 @@ void operation_init() {
     curr_speed = 0;
     curr_rpm = 0;
 
-    fprintf(stderr, "[operation] initializing TB6600 motor driver\n");
-    if (tb6600_init(&motor, 1) < 0) {
-        fprintf(stderr, "Failed to initialize TB6600\n");
-        return;
-    }
-    tb6600_enable(&motor, 1);
-
-    fprintf(stderr, "[operation] initializing tachometer\n");
+    /*fprintf(stderr, "[operation] initializing tachometer\n");
     if (tach_init() != 0) {
         fprintf(stderr, "Failed to initialize tachometer\n");
         return;
-    }
+    }*/
 
     fprintf(stderr, "[operation] initializing MPU6050 IMU\n");
     if (mpu6050_init(NULL) != 0) {
@@ -240,7 +286,7 @@ void operation_cleanup() {
 
     hopper_stop();
 
-    tach_cleanup();
+    //tach_cleanup();
     mpu6050_close();
     mcp4725_set_raw(&dac1, 0);
     tb6600_enable(&motor, 1);
@@ -262,8 +308,8 @@ void homing_sequence() {
 
 void tilt_signal(float angle) {
 
-    if (angle > 81.0 || angle < INITIAL_TILT_ANGLE) {
-        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 81 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
+    if (angle > 90.0 || angle < INITIAL_TILT_ANGLE) {
+        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 90 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
         return;
     }
 
@@ -406,48 +452,66 @@ void yaw_signal_advanced(float angle) {
 
 void tilt_with_feedback(float angle) {
 
+    if (angle > 90.0 || angle < INITIAL_TILT_ANGLE) {
+        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 90 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
+        return;
+    }
+
     //first set speed to 0
     mcp4725_set_raw(&dac1, 0);
 
-    mpu6050_data_t imu_data;
     const double target_angle = (double)angle;
+    double current_angle = 0.0;
+    int settled_reads = 0;
 
     time_t start_time = time(NULL);
 
-    while(1) {
-        if (mpu6050_read(&imu_data) != 0) {
+    while (1) {
+        if (read_tilt_feedback_angle(&current_angle) != 0) {
             fprintf(stderr, "Failed to read from MPU6050\n");
             bts_stop();
             return;
         }
 
-        double current_angle = imu_data.stable_roll_deg;
         double error = target_angle - current_angle;
 
         fprintf(stderr, "Current angle: %.2f, Target angle: %.2f, Error: %.2f\n", current_angle, target_angle, error);
 
         if (fabs(error) <= TILT_TOLERANCE_DEG) {
-            fprintf(stderr, "Target angle reached within tolerance.\n");
-            bts_stop();
-            break;
+            settled_reads++;
+
+            if (settled_reads >= TILT_TOLERANCE_HOLD_COUNT) {
+                fprintf(stderr, "Target angle reached within tolerance.\n");
+                bts_stop();
+                break;
+            }
+
+            usleep(TILT_SETTLE_DELAY_US);
+            continue;
         }
 
+        settled_reads = 0;
+
+        int duty_cycle = get_tilt_duty_cycle(error);
+
         if (error > 0) {
-            printf("Tilting forward...\n");
-            bts_forward_start(50);
+            printf("Tilting forward at %d%%...\n", duty_cycle);
+            bts_forward_start(duty_cycle);
         } else {
-            printf("Tilting backward...\n");
-            bts_reverse_start(50);
+            printf("Tilting backward at %d%%...\n", duty_cycle);
+            bts_reverse_start(duty_cycle);
         }
+
+        usleep(TILT_LOOP_DELAY_US);
 
         if (difftime(time(NULL), start_time) >= TILT_TIMEOUT_SEC) {
             fprintf(stderr, "Tilt operation timed out after %d seconds.\n", TILT_TIMEOUT_SEC);
             bts_stop();
             break;
         }
-
-        usleep(TILT_LOOP_DELAY_US);
     }
+
+    curr_tilt_angle = (float)current_angle;
 
     //resume the speed after tilt operation if the machine was running
     if (launcher_running) {
@@ -578,9 +642,10 @@ void resume_machine() {
 }
 
 int get_tach_reading() {
-    int rpm = (int)get_tach_rpm();
-    printf("Current RPM: %d\n", rpm);
-    return rpm;
+    //int rpm = (int)get_tach_rpm();
+    // printf("Current RPM: %d\n", rpm);
+    //return rpm;
+    return 1;
 }
 
 /*

@@ -24,8 +24,8 @@ int save_set(int set_index, int mp, int tl, int t) {
     }
 
     float angle = tilt_angle[mp][tl-1][t-1];
-    if (angle > 81.0 || angle < 5.0) {
-        fprintf(stderr, "Invalid tilt angle for set %d: %.2f degrees (must be between 5 and 81 degrees).\n", set_index, angle);
+    if (angle > 90.0 || angle < 5.0) {
+        fprintf(stderr, "Invalid tilt angle for set %d: %.2f degrees (must be between 5 and 90 degrees).\n", set_index, angle);
         return 0;
     }
 

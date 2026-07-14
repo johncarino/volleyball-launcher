@@ -30,10 +30,10 @@ void arc_calc_params(float net_height, float court_width, float court_length) {
     machine_x[2] = court_width; // right target
 
     //target positions (metre)
-    target_x[0] = 0 + 0.5; // left target
+    target_x[0] = 0 + 1; // left target
     target_x[1] = court_width / 4; // left center target
     target_x[2] = 3 * court_width / 4; // right center target
-    target_x[3] = court_width - 0.5; // right target
+    target_x[3] = court_width - 1; // right target
 
     //tempo heights (metre)
     peak_height[0] = net_height + 0.5; // tempo 1
