@@ -235,7 +235,7 @@ function courtPickerHTML(readonly = false) {
             <text x="${peakX}" y="${peakY - 6}" text-anchor="middle" font-size="9" fill="#fff" font-family="system-ui,sans-serif" font-weight="600">${tempo}</text>
           </g>`
         : '';
-      return `${hitArea}<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="${opacity}" style="pointer-events:none"/>${label}`;
+      return `${hitArea}<path id="tempo-line-${tempo}" d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="${opacity}" style="pointer-events:none"/>${label}`;
     }).join('');
   }
 
@@ -462,7 +462,15 @@ function tempoPillsHTML() {
 
 function onTempoHover(n) {
   hoveredTempo = n;
-  refreshCourtPicker();
+  const highlightTempo = hoveredTempo || selectedTempo;
+  for (let tempo = 1; tempo <= 5; tempo++) {
+    const line = document.getElementById('tempo-line-' + tempo);
+    if (!line) continue;
+    const active = tempo === highlightTempo;
+    line.setAttribute('stroke', active ? '#e08a1e' : '#c2b8ab');
+    line.setAttribute('stroke-width', active ? '2.5' : '1');
+    line.setAttribute('opacity', active ? '0.95' : '0.4');
+  }
 }
 
 function refreshTempo() {

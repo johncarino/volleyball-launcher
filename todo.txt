@@ -5,9 +5,7 @@
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Wire up connected icon
 - Remove old-old-index.html, old stylesheets
-- Make arc itself clickable
 - Make set selection more iterative
-- Fix clicking on arc
 
 beaglebone/mnt/remote/jp/volleyball_launcher/server/
 npm start
