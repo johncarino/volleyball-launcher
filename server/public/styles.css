@@ -321,6 +321,11 @@ input[type=range] { accent-color: var(--blue); }
 }
 .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-secondary); }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+.legend-text-select {
+  font-weight: 600 !important;
+  color: var(--text-primary) !important;
+  opacity: 0.85;
+}
 
 .court-selection-row {
   display: flex; gap: 8px; margin-top: 10px;
