@@ -4,6 +4,9 @@
 - Remove old-old-index.html, old stylesheets
 - Make it so selection instructions are not repeated every time
 - Block continue button until set selected
+- Run through sets
+- Repeat function
+- Random function
 
 beaglebone/mnt/remote/jp/volleyball_launcher/server/
 npm start
