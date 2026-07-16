@@ -10,8 +10,11 @@ var FINGER_KEYS = ["thumb", "index", "middle", "ring", "pinky"];
 
 $(document).ready(function () {
 	$('#error-box').hide();
+	setupGestureUI();
 	setupServerMessageHandlers(socket);
+});
 
+function setupGestureUI() {
 	$("#startBtn").click(function () {
 		sendCommandToServer("start");
 		appendStatus("Requesting recogniser start...");
@@ -21,53 +24,6 @@ $(document).ready(function () {
 		sendCommandToServer("stop");
 		appendStatus("Requesting recogniser stop...");
 	});
-
-	setupLauncherControls();
-
-	// Pull the current launcher calibration and presets into the UI.
-	sendLauncher("cmd state");
-	sendLauncher("cmd sets");
-});
-
-// ---- Launcher control (calibration / sets / operation / dev) ---------------
-function setupLauncherControls() {
-	$("#calApplyBtn").click(function () {
-		sendLauncher("cmd calibrate net " + $("#calNet").val());
-		sendLauncher("cmd calibrate width " + $("#calWidth").val());
-		sendLauncher("cmd calibrate length " + $("#calLength").val());
-	});
-
-	$("#machineApplyBtn").click(function () {
-		sendLauncher("cmd machine " + $("#machinePos").val());
-		sendLauncher("cmd sets");
-	});
-
-	$("#saveSetBtn").click(function () {
-		sendLauncher("cmd save " + $("#setTarget").val() + " " +
-			$("#setTempo").val() + " " + $("#setSlot").val());
-		sendLauncher("cmd sets");
-	});
-
-	$("#runBtn").click(function () {
-		sendLauncher("cmd run " + $("#runSlot").val());
-	});
-
-	$("#launcherStopBtn").click(function () {
-		sendLauncher("cmd stop");
-	});
-
-	$("#devTiltBtn").click(function () {
-		sendLauncher("cmd tilt " + $("#devTilt").val());
-	});
-
-	$("#devSpeedBtn").click(function () {
-		sendLauncher("cmd speed " + $("#devSpeed").val());
-	});
-}
-
-function sendLauncher(cmd) {
-	socket.emit("launcher-command", cmd);
-	appendStatus("> " + cmd);
 }
 
 function setupServerMessageHandlers(socket) {
@@ -100,37 +56,7 @@ function setupServerMessageHandlers(socket) {
 		renderGesture(null);
 	});
 
-	socket.on('launcher-reply', function (line) {
-		appendStatus(line);
-		if (line.indexOf('set ') === 0) {
-			updatePreset(line);
-		} else if (line.indexOf('state ') === 0) {
-			updateStateFields(line);
-		}
-	});
-
 	socket.on('gesture-error', errorHandler);
-}
-
-// "set <slot> <target> <tempo>" -> update the matching preset card.
-function updatePreset(line) {
-	var p = line.split(/\s+/);
-	if (p.length >= 4) {
-		$("#preset-" + p[1] + " .info").text("target " + p[2] + " / tempo " + p[3]);
-	}
-}
-
-// "state net=.. width=.. length=.. machine=.." -> sync the input fields.
-function updateStateFields(line) {
-	var m = {};
-	line.split(/\s+/).slice(1).forEach(function (kv) {
-		var i = kv.indexOf('=');
-		if (i > 0) { m[kv.slice(0, i)] = kv.slice(i + 1); }
-	});
-	if (m.net != null) { $("#calNet").val(m.net); }
-	if (m.width != null) { $("#calWidth").val(m.width); }
-	if (m.length != null) { $("#calLength").val(m.length); }
-	if (m.machine != null) { $("#machinePos").val(m.machine); }
 }
 
 // ---- Rendering -------------------------------------------------------------

@@ -4,10 +4,12 @@
 	"description": "Web backend for BeagleY-AI MediaPipe hand-gesture control: socket.io UI + UDP relay to the recogniser.",
 	"main": "server.js",
 	"scripts": {
-		"start": "node server.js"
+		"start": "node server.js",
+		"build": "node-gyp rebuild"
 	},
 	"dependencies": {
 		"socket.io": "~2.5",
-		"mime": "~1.6"
+		"mime": "~1.6",
+		"node-addon-api": "^8.0.0"
 	}
 }

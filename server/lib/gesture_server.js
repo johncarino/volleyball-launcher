@@ -18,11 +18,11 @@ var socketio = require('socket.io');
 var dgram    = require('dgram');
 var path     = require('path');
 var spawn    = require('child_process').spawn;
-var launcher = require('./launcher_control');
 
 // ---- Configuration (override via environment variables) -------------------
 var UDP_PORT  = parseInt(process.env.GESTURE_UDP_PORT, 10) || 12345;
 var UDP_HOST  = process.env.GESTURE_UDP_HOST || '127.0.0.1';
+var OPERATION_LAZY_INIT = process.env.OPERATION_LAZY_INIT === '1';
 
 // Path to the compiled MediaPipe recogniser binary and its graph config.
 // On the BeagleY-AI these typically point into your cloned MediaPipe repo,
@@ -32,26 +32,150 @@ var GRAPH_CONFIG  = process.env.GESTURE_GRAPH ||
         path.join(__dirname, '..', '..', 'mediapipe_files', 'hand_tracking_custom.pbtxt');
 var CAMERA_INDEX  = process.env.GESTURE_CAMERA || '0';
 
-// Optional low-latency MJPEG/RTP preview stream of the annotated frames.
-// Set GESTURE_STREAM_HOST to a laptop's IP to watch what the camera sees;
-// leave it unset to disable streaming (no extra cost on the board).
-var STREAM_HOST   = process.env.GESTURE_STREAM_HOST || '';
-var STREAM_PORT   = process.env.GESTURE_STREAM_PORT || '5000';
-
 var io;
 var recognizer = null;   // current child_process, or null
+var operationInitAttempted = false;
+var operationReady = false;
+var currentNetHeight = 2.43;
+var currentCourtLength = 18.0;
+var currentCourtWidth = 9.0;
+// Track saved set data indexed by machinePosition and setIndex
+var savedSets = {};  // savedSets[machinePos + '_' + setIdx] = { launch_speed, tilt_angle, yaw_angle, rpm_output, ... }
+
+// ---- Native wrappers (built by: cd server && npm run build) --------------
+var operation = (function() {
+	try {
+		var m = require('../build/Release/operation_wrapper');
+		console.log('[operation] Native addon loaded.');
+		return m;
+	} catch (e) {
+		console.warn('[operation] Native addon not available (' + e.message + '). Operation calls will be no-ops.');
+		return {
+			operationInit: function(){},
+			operationCleanup: function(){},
+			homingSequence: function(){},
+			tiltSignal: function(){},
+			speedSignal: function(){},
+			getTachReading: function(){ return 0; },
+			syncSet: function(){},
+			setMachine: function(){},
+			hopperStart: function(){},
+			hopperStop: function(){},
+			hopperPulse: function(){},
+			resumeMachine: function(){},
+			pauseMachine: function(){}
+		};
+	}
+}());
+
+var setApi = (function() {
+	try {
+		var m = require('../build/Release/set_wrapper');
+		console.log('[set] Native addon loaded.');
+		return m;
+	} catch (e) {
+		console.warn('[set] Native addon not available (' + e.message + '). Set calls will be no-ops.');
+		return { saveSet: function(){} };
+	}
+}());
+
+var calibration = (function() {
+	try {
+		var m = require('../build/Release/calibration_wrapper');
+		console.log('[calibration] Native addon loaded.');
+		return m;
+	} catch (e) {
+		console.warn('[calibration] Native addon not available (' + e.message + '). Calibration calls will be no-ops.');
+		return {
+			setNetHeight: function(){},
+			setCourtDimensions: function(){},
+			setCourtLength: function(){},
+			setCourtWidth: function(){},
+			defaultCalibration: function(){}
+		};
+	}
+}());
 
 exports.listen = function(server) {
 	io = socketio.listen(server);
 	io.set('log level', 1);
 
 	startUdpReceiver();
-	launcher.init(io);
 
 	io.sockets.on('connection', function(socket) {
 		handleCommand(socket);
+
+		socket.on('advanced-enter', function() {
+			initOperation(socket, 'advanced-enter');
+		});
+
+		socket.on('advanced-leave', function() {
+			cleanupOperation(socket, 'advanced-leave');
+		});
 	});
 };
+
+function ensureOperationReady(socket, commandName) {
+	if (operationReady) {
+		return true;
+	}
+
+	if (OPERATION_LAZY_INIT && operationInitAttempted) {
+		if (socket) socket.emit('machine-error', 'Operation mode is unavailable.');
+		console.log('[operation] Command blocked (' + commandName + '): operation mode unavailable.');
+		return false;
+	}
+
+	return initOperation(socket, commandName);
+}
+
+function initOperation(socket, reason) {
+	if (operationReady) {
+		if (socket) socket.emit('operation-state', 'READY');
+		return true;
+	}
+
+	if (operationInitAttempted) {
+		if (socket) socket.emit('operation-state', 'INITIALIZING');
+		return false;
+	}
+
+	operationInitAttempted = true;
+	try {
+		console.log('[operation] initOperation requested (' + reason + ').');
+		operation.operationInit();
+		operationReady = true;
+		console.log('[operation] operationInit complete (' + reason + ').');
+		if (socket) socket.emit('operation-state', 'READY');
+		return true;
+	} catch (e) {
+		operationReady = false;
+		console.log('[operation] operationInit failed: ' + e.message);
+		if (socket) socket.emit('machine-error', 'Failed to initialize operation mode.');
+		return false;
+	}
+}
+
+function cleanupOperation(socket, reason) {
+	if (!operationReady && !operationInitAttempted) {
+		if (socket) socket.emit('operation-state', 'IDLE');
+		return true;
+	}
+
+	try {
+		if (operationReady) {
+			operation.operationCleanup();
+		}
+		console.log('[operation] operationCleanup complete (' + reason + ').');
+	} catch (e) {
+		console.log('[operation] operationCleanup failed: ' + e.message);
+	} finally {
+		operationReady = false;
+		operationInitAttempted = false;
+		if (socket) socket.emit('operation-state', 'IDLE');
+	}
+	return true;
+}
 
 // ---- Browser command handling ---------------------------------------------
 function handleCommand(socket) {
@@ -67,8 +191,215 @@ function handleCommand(socket) {
 		stopRecognizer(socket);
 	});
 
-	// Bridge launcher control commands (calibration, sets, operation, dev).
-	launcher.handle(socket);
+	socket.on('page-loaded', function() {
+		console.log("Got page-loaded event. Applying default calibration.");
+		try {
+			calibration.defaultCalibration();
+			currentNetHeight = 2.43;
+			currentCourtLength = 18.0;
+			currentCourtWidth = 9.0;
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+			socket.emit('calibration-state', 'DEFAULT_APPLIED');
+		} catch (e) {
+			console.log('[calibration] defaultCalibration failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to apply default calibration.');
+		}
+	});
+
+	socket.on('setNetHeight', function(value) {
+		console.log("Got setNetHeight command: " + value);
+		try {
+			var netHeight = parseFloat(value);
+			calibration.setNetHeight(netHeight);
+			currentNetHeight = netHeight;
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+		} catch (e) {
+			console.log('[calibration] setNetHeight failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to set net height.');
+		}
+	});
+
+	socket.on('setCourtLength', function(value) {
+		console.log("Got setCourtLength command: " + value);
+		try {
+			var courtLength = parseFloat(value);
+			calibration.setCourtLength(courtLength);
+			currentCourtLength = courtLength;
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+		} catch (e) {
+			console.log('[calibration] setCourtLength failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to set court length.');
+		}
+	});
+
+	socket.on('setCourtWidth', function(value) {
+		console.log("Got setCourtWidth command: " + value);
+		try {
+			var courtWidth = parseFloat(value);
+			calibration.setCourtWidth(courtWidth);
+			currentCourtWidth = courtWidth;
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+		} catch (e) {
+			console.log('[calibration] setCourtWidth failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to set court width.');
+		}
+	});
+
+	socket.on('saveSet', function(payload) {
+		console.log('Got saveSet command:', payload);
+		try {
+			if (!payload || typeof payload !== 'object') {
+				throw new Error('Invalid payload');
+			}
+
+			var setIndex = parseInt(payload.setIndex, 10);
+			var machinePosition = parseInt(payload.machinePosition, 10);
+			var targetLocation = parseInt(payload.targetLocation, 10);
+			var tempo = parseInt(payload.tempo, 10);
+
+			if (Number.isNaN(setIndex) || Number.isNaN(machinePosition) ||
+				Number.isNaN(targetLocation) || Number.isNaN(tempo)) {
+				throw new Error('saveSet payload contains non-numeric fields');
+			}
+
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+
+			// saveSet now returns the saved set data or null if save failed
+			var setData = setApi.saveSet(setIndex, machinePosition, targetLocation, tempo);
+			
+			if (setData) {
+				// Store the set data for later use by setMachine
+				var key = machinePosition + '_' + setIndex;
+				savedSets[key] = setData;
+				socket.emit('set-save-state', 'SAVED');
+			} else {
+				throw new Error('saveSet returned no data (validation may have failed)');
+			}
+		} catch (e) {
+			console.log('[set] saveSet failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to save set slot.');
+		}
+	});
+
+	socket.on('setMachine', function(payload) {
+		console.log('Got setMachine command:', payload);
+		try {
+			if (!payload || typeof payload !== 'object') {
+				throw new Error('Invalid payload');
+			}
+
+			var setIndex = parseInt(payload.setIndex, 10);
+			var machinePosition = parseInt(payload.machinePosition, 10);
+
+			if (Number.isNaN(setIndex) || Number.isNaN(machinePosition)) {
+				throw new Error('setMachine payload contains non-numeric fields');
+			}
+
+			if (typeof operation.syncSet !== 'function') {
+				throw new Error('syncSet is not available in the operation addon');
+			}
+
+			if (typeof operation.setMachine !== 'function') {
+				throw new Error('setMachine is not available in the operation addon');
+			}
+
+			if (!ensureOperationReady(socket, 'setMachine')) return;
+			
+			// Look up the saved set data
+			var key = machinePosition + '_' + setIndex;
+			var setData = savedSets[key];
+			
+			if (!setData) {
+				throw new Error('No saved set data for machine ' + machinePosition + ' set ' + setIndex);
+			}
+			
+			// Sync the set data to operation_wrapper before calling setMachine
+			operation.syncSet(
+				machinePosition,
+				setIndex,
+				setData.launch_speed,
+				setData.tilt_angle,
+				setData.yaw_angle,
+				setData.rpm_output,
+				setData.target_location,
+				setData.tempo
+			);
+			
+			// Now call setMachine to apply it
+			operation.setMachine(machinePosition, setIndex);
+			socket.emit('set-machine-state', 'APPLIED');
+		} catch (e) {
+			console.log('[operation] setMachine failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to apply set machine.');
+		}
+	});
+
+	socket.on('setSpeed', function(value) {
+		if (!ensureOperationReady(socket, 'setSpeed')) return;
+		console.log("Got setSpeed command: " + value);
+		operation.speedSignal(value);
+	});
+
+	socket.on('setAngle', function(value) {
+		if (!ensureOperationReady(socket, 'setAngle')) return;
+		console.log("Got setAngle command: " + value);
+		console.log('[operation] forwarding setAngle to native tiltSignal.');
+		operation.tiltSignal(value);
+	});
+
+	socket.on('stopMotors', function() {
+		if (!ensureOperationReady(socket, 'stopMotors')) return;
+		console.log("Got stopMotors command.");
+		operation.pauseMachine();
+	});
+
+	socket.on('resumeMotors', function() {
+		if (!ensureOperationReady(socket, 'resumeMotors')) return;
+		console.log("Got resumeMotors command.");
+		operation.resumeMachine();
+	});
+
+	socket.on('hopper-on', function() {
+		if (!ensureOperationReady(socket, 'hopper-on')) return;
+		console.log("Got hopper-on command.");
+		operation.hopperStart();
+	});
+
+	socket.on('hopper-off', function() {
+		if (!ensureOperationReady(socket, 'hopper-off')) return;
+		console.log("Got hopper-off command.");
+		operation.hopperStop();
+	});
+
+	socket.on('hopper-pulse', function() {
+		if (!ensureOperationReady(socket, 'hopper-pulse')) return;
+		console.log("Got hopper-pulse command.");
+		operation.hopperPulse();
+	});
+
+	socket.on('requestTelemetry', function() {
+		if (!ensureOperationReady(socket, 'requestTelemetry')) return;
+		try {
+			var rpm = 0;
+			if (typeof operation.getTachReading === 'function') {
+				rpm = parseInt(operation.getTachReading(), 10) || 0;
+			}
+			socket.emit('telemetry-update', { rpm: rpm });
+		} catch (e) {
+			console.log('[operation] requestTelemetry failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to get telemetry.');
+		}
+	});
 
 	// Report current state to a freshly-connected browser.
 	socket.emit('state-reply', recognizer ? 'RUNNING' : 'IDLE');
@@ -86,12 +417,6 @@ function startRecognizer(socket) {
 		'--udp_host=' + UDP_HOST,
 		'--udp_port=' + UDP_PORT
 	];
-
-	// Enable the live preview stream only when a destination host is configured.
-	if (STREAM_HOST) {
-		args.push('--stream_host=' + STREAM_HOST);
-		args.push('--stream_port=' + STREAM_PORT);
-	}
 
 	console.log("Spawning recogniser: " + M2DEMO_BIN + " " + args.join(' '));
 
@@ -184,7 +509,16 @@ function shutdownRecognizer() {
 		recognizer.kill('SIGTERM');
 		recognizer = null;
 	}
-	launcher.shutdown();
+
+	if (operationReady) {
+		try {
+			operation.operationCleanup();
+			console.log('[operation] operationCleanup complete.');
+		} catch (e) {
+			console.log('[operation] operationCleanup failed: ' + e.message);
+		}
+		operationReady = false;
+	}
 }
 process.on('exit', shutdownRecognizer);
 process.on('SIGINT', function() { shutdownRecognizer(); process.exit(0); });
