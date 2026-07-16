@@ -7,6 +7,7 @@
 - Run through sets
 - Repeat function
 - Random function
+- Change to 5 set locations
 
 beaglebone/mnt/remote/jp/volleyball_launcher/server/
 npm start
