@@ -5,7 +5,7 @@ PRIORITY
 - Accessable from another device
 
 SECONDARY
-- Make the graphic more pretty
+- Make the graphic more pretty (machine figure, volleyball images, flash the selectable images)
 - When the middle machine position, selecting one set direction, the other side disappears
 - Block continue button until set selected
 
