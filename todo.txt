@@ -1,15 +1,23 @@
-- Move JS to separate file
-- in launch mode, the back button may be too small, a little unintuitive perhaps
-- further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
-- Remove old-old-index.html, old stylesheets
-- Make it so selection instructions are not repeated every time
-- Block continue button until set selected
+PRIORITY
 - Run through sets
 - Repeat function
 - Random function
-- Change to 5 set locations(?)
 - Accessable from another device
+
+SECONDARY
 - Make the graphic more pretty
+- When the middle machine position, selecting one set direction, the other side disappears
+- Block continue button until set selected
+
+CONSIDERATION
+- in launch mode, the back button may be too small, a little unintuitive perhaps
+- Change to 5 set locations(?)
+- further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
+
+CLEANUP
+- Remove old-old-index.html, old stylesheets
+- Make it so selection instructions are not repeated every time
+- Move JS to separate file
 
 beaglebone/mnt/remote/jp/volleyball_launcher/server/
 npm start
