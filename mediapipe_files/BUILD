@@ -48,3 +48,9 @@ cc_binary(
         "@com_google_absl//absl/log:absl_log",
     ],
 )
+
+# NOTE: camera_test.cpp is intentionally NOT a Bazel target. It is a standalone,
+# dependency-light OpenCV program meant to be compiled natively on the board:
+#   g++ -O2 camera_test.cpp -o camera_test $(pkg-config --cflags --libs opencv4)
+# (or via `make camera-test`). It deliberately avoids MediaPipe/Bazel so the
+# camera path can be verified without a cross-toolchain or a full MediaPipe build.

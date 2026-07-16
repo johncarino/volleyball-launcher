@@ -18,6 +18,7 @@ var socketio = require('socket.io');
 var dgram    = require('dgram');
 var path     = require('path');
 var spawn    = require('child_process').spawn;
+var launcher = require('./launcher_control');
 
 // ---- Configuration (override via environment variables) -------------------
 var UDP_PORT  = parseInt(process.env.GESTURE_UDP_PORT, 10) || 12345;
@@ -31,6 +32,12 @@ var GRAPH_CONFIG  = process.env.GESTURE_GRAPH ||
         path.join(__dirname, '..', '..', 'mediapipe_files', 'hand_tracking_custom.pbtxt');
 var CAMERA_INDEX  = process.env.GESTURE_CAMERA || '0';
 
+// Optional low-latency MJPEG/RTP preview stream of the annotated frames.
+// Set GESTURE_STREAM_HOST to a laptop's IP to watch what the camera sees;
+// leave it unset to disable streaming (no extra cost on the board).
+var STREAM_HOST   = process.env.GESTURE_STREAM_HOST || '';
+var STREAM_PORT   = process.env.GESTURE_STREAM_PORT || '5000';
+
 var io;
 var recognizer = null;   // current child_process, or null
 
@@ -39,6 +46,7 @@ exports.listen = function(server) {
 	io.set('log level', 1);
 
 	startUdpReceiver();
+	launcher.init(io);
 
 	io.sockets.on('connection', function(socket) {
 		handleCommand(socket);
@@ -59,20 +67,8 @@ function handleCommand(socket) {
 		stopRecognizer(socket);
 	});
 
-	socket.on('setSpeed', function(speed) {
-		console.log("Got setSpeed command: " + speed);
-		// TODO: Add logic here to send this value to your launcher hardware (e.g., via UDP or Serial)
-	});
-
-	socket.on('setAngle', function(angle) {
-		console.log("Got setAngle command: " + angle);
-		// TODO: Add logic here to send this value to your launcher hardware
-	});
-
-	socket.on('stopMotors', function() {
-		console.log("Got stopMotors command.");
-		// TODO: Add logic here to emergency stop the launcher motors
-	});
+	// Bridge launcher control commands (calibration, sets, operation, dev).
+	launcher.handle(socket);
 
 	// Report current state to a freshly-connected browser.
 	socket.emit('state-reply', recognizer ? 'RUNNING' : 'IDLE');
@@ -90,6 +86,12 @@ function startRecognizer(socket) {
 		'--udp_host=' + UDP_HOST,
 		'--udp_port=' + UDP_PORT
 	];
+
+	// Enable the live preview stream only when a destination host is configured.
+	if (STREAM_HOST) {
+		args.push('--stream_host=' + STREAM_HOST);
+		args.push('--stream_port=' + STREAM_PORT);
+	}
 
 	console.log("Spawning recogniser: " + M2DEMO_BIN + " " + args.join(' '));
 
@@ -182,6 +184,7 @@ function shutdownRecognizer() {
 		recognizer.kill('SIGTERM');
 		recognizer = null;
 	}
+	launcher.shutdown();
 }
 process.on('exit', shutdownRecognizer);
 process.on('SIGINT', function() { shutdownRecognizer(); process.exit(0); });

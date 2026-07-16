@@ -22,12 +22,21 @@ Camera ──OpenCV──► m2demo ──UDP 12345──► Node (gesture_serve
 The recogniser and the web app are decoupled by the UDP protocol, so you can test
 the entire web stack **without a camera** using the included fake source.
 
+> **Important — the `mediapipe/` folder is NOT part of this repository.**
+> It is an external checkout of upstream
+> [google-ai-edge/mediapipe](https://github.com/google-ai-edge/mediapipe) (~85 MB)
+> and is deliberately **git-ignored** (see [.gitignore](.gitignore)). On the
+> **BeagleY-AI it already exists**, so nothing extra is needed there. On any other
+> machine you must clone it yourself and copy the canonical `mediapipe_files/`
+> sources into it before building — see **Building the real recogniser** below.
+
 ---
 
 ## Repository layout
 
 ```
-mediapipe_files/                 # Copy into a cloned MediaPipe repo to build
+mediapipe/                       # EXTERNAL upstream MediaPipe checkout — git-ignored, NOT in this repo
+mediapipe_files/                 # Copy into the cloned MediaPipe repo to build
   BUILD                          #   Bazel target //mediapipe/mediapipe_files:m2demo
   hand_tracking_custom.pbtxt     #   MediaPipe graph (num_hands=1, CPU)
   hand_recognition.h / .cpp      #   21 landmarks -> fingers-up + named gesture
@@ -53,6 +62,70 @@ e.g.    gesture 2 0 1 1 0 0 PEACE
 Each finger is `1` (up) or `0` (down). `NAME` is one of
 `FIST, OPEN_PALM, POINT, PEACE, THUMBS_UP, CALL_ME, FOUR, ROCK, GUN, HORNS,
 UNKNOWN, NONE`.
+
+---
+
+## Prerequisites (install these first)
+
+This project has two independent toolchains: **Node.js** for the web app, and
+**Bazel + a full C++/Python/Java toolchain** for the MediaPipe recogniser. The
+MediaPipe build is strict — it builds most of its dependencies (TensorFlow,
+Abseil, protobuf, ...) from source, so every piece of the toolchain must be
+present or the build fails partway through. Examples below are for
+Debian/Ubuntu (`apt`); adjust for your distro.
+
+### For the web app only (`server/`)
+
+```bash
+sudo apt update && sudo apt install -y nodejs npm gcc
+node --version    # v16+ recommended
+```
+
+That's all you need to run the UI with the fake gesture source — no camera, no
+MediaPipe, no Bazel.
+
+### For building the recogniser (`m2demo`)
+
+| Tool | Why it's needed | Install |
+|------|-----------------|---------|
+| **Bazelisk** (provides Bazel) | MediaPipe pins an exact Bazel version in `.bazelversion` (7.4.1). Bazelisk auto-fetches it. | see below |
+| **C++ toolchain** | Compiles MediaPipe/TensorFlow C++. Missing `g++` shows up as `cannot execute 'cc1plus'`. | `sudo apt install -y build-essential g++` |
+| **A JDK** | Parts of the graph (protobuf codegen) build with Java. Missing it shows up as `rules_java~//tools/jdk` errors. | `sudo apt install -y default-jdk` |
+| **OpenCV dev headers** | `m2demo` captures/encodes frames with OpenCV. Missing it shows up as `opencv2/core/version.hpp: No such file`. | `sudo apt install -y libopencv-dev` |
+| **Python 3.9–3.12** | TensorFlow's hermetic Python picks dependency versions. Python 3.13+ is not yet supported and errors out. | usually present; else `sudo apt install -y python3` |
+
+Install Bazelisk as `bazel` (the host is x86_64, so use the `amd64` build even
+though you cross-compile *for* aarch64):
+
+```bash
+sudo curl -fsSL -o /usr/local/bin/bazel \
+  https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+sudo chmod +x /usr/local/bin/bazel
+bazel version     # first run downloads the pinned Bazel (7.4.1)
+```
+
+### Required `.bazelrc` settings
+
+Two classes of error (Python version, Java toolchain) are fixed by pinning them
+in MediaPipe's `.bazelrc`. After cloning MediaPipe (see below), append:
+
+```bash
+cat >> mediapipe/.bazelrc <<'EOF'
+build --java_language_version=17
+build --java_runtime_version=remotejdk_17
+build --tool_java_runtime_version=remotejdk_17
+build --repo_env=HERMETIC_PYTHON_VERSION=3.11
+EOF
+```
+
+- `remotejdk_17` makes Bazel download its own JDK 17, independent of the system
+  one (the `default-jdk` above just satisfies autodetection).
+- `HERMETIC_PYTHON_VERSION=3.11` forces a supported Python (avoids the 3.13
+  error). 3.10/3.12 also work.
+
+> If you ever hit a corrupted-repo error like
+> `no such package '@@rules_java~//tools/jdk'` (often after an interrupted
+> download), clear the cache and rebuild: `bazel clean --expunge`.
 
 ---
 
@@ -95,16 +168,28 @@ see data; Start/Stop control the real `m2demo` binary.)
    git clone https://github.com/google-ai-edge/mediapipe.git
    cp -r mediapipe_files mediapipe/mediapipe/mediapipe_files
    ```
+   Then add the required `.bazelrc` settings (see **Prerequisites** above):
+   ```bash
+   cat >> mediapipe/.bazelrc <<'EOF'
+   build --java_language_version=17
+   build --java_runtime_version=remotejdk_17
+   build --tool_java_runtime_version=remotejdk_17
+   build --repo_env=HERMETIC_PYTHON_VERSION=3.11
+   EOF
+   ```
 
 3. **Build (CPU only).** Native build on the board, or cross-compile for aarch64:
    ```bash
    cd mediapipe
-   bazel build -c opt \
-     --define MEDIAPIPE_DISABLE_GPU=1 \
-     //mediapipe/mediapipe_files:m2demo
+   bazel build -c opt --define MEDIAPIPE_DISABLE_GPU=1 //mediapipe/mediapipe_files:m2demo
    # cross-compile: add your aarch64 toolchain, e.g. --config=elinux_aarch64
    ```
-   The resulting binary is `bazel-bin/mediapipe/mediapipe_files/m2demo`.
+   The first build downloads and compiles all dependencies (TensorFlow, etc.) and
+   takes a while; later builds are fast. The resulting binary is at
+   `bazel-bin/mediapipe/mediapipe_files/m2demo`.
+   > `bazel-bin` is a symlink created by the last build; `-c opt` outputs under
+   > `bazel-out/k8-opt/bin`. If `bazel info bazel-bin` disagrees with the symlink,
+   > pass the matching config: `bazel info bazel-bin -c opt`.
 
 4. **Run it manually (optional):**
    ```bash
@@ -112,6 +197,7 @@ see data; Start/Stop control the real `m2demo` binary.)
      --calculator_graph_config_file=mediapipe/mediapipe_files/hand_tracking_custom.pbtxt \
      --camera_index=0 --udp_port=12345
    ```
+   No camera? Use a video file instead: `--input_video_path=test.mp4`.
 
 ## Wiring m2demo to the web app
 

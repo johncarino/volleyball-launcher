@@ -5,6 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BeagleY-AI Gesture Control</title>
+  <link rel="stylesheet" href="stylesheets/style.css" />
   <style>
     :root {
       --bg: #0f1220;
@@ -30,47 +31,7 @@
         var(--bg);
     }
 
-    .wrap {
-      max-width: 880px;
-      margin: 0 auto;
-      padding: 28px 18px 60px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .page-nav {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 18px;
-      justify-content: center;
-      width: 100%;
-    }
-
-    .page-btn {
-      flex: 0 0 auto;
-      min-width: 120px;
-    }
-
-    .page-btn.active {
-      border-color: var(--accent);
-      background: rgba(110, 231, 183, 0.16);
-      color: #d1fae5;
-    }
-
-    .page {
-      display: none;
-      animation: pageFade 0.2s ease;
-      width: 100%;
-      text-align: center;
-    }
-
-    .page.active { display: block; }
-
-    @keyframes pageFade {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 28px 18px 60px; }
 
     header h1 { margin: 0 0 4px; font-size: 1.6rem; }
     header p { margin: 0 0 22px; color: var(--muted); }
@@ -82,129 +43,9 @@
       padding: 20px;
       backdrop-filter: blur(8px);
       margin-bottom: 18px;
-      width: 100%;
     }
 
-    .slider-grid {
-      display: flex;
-      gap: 16px;
-      justify-content: center;
-      align-items: stretch;
-      flex-wrap: nowrap;
-    }
-
-    .machine-actions {
-      margin-top: 18px;
-      display: flex;
-      justify-content: center;
-    }
-
-    .machine-stop-btn {
-      border-color: rgba(248, 113, 113, 0.75);
-      background: rgba(248, 113, 113, 0.18);
-      color: #fecaca;
-      min-width: 180px;
-    }
-
-    .machine-stop-btn:hover {
-      background: rgba(248, 113, 113, 0.26);
-    }
-
-    .slider-card {
-      flex: 1 1 0;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      padding: 16px 12px;
-      border-radius: 14px;
-      border: 1px solid var(--panel-border);
-      background: rgba(255, 255, 255, 0.04);
-    }
-
-    .slider-card label {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .slider-value {
-      font-size: 0.9rem;
-      color: var(--muted);
-    }
-
-    .vertical-slider-wrap {
-      height: 260px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .vertical-slider {
-      appearance: slider-vertical;
-      writing-mode: vertical-lr;
-      direction: rtl;
-      width: 44px;
-      margin: 0;
-      background: transparent;
-      accent-color: var(--accent);
-      touch-action: pan-y;
-    }
-
-    .vertical-slider:focus {
-      outline: none;
-    }
-
-    .vertical-slider::-webkit-slider-runnable-track {
-      width: 44px;
-    }
-
-    .vertical-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 0;
-      height: 0;
-      border: 0;
-      background: transparent;
-      box-shadow: none;
-      opacity: 0;
-    }
-
-    .vertical-slider::-moz-range-thumb {
-      width: 0;
-      height: 0;
-      border: 0;
-      background: transparent;
-      box-shadow: none;
-      opacity: 0;
-    }
-
-    @media (max-width: 520px) {
-      .slider-grid {
-        gap: 12px;
-      }
-
-      .slider-card {
-        padding: 14px 10px;
-      }
-
-      .vertical-slider-wrap {
-        height: 240px;
-      }
-
-      .vertical-slider {
-        height: 220px;
-      }
-    }
-
-    .row {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-    }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 
     button {
       cursor: pointer;
@@ -224,6 +65,7 @@
     #stopBtn { border-color: rgba(248, 113, 113, 0.5); }
 
     .pill {
+      margin-left: auto;
       padding: 6px 14px;
       border-radius: 999px;
       font-size: 0.85rem;
@@ -276,7 +118,6 @@
       max-height: 160px;
       overflow-y: auto;
       margin: 0;
-      text-align: left;
     }
 
     #error-box {
@@ -289,114 +130,165 @@
     }
 
     h2 { font-size: 1rem; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+
+    input, select {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+      width: 110px;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 0.8rem; }
+    button.small { padding: 10px 16px; font-size: 0.9rem; }
+    #launcherStopBtn { border-color: rgba(248, 113, 113, 0.5); }
+
+    .presets {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .preset {
+      text-align: center;
+      padding: 12px 8px;
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .preset .slot { font-size: 0.75rem; color: var(--muted); }
+    .preset .info { font-weight: 700; margin-top: 6px; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <nav class="page-nav" aria-label="Page navigation">
-      <button class="page-btn active" type="button" data-page-target="page-main">Gesture Control</button>
-      <button class="page-btn" type="button" data-page-target="page-two">Machine Control</button>
-    </nav>
+    <header>
+      <h1>BeagleY-AI Gesture Control</h1>
+      <p>MediaPipe hand tracking &rarr; UDP &rarr; live web readout</p>
+    </header>
 
     <div id="error-box">
       <strong>Error:</strong> <span id="error-text"></span>
     </div>
 
-    <section class="page active" id="page-main" data-page="main">
-      <header>
-        <h1>BeagleY-AI Gesture Control</h1>
-        <p>MediaPipe hand tracking &rarr; UDP &rarr; live web readout</p>
-      </header>
+    <div class="panel">
+      <div class="row">
+        <button id="startBtn">Start</button>
+        <button id="stopBtn" disabled>Stop</button>
+        <span class="pill" id="statePill">Idle</span>
+        <span style="display:none" id="stateid">Idle</span>
+      </div>
+    </div>
 
-      <div class="panel">
-        <div class="row">
-          <button id="startBtn">Start</button>
-          <button id="stopBtn" disabled>Stop</button>
-          <span class="pill" id="statePill">Idle</span>
-          <span style="display:none" id="stateid">Idle</span>
+    <div class="panel">
+      <div class="gesture-name" id="gestureName">NONE</div>
+      <div class="finger-count">Fingers up: <span id="fingerCount">0</span></div>
+      <div class="fingers">
+        <div class="finger down" id="finger-thumb">
+          <div class="finger-name">Thumb</div><div class="finger-state">down</div>
+        </div>
+        <div class="finger down" id="finger-index">
+          <div class="finger-name">Index</div><div class="finger-state">down</div>
+        </div>
+        <div class="finger down" id="finger-middle">
+          <div class="finger-name">Middle</div><div class="finger-state">down</div>
+        </div>
+        <div class="finger down" id="finger-ring">
+          <div class="finger-name">Ring</div><div class="finger-state">down</div>
+        </div>
+        <div class="finger down" id="finger-pinky">
+          <div class="finger-name">Pinky</div><div class="finger-state">down</div>
         </div>
       </div>
+    </div>
 
-      <div class="panel">
-        <div class="gesture-name" id="gestureName">NONE</div>
-        <div class="finger-count">Fingers up: <span id="fingerCount">0</span></div>
-        <div class="fingers">
-          <div class="finger down" id="finger-thumb">
-            <div class="finger-name">Thumb</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-index">
-            <div class="finger-name">Index</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-middle">
-            <div class="finger-name">Middle</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-ring">
-            <div class="finger-name">Ring</div><div class="finger-state">down</div>
-          </div>
-          <div class="finger down" id="finger-pinky">
-            <div class="finger-name">Pinky</div><div class="finger-state">down</div>
-          </div>
-        </div>
+    <div class="panel">
+      <h2>Calibration</h2>
+      <div class="row">
+        <label class="field">Net height (m)
+          <input type="number" id="calNet" step="0.01" min="2.0" max="3.0" value="2.43" />
+        </label>
+        <label class="field">Court width (m)
+          <input type="number" id="calWidth" step="0.1" min="5.0" max="20.0" value="9.0" />
+        </label>
+        <label class="field">Court length (m)
+          <input type="number" id="calLength" step="0.1" min="10.0" max="30.0" value="18.0" />
+        </label>
+        <button class="small" id="calApplyBtn">Apply calibration</button>
       </div>
+    </div>
 
-      <div class="panel">
-        <h2>Status log</h2>
-        <pre id="status"></pre>
+    <div class="panel">
+      <h2>Machine position &amp; presets</h2>
+      <div class="row">
+        <label class="field">Machine position
+          <select id="machinePos">
+            <option value="0">Left</option>
+            <option value="1" selected>Center</option>
+            <option value="2">Right</option>
+          </select>
+        </label>
+        <button class="small" id="machineApplyBtn">Set position (rebuild presets)</button>
       </div>
-    </section>
-
-    <section class="page" id="page-two" data-page="two">
-      <header>
-        <h1>Machine Control</h1>
-        <p>Adjust the motor controls below.</p>
-      </header>
-
-      <div class="panel">
-        <div class="slider-grid">
-          <div class="slider-card">
-            <label for="speedSlider">Speed</label>
-            <div class="slider-value"><span id="speedValue">0</span>%</div>
-            <div class="vertical-slider-wrap">
-              <input
-                id="speedSlider"
-                class="vertical-slider"
-                type="range"
-                min="0"
-                max="100"
-                value="0"
-                aria-label="Speed"
-              />
-            </div>
-          </div>
-
-          <div class="slider-card">
-            <label for="angleSlider">Angle</label>
-            <div class="slider-value"><span id="angleValue">0</span>&deg;</div>
-            <div class="vertical-slider-wrap">
-              <input
-                id="angleSlider"
-                class="vertical-slider"
-                type="range"
-                min="0"
-                max="90"
-                value="0"
-                aria-label="Angle"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="machine-actions">
-          <button id="machineStopBtn" class="machine-stop-btn" type="button">Stop Motors</button>
-        </div>
+      <div class="row" style="margin-top:14px;">
+        <label class="field">Target (1-5)
+          <input type="number" id="setTarget" min="1" max="5" value="3" />
+        </label>
+        <label class="field">Tempo (1-4)
+          <input type="number" id="setTempo" min="1" max="4" value="2" />
+        </label>
+        <label class="field">Slot (0-3)
+          <input type="number" id="setSlot" min="0" max="3" value="0" />
+        </label>
+        <button class="small" id="saveSetBtn">Save preset</button>
       </div>
-    </section>
+      <div class="presets" id="presets">
+        <div class="preset" id="preset-0"><div class="slot">Slot 0</div><div class="info">&mdash;</div></div>
+        <div class="preset" id="preset-1"><div class="slot">Slot 1</div><div class="info">&mdash;</div></div>
+        <div class="preset" id="preset-2"><div class="slot">Slot 2</div><div class="info">&mdash;</div></div>
+        <div class="preset" id="preset-3"><div class="slot">Slot 3</div><div class="info">&mdash;</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Operation</h2>
+      <div class="row">
+        <label class="field">Preset slot
+          <select id="runSlot">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+        <button class="small" id="runBtn">Run preset</button>
+        <button class="small" id="launcherStopBtn">Stop motors</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Developer (manual control)</h2>
+      <div class="row">
+        <label class="field">Tilt (deg, 9-81)
+          <input type="number" id="devTilt" step="1" min="9" max="81" value="9" />
+        </label>
+        <button class="small" id="devTiltBtn">Set tilt</button>
+        <label class="field">Speed (rpm, 0-1200)
+          <input type="number" id="devSpeed" step="10" min="0" max="1200" value="0" />
+        </label>
+        <button class="small" id="devSpeedBtn">Set speed</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Status log</h2>
+      <pre id="status"></pre>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://code.jquery.com/jquery-1.11.1.min.js"></script>
-  <script src="javascripts/page_control.js"></script>
-  <script src="javascripts/machine_control.js"></script>
   <script src="javascripts/gesture_ui.js"></script>
 </body>
 </html>
