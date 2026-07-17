@@ -1,5 +1,5 @@
 PRIORITY
-- Accessable from another device
+- Accessable from beaglebone
 
 SECONDARY
 - Make the graphic more pretty (machine figure, volleyball images, flash the selectable images)
