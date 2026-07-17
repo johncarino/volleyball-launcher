@@ -20,12 +20,13 @@
   </div>
   -->
   <div class="topbar" id="topbar">
-    <h1 id="page-title">Configure</h1>
-  </div>
-
-  <div class="modenav" id="modenav" role="tablist" aria-label="Modes" style="display:none">
-    <button class="modetab" role="tab" data-mode="launch">Launch</button>
-    <button class="modetab" role="tab" data-mode="advanced">Advanced</button>
+    <div class="topbar-left" id="topbar-left">
+      <h1 id="page-title">Configure</h1>
+    </div>
+    <div class="modenav" id="modenav" role="tablist" aria-label="Modes" style="display:none">
+      <button class="modetab" role="tab" data-mode="launch">Launch</button>
+      <button class="modetab" role="tab" data-mode="advanced">Advanced</button>
+    </div>
   </div>
 
   <div class="content" id="main-content"></div>
@@ -792,8 +793,8 @@ function toggleLaunch(btn) {
 function goToLaunch() {
   clearInterval(window._telem);
   document.getElementById('modenav').style.display = 'flex';
-  const topbar = document.getElementById('topbar');
-  topbar.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button><h1 id="page-title">Launch</h1>`;
+  const topbarLeft = document.getElementById('topbar-left');
+  topbarLeft.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button><h1 id="page-title">Launch</h1>`;
   setMode('launch');
 }
 
@@ -805,8 +806,8 @@ function goBack() {
   }
   window._activeMode = null;
   document.getElementById('modenav').style.display = 'none';
-  const topbar = document.getElementById('topbar');
-  topbar.innerHTML = `<h1 id="page-title">Configure</h1>`;
+  const topbarLeft = document.getElementById('topbar-left');
+  topbarLeft.innerHTML = `<h1 id="page-title">Configure</h1>`;
   document.getElementById('main-content').innerHTML = screens.configure();
 
   const appEl = document.querySelector('.app');
