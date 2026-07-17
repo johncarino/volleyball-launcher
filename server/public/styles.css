@@ -194,6 +194,8 @@ body {
 .slot-name.empty-name { color: var(--text-tertiary); }
 .slot.slot-active { border-color: var(--blue); background: rgba(24,95,165,0.1); }
 .slot.slot-disabled { cursor: default; opacity: 0.6; pointer-events: none; }
+.slot.slot-enabled { border-color: var(--green); background: rgba(26,122,58,0.08); }
+.slot-enabled-badge { color: var(--green); font-size: 9px; }
 .slot-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 3px; }
 .slot.locked-out { opacity: 0.4; pointer-events: none; cursor: default; }
 
@@ -309,12 +311,6 @@ input[type=range] { accent-color: var(--blue); }
 .pb-btn.active .pb-btn-icon { color: var(--blue); border-color: var(--blue); background: rgba(24,95,165,0.08); }
 .pb-btn-label { font-size: 11px; color: var(--text-tertiary); transition: color 0.15s; }
 .pb-btn.active .pb-btn-label { color: var(--blue); }
-.pb-dot {
-  width: 4px; height: 4px; border-radius: 50%; background: var(--blue);
-  position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%);
-  opacity: 0; transition: opacity 0.15s;
-}
-.pb-btn.active .pb-dot { opacity: 1; }
 .repeat-badge {
   position: absolute; top: -3px; right: -3px;
   width: 14px; height: 14px; border-radius: 50%;
@@ -324,7 +320,6 @@ input[type=range] { accent-color: var(--blue); }
   opacity: 0; transition: opacity 0.15s;
   border: 1.5px solid var(--bg-primary);
 }
-.pb-btn.repeat-one .repeat-badge { opacity: 1; }
 
 .court-picker {
   background: var(--bg-secondary);

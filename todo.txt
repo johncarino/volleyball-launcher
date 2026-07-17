@@ -1,13 +1,11 @@
 PRIORITY
-- Run through sets
-- Repeat function
-- Random function
 - Accessable from another device
 
 SECONDARY
 - Make the graphic more pretty (machine figure, volleyball images, flash the selectable images)
 - When the middle machine position, selecting one set direction, the other side disappears
 - Block continue button until set selected
+- Move launch, advanced next to "Launch"
 
 CONSIDERATION
 - in launch mode, the back button may be too small, a little unintuitive perhaps

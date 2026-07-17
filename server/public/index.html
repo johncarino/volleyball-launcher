@@ -96,9 +96,14 @@ const slots = {
   C: { 1: null, 2: null, 3: null, 4: null },
   R: { 1: null, 2: null, 3: null, 4: null },
 };
+const slotEnabled = {
+  L: { 1: false, 2: false, 3: false, 4: false },
+  C: { 1: false, 2: false, 3: false, 4: false },
+  R: { 1: false, 2: false, 3: false, 4: false },
+};
 
-const repeatLabels = ['Repeat', 'Repeat all', 'Repeat one'];
-const repeatIcons  = ['ti-repeat', 'ti-repeat', 'ti-repeat-once'];
+const repeatLabels = ['Repeat', 'Repeat'];
+const repeatIcons  = ['ti-repeat', 'ti-repeat'];
 
 const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
 const targetNames  = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
@@ -338,11 +343,10 @@ function toggleRandom() {
 }
 
 function cycleRepeat() {
-  repeatState = (repeatState + 1) % 3;
+  repeatState = (repeatState + 1) % 2;
   const btn = document.getElementById('pb-repeat');
   if (!btn) return;
   btn.classList.toggle('active', repeatState > 0);
-  btn.classList.toggle('repeat-one', repeatState === 2);
   btn.querySelector('.pb-btn-label').textContent = repeatLabels[repeatState];
   btn.querySelector('i').className = `ti ${repeatIcons[repeatState]}`;
 }
@@ -350,21 +354,17 @@ function cycleRepeat() {
 function renderPlaybackControls() {
   const randomActiveClass = randomOn ? 'active' : '';
   const repeatActiveClass = repeatState > 0 ? 'active' : '';
-  const repeatOneClass    = repeatState === 2 ? 'repeat-one' : '';
   return `
     <div class="playback-controls">
       <button class="pb-btn ${randomActiveClass}" id="pb-random" onclick="toggleRandom()" aria-label="Random">
         <div class="pb-btn-icon"><i class="ti ti-arrows-shuffle" aria-hidden="true"></i></div>
         <span class="pb-btn-label">Random</span>
-        <span class="pb-dot"></span>
       </button>
-      <button class="pb-btn ${repeatActiveClass} ${repeatOneClass}" id="pb-repeat" onclick="cycleRepeat()" aria-label="Repeat">
-        <div class="pb-btn-icon" style="position:relative">
+      <button class="pb-btn ${repeatActiveClass}" id="pb-repeat" onclick="cycleRepeat()" aria-label="Repeat">
+        <div class="pb-btn-icon">
           <i class="ti ${repeatIcons[repeatState]}" aria-hidden="true"></i>
-          <span class="repeat-badge">1</span>
         </div>
         <span class="pb-btn-label">${repeatLabels[repeatState]}</span>
-        <span class="pb-dot"></span>
       </button>
     </div>`;
 }
@@ -560,94 +560,152 @@ function refreshLaunchView() {
   if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
 }
 
-let activeSlot = null;
-let slotsLocked = false;
+// --- Run sequence state (drives the Launch screen's Start button) ---
+let isRunning = false;
+let runQueue = [];       // ordered list of { machine, n } to fire through
+let runIndex = 0;
+let currentRunSlot = null; // { machine, n } currently firing, for the "now playing" highlight
+const SET_RUN_DURATION_MS = 6000; // assumed dwell time per set before advancing
 
 function slotsHTML(readonly = false) {
   const machineKey = selectedMachine || 'L';
   const machineSlots = slots[machineKey];
+  const machineEnabled = slotEnabled[machineKey];
   return [1, 2, 3, 4].map(n => {
     const s = machineSlots[n];
-    const isActive = readonly && activeSlot === n;
-    const isLockedOut = readonly && slotsLocked && activeSlot !== n;
+    const enabled = readonly && !!s && !!machineEnabled[n];
+    const isPlaying = readonly && !!currentRunSlot && currentRunSlot.machine === machineKey && currentRunSlot.n === n;
     const isEmptyReadonly = readonly && !s;
 
     let clickAttr;
     if (readonly) {
-      clickAttr = (isLockedOut || isEmptyReadonly) ? '' : `onclick="clickSlot(${n})"`;
+      clickAttr = isEmptyReadonly ? '' : `onclick="clickSlot(${n})"`;
     } else {
       clickAttr = `onclick="saveNewSlot(${n})"`;
     }
 
-    const stateClass = isActive ? ' slot-active' : (isLockedOut ? ' locked-out' : (isEmptyReadonly ? ' slot-disabled' : ''));
+    const stateClass = isPlaying ? ' slot-active' : (enabled ? ' slot-enabled' : (isEmptyReadonly ? ' slot-disabled' : ''));
     const name = s ? s.name : (readonly ? 'Empty' : 'Tap to save current set');
     const nameClass = s ? '' : ' empty-name';
 
     return `<div class="slot${stateClass}" ${clickAttr}>
-      <div class="slot-num">Slot ${n}</div>
+      <div class="slot-num">Slot ${n}${enabled ? ' <span class="slot-enabled-badge">●</span>' : ''}</div>
       <div class="slot-name${nameClass}">${name}</div>
     </div>`;
   }).join('');
 }
 
-const SLOT_HIGHLIGHT_MS = 4000;
-
+// Tapping a slot in the Launch screen now enables/disables it for the run
+// queue, instead of immediately running it.
 function clickSlot(n) {
   const machineKey = selectedMachine || 'L';
-  const slotData = slots[machineKey][n];
+  if (!slots[machineKey][n]) return; // nothing saved in this slot, nothing to toggle
+  slotEnabled[machineKey][n] = !slotEnabled[machineKey][n];
+  refreshSlots();
+}
 
-  if (!slotData && !(slotsLocked && activeSlot === n)) return;
-
-  if (slotsLocked && activeSlot !== n) return;
-
-  if (slotsLocked && activeSlot === n) {
-    console.log('Slot deactivated:', machineKey, n);
-
-    fetch('/api/slot-click', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ machine: machineKey, slot: n, action: 'stop' })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Server responded with ' + res.status);
-        return res.json().catch(() => ({}));
-      })
-      .then(json => console.log('Server ack:', json))
-      .catch(err => console.error('Failed to send slot stop to server:', err));
-
-    clearTimeout(window._slotUnlockTimer);
-    slotsLocked = false;
-    activeSlot = null;
-    refreshSlots();
-    return;
-  }
-
-  console.log('Slot clicked:', machineKey, n, slotData);
-
+function fireSet(machine, n, slotData) {
   fetch('/api/slot-click', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ machine: machineKey, slot: n, data: slotData })
+    body: JSON.stringify({ machine, slot: n, data: slotData })
   })
     .then(res => {
       if (!res.ok) throw new Error('Server responded with ' + res.status);
       return res.json().catch(() => ({}));
     })
     .then(json => console.log('Server ack:', json))
-    .catch(err => console.error('Failed to send slot click to server:', err));
+    .catch(err => console.error('Failed to send slot fire to server:', err));
+}
 
-slotsLocked = true;
-  activeSlot = n;
+function stopFiring(machine, n) {
+  fetch('/api/slot-click', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ machine, slot: n, action: 'stop' })
+  })
+    .then(res => {
+      if (!res.ok) throw new Error('Server responded with ' + res.status);
+      return res.json().catch(() => ({}));
+    })
+    .catch(err => console.error('Failed to send slot stop to server:', err));
+}
+
+function shuffleArray(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildRunQueue() {
+  const machineKey = selectedMachine || 'L';
+  let ns = [1, 2, 3, 4].filter(n => slots[machineKey][n] && slotEnabled[machineKey][n]);
+  if (randomOn) ns = shuffleArray(ns);
+  return ns.map(n => ({ machine: machineKey, n }));
+}
+
+function startRunSequence() {
+  runQueue = buildRunQueue();
+  if (runQueue.length === 0) {
+    console.warn('No enabled sets to run');
+    stopRunSequence();
+    return;
+  }
+  runIndex = 0;
+  isRunning = true;
+  emitMachine('resumeMotors');
+  runNextInQueue();
+}
+
+function runNextInQueue() {
+  if (!isRunning) return;
+
+  const { machine, n } = runQueue[runIndex];
+  const slotData = slots[machine][n];
+  currentRunSlot = { machine, n };
+  activateSlot(machine, n);
   refreshSlots();
+  fireSet(machine, n, slotData);
 
-  clearTimeout(window._slotUnlockTimer);
-  window._slotUnlockTimer = setTimeout(() => {
-    slotsLocked = false;
-    activeSlot = null;
-    refreshSlots();
-  }, SLOT_HIGHLIGHT_MS);
+  clearTimeout(window._runTimer);
+  window._runTimer = setTimeout(() => {
+    stopFiring(machine, n);
 
-  activateSlot(machineKey, n);
+    runIndex++;
+    if (runIndex >= runQueue.length) {
+      if (repeatState === 1) {
+        // Repeat on: start the queue over, reshuffling if random is on
+        runQueue = buildRunQueue();
+        runIndex = 0;
+        if (runQueue.length === 0) { stopRunSequence(); return; }
+      } else {
+        stopRunSequence();
+        return;
+      }
+    }
+    runNextInQueue();
+  }, SET_RUN_DURATION_MS);
+}
+
+function stopRunSequence() {
+  const wasRunning = isRunning;
+  isRunning = false;
+  clearTimeout(window._runTimer);
+  if (wasRunning && currentRunSlot) {
+    stopFiring(currentRunSlot.machine, currentRunSlot.n);
+  }
+  currentRunSlot = null;
+  refreshSlots();
+  emitMachine('stopMotors');
+
+  const btn = document.getElementById('launch-main-btn');
+  if (btn) {
+    btn.classList.remove('stop'); btn.classList.add('start');
+    btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+  }
 }
 
 function activateSlot(machineKey, n) {
@@ -697,10 +755,22 @@ function saveNewSlot(n) {
     target: selectedTarget,
     tempo: selectedTempo,
   };
+  slotEnabled[selectedMachine][n] = true;
   refreshSlots();
 }
 
 function toggleLaunch(btn) {
+  if (window._activeMode === 'launch') {
+    if (isRunning) {
+      stopRunSequence();
+    } else {
+      btn.classList.remove('start'); btn.classList.add('stop');
+      btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+      startRunSequence();
+    }
+    return;
+  }
+
   const running = btn.classList.contains('stop');
   if (running) {
     btn.classList.remove('stop'); btn.classList.add('start');
@@ -729,6 +799,7 @@ function goToLaunch() {
 
 function goBack() {
   clearInterval(window._telem);
+  if (isRunning) stopRunSequence();
   if (window._activeMode === 'advanced') {
     emitMachine('advanced-leave');
   }
@@ -737,6 +808,7 @@ function goBack() {
   const topbar = document.getElementById('topbar');
   topbar.innerHTML = `<h1 id="page-title">Configure</h1>`;
   document.getElementById('main-content').innerHTML = screens.configure();
+
   const appEl = document.querySelector('.app');
   if (appEl) appEl.classList.remove('mode-launch', 'mode-advanced');
 }
@@ -753,6 +825,9 @@ function syncLaunchSummary() {
 
 function setMode(mode) {
   const previousMode = window._activeMode || 'launch';
+  if (previousMode === 'launch' && mode !== 'launch' && isRunning) {
+    stopRunSequence();
+  }
   if (previousMode === 'advanced' && mode !== 'advanced') {
     emitMachine('advanced-leave');
   }
