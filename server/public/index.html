@@ -266,6 +266,8 @@ function courtPickerHTML(readonly = false) {
     legendClass = '';
   }
 
+  const showTempo = !readonly && mSel && tSel;
+
   return `
     <div class="court-picker" style="${readonly ? 'pointer-events:none;' : ''}">
       <div class="court-svg-wrap">
@@ -334,6 +336,18 @@ function refreshCourtPicker() {
     wrap.innerHTML = courtPickerHTML();
     animateCourtShift(wrap);
   }
+
+  const showTempo = !!(selectedMachine && selectedTarget);
+
+  const tempoWrap = document.getElementById('tempo-wrap');
+  if (tempoWrap) {
+    tempoWrap.innerHTML = tempoPillsHTML();
+    tempoWrap.classList.toggle('tempo-visible', showTempo);
+  }
+
+  if (wrap) {
+    wrap.classList.toggle('tempo-open', showTempo);
+  }
 }
 
 function toggleRandom() {
@@ -375,10 +389,7 @@ const screens = {
     <div class="section" style="margin-top:8px">
       <div class="section-label">Position</div>
       <div id="court-picker-wrap">${courtPickerHTML()}</div>
-    </div>
-    <div class="section">
-      <div class="section-label">Tempo</div>
-      <div class="card" id="tempo-wrap">${tempoPillsHTML()}</div>
+      <div class="tempo-attached" id="tempo-wrap">${tempoPillsHTML()}</div>
     </div>
     <div class="section">
       <div class="section-label">Set Slots</div>
@@ -494,15 +505,15 @@ function getCourtSummary() {
 }
 
 function tempoPillsHTML() {
-  const enabled = !!(selectedMachine && selectedTarget);
   const pills = [1, 2, 3, 4, 5].map(n =>
     `<button class="tempo-pill ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
-      ${enabled ? `onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)"` : ''}
-      ${enabled ? '' : 'disabled'}>${n}</button>`
+      onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)">${n}</button>`
   ).join('');
   return `
-    <div class="tempo-pills">${pills}</div>
-    ${!enabled ? `<div style="font-size:11px;color:var(--text-tertiary);margin-top:8px">Select a machine and target zone first</div>` : ''}`;
+    <div class="tempo-row">
+      <span class="tempo-label">Tempo</span>
+      <div class="tempo-pills">${pills}</div>
+    </div>`;
 }
 
 function onTempoHover(n) {

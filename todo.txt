@@ -5,6 +5,8 @@ SECONDARY
 - Make the graphic more pretty (machine figure, volleyball images, flash the selectable images)
 - When the middle machine position, selecting one set direction, the other side disappears
 - Disable continue button until set selected
+- Remove court dimensions from launch screen
+- Move tempo to court screen on launch screen
 
 CONSIDERATION
 - in launch mode, the back button may be too small, a little unintuitive perhaps
