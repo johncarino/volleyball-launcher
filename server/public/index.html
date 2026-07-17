@@ -466,7 +466,6 @@ const screens = {
     </div>
     <div class="section">
       <div class="card">
-        <div class="summary-row"><span class="summary-key"><i class="ti ti-metronome" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Tempo</span><span class="summary-val" id="sum-tempo">${selectedTempo}</span></div>
         <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">243 cm</span></div>
         <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">18.0 m × 9.0 m</span></div>
       </div>
@@ -558,9 +557,6 @@ function refreshSlots() {
 function refreshLaunchView() {
   const courtWrap = document.getElementById('launch-court-picker-wrap');
   if (courtWrap) courtWrap.innerHTML = courtPickerHTML(true);
-
-  const tempoEl = document.getElementById('sum-tempo');
-  if (tempoEl) tempoEl.textContent = selectedTempo;
 
   const netVal = document.getElementById('net-val');
   const netEl = document.getElementById('sum-net');
