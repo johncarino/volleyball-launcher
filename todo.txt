@@ -2,14 +2,14 @@ PRIORITY
 - Accessable from beaglebone
 
 SECONDARY
-- Make the graphic more pretty (machine figure, volleyball images)
+- Add images for volleyball locations
+- Add images for launcher locations
 - Flash selectable images
 - When the middle machine position, selecting one set direction, the other side disappears
 - Disable continue button until set selected
 - Fix tempo 5 being countdown
 - Prompt user to save slot after selecting tempo
 - Make launch menu set selection more intuitive
-- Make set slots a list
 - Hopper pulse button turn green for x seconds
 - Change launch/advance buttons to be the header
 - Popup to help align the machine
