@@ -197,12 +197,13 @@ function courtPickerHTML(readonly = false) {
     const stroke   = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
     const textFill = active ? '#fff' : '#b52a2a';
     const opacity  = active ? 1 : (readonly ? 0 : 0.7);
+    const flashClass = (!mSel && !readonly) ? 'selectable-flash' : '';
     const onclick  = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
     const cursor   = readonly ? 'default' : 'pointer';
     const rx       = s.cx - machineRectW / 2;
     const ry       = s.cy - machineRectH / 2;
     return `<g ${onclick} style="cursor:${cursor}">
-      <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}"/>
+      <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}" class="${flashClass}"/>
       ${active ? `<text x="${s.cx}" y="${s.cy + 4}" text-anchor="middle" font-size="9" fill="${textFill}" font-family="system-ui,sans-serif" font-weight="500">${s.id}</text>` : ''}
     </g>`;
   }).join('');
@@ -217,11 +218,12 @@ function courtPickerHTML(readonly = false) {
     const textFill    = active ? '#fff' : '#1a7a3a';
     const opacity     = active ? 1 : (clickable ? 0.75 : 0);
     const lineOpacity = active ? 0.6 : (clickable ? 0.35 : 0);
+    const flashClass  = (clickable && !tSel) ? 'selectable-flash' : '';
     const onclick     = clickable ? `onclick="selectTarget('${s.id}')"` : '';
     const cursor      = clickable ? 'pointer' : 'default';
     return `<g ${onclick} style="cursor:${cursor}">
       <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="${46 + baseOffset}" stroke="#1a7a3a" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
-      <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}"/>
+      <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}" class="${flashClass}"/>
       ${active ? `<text x="${s.cx}" y="${s.cy + 4}" text-anchor="middle" font-size="9" fill="${textFill}" font-family="system-ui,sans-serif" font-weight="500">${s.id}</text>` : ''}
     </g>`;
   }).join('');
@@ -246,6 +248,7 @@ function courtPickerHTML(readonly = false) {
       const stroke      = active ? '#e08a1e' : '#c2b8ab';
       const strokeWidth = active ? 2.5 : 1;
       const opacity     = active ? 0.95 : 0.4;
+      const flashClass  = (!readonly && !tempoSelected) ? 'selectable-flash' : '';
       const hitProps    = readonly
         ? ''
         : `onclick="selectTempo(${tempo})" onmouseenter="onTempoHover(${tempo})" onmouseleave="onTempoHover(null)" style="cursor:pointer"`;
@@ -258,7 +261,7 @@ function courtPickerHTML(readonly = false) {
             <text x="${peakX}" y="${peakY - 6}" text-anchor="middle" font-size="9" fill="#fff" font-family="system-ui,sans-serif" font-weight="600">${tempo}</text>
           </g>`
         : '';
-      return `${hitArea}<path id="tempo-line-${tempo}" d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="${opacity}" style="pointer-events:none"/>${label}`;
+      return `${hitArea}<path id="tempo-line-${tempo}" d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="${opacity}" class="${flashClass}" style="pointer-events:none"/>${label}`;
     }).join('');
   }
 
@@ -525,8 +528,9 @@ function getCourtSummary() {
 }
 
 function tempoPillsHTML() {
+  const flashClass = !tempoSelected ? ' selectable-flash' : '';
   const pills = [1, 2, 3, 4, 5].map(n =>
-    `<button class="tempo-pill ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
+    `<button class="tempo-pill${flashClass} ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
       onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)">${n}</button>`
   ).join('');
   return `
@@ -564,6 +568,7 @@ function selectTempo(n) {
   slotSaved = false;
   refreshTempo();
   refreshCourtPicker();
+  refreshSlots();
 }
 
 function refreshSlots() {
@@ -601,6 +606,7 @@ function slotsHTML(readonly = false) {
   const machineKey = selectedMachine || 'L';
   const machineSlots = slots[machineKey];
   const machineEnabled = slotEnabled[machineKey];
+  const readyToSave = !readonly && selectedMachine && selectedTarget && tempoSelected && !slotSaved; // add this line
   return [1, 2, 3, 4].map(n => {
     const s = machineSlots[n];
     const enabled = readonly && !!s && !!machineEnabled[n];
@@ -615,10 +621,11 @@ function slotsHTML(readonly = false) {
     }
 
     const stateClass = isPlaying ? ' slot-active' : (enabled ? ' slot-enabled' : (isEmptyReadonly ? ' slot-disabled' : ''));
+    const flashClass = readyToSave ? ' selectable-flash' : ''; // add this line
     const name = s ? s.name : (readonly ? 'Empty' : 'Tap to save current set');
     const nameClass = s ? '' : ' empty-name';
 
-    return `<div class="slot${stateClass}" ${clickAttr}>
+    return `<div class="slot${stateClass}${flashClass}" ${clickAttr}>
       <div class="slot-num">Slot ${n}${enabled ? ' <span class="slot-enabled-badge">●</span>' : ''}</div>
       <div class="slot-name${nameClass}">${name}</div>
     </div>`;

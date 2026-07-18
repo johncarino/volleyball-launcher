@@ -383,6 +383,14 @@ input[type=range] { accent-color: var(--blue); }
   opacity: 0.85;
 }
 
+.selectable-flash {
+  animation: legend-flash 1.5s ease-in-out infinite;
+}
+@keyframes legend-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 .court-selection-row {
   display: flex; gap: 8px; margin-top: 10px;
 }
