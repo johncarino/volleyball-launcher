@@ -210,21 +210,21 @@ function courtPickerHTML(readonly = false) {
 
   const isMachineSelected = mSel !== null;
 
+  const targetImgSize = 48; // width/height of the volleyball icon in SVG units
   const tCircles = targetSpots.map(s => {
     const active      = tSel === s.id;
     const clickable   = isMachineSelected && !readonly;
-    const fill        = active ? '#1a7a3a' : 'transparent';
-    const stroke      = active ? '#1a7a3a' : (clickable ? '#1a7a3a' : 'transparent');
-    const textFill    = active ? '#fff' : '#1a7a3a';
+    const ringStroke  = active ? '#1a7a3a' : (clickable ? '#1a7a3a' : 'transparent');
     const opacity     = active ? 1 : (clickable ? 0.75 : 0);
     const lineOpacity = active ? 0.6 : (clickable ? 0.35 : 0);
     const flashClass  = (clickable && !tSel) ? 'selectable-flash' : '';
     const onclick     = clickable ? `onclick="selectTarget('${s.id}')"` : '';
     const cursor      = clickable ? 'pointer' : 'default';
+    const half        = targetImgSize / 2;
     return `<g ${onclick} style="cursor:${cursor}">
       <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="${46 + baseOffset}" stroke="#1a7a3a" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
-      <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}" class="${flashClass}"/>
-      ${active ? `<text x="${s.cx}" y="${s.cy + 4}" text-anchor="middle" font-size="9" fill="${textFill}" font-family="system-ui,sans-serif" font-weight="500">${s.id}</text>` : ''}
+      <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
+      <image href="images/volleyball.png" x="${s.cx - half}" y="${s.cy - half}" width="${targetImgSize}" height="${targetImgSize}" opacity="${opacity}" class="${flashClass}"/>
     </g>`;
   }).join('');
 

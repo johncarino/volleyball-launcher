@@ -5,8 +5,7 @@ SECONDARY
 - Add images for volleyball locations
 - Add images for launcher locations
 - When the middle machine position, selecting one set direction, the other side disappears
-- Disable continue button until set selected
-- Fix tempo 5 being countdown
+- Fix tempo 5 being cut
 - Make launch menu set selection more intuitive
 - Change launch/advance buttons to be the header
 - Popup to help align the machine
