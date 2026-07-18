@@ -35,6 +35,22 @@ It has two runtime subsystems:
   - Canonical MediaPipe-side sources (`m2demo.cpp`, `BUILD`, graph, etc.) synced
     into `mediapipe/mediapipe/mediapipe_files/` before Bazel build.
 
+## Adding a new HAL module
+
+`server/binding.gyp` does **not** glob `hal/src/*.c` — each addon target lists its
+`.c`/`.cpp` sources explicitly. Adding a new HAL module (e.g. a new sensor driver
+under `hal/src/`) requires **two steps**:
+
+1. Add the new `.c` file to the `sources` array of the relevant target in
+   [server/binding.gyp](server/binding.gyp) (usually `operation_wrapper`, since
+   that's the target linking the HAL). Add any new `libraries` flag too if the
+   module needs one (e.g. a new `-l...`).
+2. Run `make server` to rebuild the native addons (`npm run build` ->
+   `node-gyp rebuild`).
+
+Running `make server` alone, **without** editing `binding.gyp` first, will not
+pick up the new file — node-gyp only compiles what's listed.
+
 ## Local Make Targets (from this folder)
 
 This repo now includes [Makefile](Makefile) at its root (`gesture-control/`):
