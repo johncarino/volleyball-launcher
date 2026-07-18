@@ -232,7 +232,7 @@ void operation_init() {
     hopper_running = 0;
     launcher_running = 0;
 
-    curr_tilt_angle = INITIAL_TILT_ANGLE;
+    //curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_yaw_angle = 0.0;
     curr_tilt_angle = 0.0;
     curr_yaw_angle = 0.0;
@@ -249,6 +249,10 @@ void operation_init() {
     if (mpu6050_init(NULL) != 0) {
         fprintf(stderr, "Failed to initialize MPU6050 — is I2C enabled?\n");
         return;
+    }
+    double initial_tilt_angle = 0.0;
+    if (read_tilt_feedback_angle(&initial_tilt_angle) == 0) {
+        curr_tilt_angle = (float)initial_tilt_angle;
     }
 
     fprintf(stderr, "[operation] initializing BTS/BTN7960 motor driver\n");
@@ -308,8 +312,8 @@ void homing_sequence() {
 
 void tilt_signal(float angle) {
 
-    if (angle > 90.0 || angle < INITIAL_TILT_ANGLE) {
-        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 90 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
+    if (angle > 87.0 || angle < INITIAL_TILT_ANGLE) {
+        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 87 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
         return;
     }
 
@@ -317,32 +321,40 @@ void tilt_signal(float angle) {
     mcp4725_set_raw(&dac1, 0);
 
     float delta_angle = angle - curr_tilt_angle;
-    long tilt_duration = 0.0;
-    //duty_cycle of linear actuator, as a percentage
-    //keep this a constant
-    int duty_cycle = 100;
+    long duration_us = tilt_angle_to_time(curr_tilt_angle, angle);
 
     if (delta_angle == 0) {
-        printf("No change in tilt angle\n");
+        printf("No Change in tilt angle\n");
         return;
     }
-    else if (delta_angle > 0) {
-        //convert delta_angle to tilt_duration
-        tilt_duration = tilt_angle_to_time(curr_tilt_angle, angle);
-        printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
 
-        //(void)duty_cycle; // Avoid unused variable warning
-        forward_ms(duty_cycle, tilt_duration);
-    }
-    else { // if delta_angle < 0
-        delta_angle = -delta_angle;
-        //convert delta_angle to tilt_duration
-        tilt_duration = tilt_angle_to_time(curr_tilt_angle, angle);
-        printf("tilting reverse by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
-        reverse_ms(duty_cycle, tilt_duration);
+    if (curr_tilt_angle > 80.0) {
+        if (angle > 80.0) {
+            if (delta_angle > 0) {
+                forward_ms(100, duration_us);
+            } else if (delta_angle < 0) {
+                reverse_ms(100, duration_us);
+            }
+        } else {
+            tilt_with_feedback(angle);
+        }
+    } else {
+        if (angle < 80.0) {
+            tilt_with_feedback(angle);
+        } else {
+            tilt_with_feedback(80.0);
+            usleep(100000); // Small delay to ensure the tilt operation completes
+            duration_us = tilt_angle_to_time(80.0, angle);
+            forward_ms(100, duration_us);
+        }
     }
 
     curr_tilt_angle = angle;
+
+    //resume the speed after tilt operation if the machine was running
+    if (launcher_running) {
+        mcp4725_set_mv(&dac1, (uint16_t)curr_speed);
+    }
 }
 
 void yaw_signal(float angle) {
@@ -452,14 +464,6 @@ void yaw_signal_advanced(float angle) {
 
 void tilt_with_feedback(float angle) {
 
-    if (angle > 90.0 || angle < INITIAL_TILT_ANGLE) {
-        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 90 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
-        return;
-    }
-
-    //first set speed to 0
-    mcp4725_set_raw(&dac1, 0);
-
     const double target_angle = (double)angle;
     double current_angle = 0.0;
     int settled_reads = 0;
@@ -509,13 +513,6 @@ void tilt_with_feedback(float angle) {
             bts_stop();
             break;
         }
-    }
-
-    curr_tilt_angle = (float)current_angle;
-
-    //resume the speed after tilt operation if the machine was running
-    if (launcher_running) {
-        mcp4725_set_mv(&dac1, (uint16_t)curr_speed);
     }
 }
 
