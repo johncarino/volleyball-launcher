@@ -8,10 +8,10 @@ SECONDARY
 - When the middle machine position, selecting one set direction, the other side disappears
 - Disable continue button until set selected
 - Fix tempo 5 being countdown
-- Prompt user to save slot after selecting tempo
 - Make launch menu set selection more intuitive
 - Change launch/advance buttons to be the header
 - Popup to help align the machine
+- Power on/off button
 
 CONSIDERATION
 - in launch mode, the back button may be too small, a little unintuitive perhaps

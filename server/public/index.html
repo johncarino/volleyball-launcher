@@ -91,6 +91,7 @@ let selectedTempo = null;
 let hoveredTempo = null;
 let hopperOn = false;
 let tempoSelected = false; // Track if tempo has been selected
+let slotSaved = false; // whether the current machine/target/tempo combo has been saved to a slot
 const machineSocket = (typeof io !== 'undefined') ? io() : null;
 const slots = {
   L: { 1: null, 2: null, 3: null, 4: null },
@@ -262,6 +263,9 @@ function courtPickerHTML(readonly = false) {
   }
 
   // Determine the legend text
+  // Determine the legend text
+  const dotsLegend = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#b52a2a;opacity:0.8"></span> Machine position <span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a7a3a;opacity:0.8"></span> Target zone</span>';
+
   let legendText = 'Select a machine location';
   let legendClass = 'legend-text-select';
   if (mSel && !tSel) {
@@ -270,11 +274,14 @@ function courtPickerHTML(readonly = false) {
   } else if (mSel && tSel && !tempoSelected && !readonly) {
     legendText = 'Select an Arc Tempo';
     legendClass = 'legend-text-select';
-  } else if (mSel && tSel && tempoSelected && !readonly) {
-    legendText = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#b52a2a;opacity:0.8"></span> Machine position <span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a7a3a;opacity:0.8"></span> Target zone</span>';
+  } else if (mSel && tSel && tempoSelected && !slotSaved && !readonly) {
+    legendText = 'Save to Set Slot';
+    legendClass = 'legend-text-select';
+  } else if (mSel && tSel && tempoSelected && slotSaved && !readonly) {
+    legendText = dotsLegend;
     legendClass = '';
   } else if (mSel && tSel && readonly) {
-    legendText = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#b52a2a;opacity:0.8"></span> Machine position <span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a7a3a;opacity:0.8"></span> Target zone</span>';
+    legendText = dotsLegend;
     legendClass = '';
   }
 
@@ -330,6 +337,7 @@ function selectMachine(id) {
   selectedMachine = id;
   selectedTarget = null; // Reset target when machine changes
   tempoSelected = false; // Reset tempo selection state
+  slotSaved = false;
   refreshCourtPicker();
   refreshSlots();
   refreshTempo();
@@ -338,6 +346,7 @@ function selectMachine(id) {
 function selectTarget(id) {
   selectedTarget = id;
   tempoSelected = false; // Reset tempo selection state when target changes
+  slotSaved = false;
   refreshCourtPicker();
   refreshTempo();
 }
@@ -552,6 +561,7 @@ function setPill(el) {
 function selectTempo(n) {
   selectedTempo = n;
   tempoSelected = true; // Mark that tempo has been selected
+  slotSaved = false;
   refreshTempo();
   refreshCourtPicker();
 }
@@ -749,6 +759,7 @@ function loadSlot(n) {
   if (s.target)  { selectedTarget  = s.target;  }
   if (s.tempo)   { selectedTempo   = s.tempo;   }
   tempoSelected = true;
+   slotSaved = true;
   refreshCourtPicker();
   refreshSlots();
   document.querySelectorAll('.tempo-pill').forEach(p => {
@@ -776,7 +787,9 @@ function saveNewSlot(n) {
     tempo: selectedTempo,
   };
   slotEnabled[selectedMachine][n] = true;
+  slotSaved = true;
   refreshSlots();
+  refreshCourtPicker();
 }
 
 function toggleLaunch(btn) {
