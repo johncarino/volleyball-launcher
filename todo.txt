@@ -10,7 +10,6 @@ SECONDARY
 - Fix tempo 5 being countdown
 - Prompt user to save slot after selecting tempo
 - Make launch menu set selection more intuitive
-- Hopper pulse button turn green for x seconds
 - Change launch/advance buttons to be the header
 - Popup to help align the machine
 

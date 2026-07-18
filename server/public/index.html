@@ -146,6 +146,18 @@ function onHopperControl(action) {
   emitMachine('hopper-' + action);
 }
 
+function pulseHopper(btn) {
+  if (btn.disabled) return; // do nothing if already running
+  btn.disabled = true;
+  btn.classList.add('active');
+  onHopperControl('pulse');
+
+  setTimeout(() => {
+    btn.classList.remove('active');
+    btn.disabled = false;
+  }, 4000); // Change this value to adjust duration of pulse
+}
+
 function toggleHopper() {
   hopperOn = !hopperOn;
   const btn = document.getElementById('hopper-toggle-btn');
@@ -445,7 +457,7 @@ const screens = {
       <div class="section-label">Hopper</div>
       <div class="hopper-controls">
         <button class="hopper-btn" id="hopper-toggle-btn" onclick="toggleHopper()">Hopper Off</button>
-        <button class="hopper-btn" onclick="onHopperControl('pulse')">Hopper Pulse</button>
+        <button class="hopper-btn" id="hopper-pulse-btn" onclick="pulseHopper(this)">Hopper Pulse</button>
       </div>
     </div>
     <div class="section">
