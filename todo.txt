@@ -2,21 +2,29 @@ PRIORITY
 - Accessable from beaglebone
 
 SECONDARY
-- Make the graphic more pretty (machine figure, volleyball images, flash the selectable images)
+- Make the graphic more pretty (machine figure, volleyball images)
+- Flash selectable images
 - When the middle machine position, selecting one set direction, the other side disappears
 - Disable continue button until set selected
-- Remove court dimensions from launch screen
-- Move tempo to court screen on launch screen
+- Fix tempo 5 being countdown
+- Prompt user to save slot after selecting tempo
+- Make launch menu set selection more intuitive
+- Make set slots a list
+- Hopper pulse button turn green for x seconds
+- Change launch/advance buttons to be the header
+- Popup to help align the machine
 
 CONSIDERATION
 - in launch mode, the back button may be too small, a little unintuitive perhaps
 - Change to 5 set locations(?)
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
+- Remove court dimensions from launch screen
 
 CLEANUP
 - Remove old-old-index.html, old stylesheets
 - Make it so selection instructions are not repeated every time
 - Move JS to separate file
+- Change background colours to be better
 
 beaglebone/mnt/remote/jp/volleyball_launcher/server/
 npm start
