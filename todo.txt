@@ -1,8 +1,8 @@
 PRIORITY
 - Accessable from beaglebone
-- Popup to help align the machine
 
 SECONDARY
+- Fill in alignment modal
 
 FUNCTIONAL
 - Make launch menu set selection more intuitive

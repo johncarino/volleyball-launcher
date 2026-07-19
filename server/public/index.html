@@ -78,6 +78,20 @@
       <button class="modal-save" onclick="closeModal()">Save</button>
     </div>
   </div>
+  <div class="modal-overlay" id="align-modal" onclick="handleAlignOverlayClick(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title" id="align-modal-title">Machine alignment</span>
+        <button class="modal-close" onclick="closeAlignModal()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+      </div>
+      <div class="modal-body">
+        <img id="align-modal-img" src="" alt="Machine alignment reference" class="align-modal-img">
+        <p id="align-modal-text" class="align-modal-text"></p>
+      </div>
+      <button class="modal-save" onclick="closeAlignModal()">Got it</button>
+    </div>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -110,6 +124,31 @@ const repeatIcons  = ['ti-repeat', 'ti-repeat'];
 
 const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
 const targetNames  = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
+
+const alignImages = { L: 'images/left.jpg', C: 'images/front.jpg', R: 'images/right.jpg' };
+const alignInstructions = {
+  L: 'Placeholder instructions for aligning the machine at the LEFT position.',
+  C: 'Placeholder instructions for aligning the machine at the CENTER position.',
+  R: 'Placeholder instructions for aligning the machine at the RIGHT position.',
+};
+
+function openAlignModal(id) {
+  const img = document.getElementById('align-modal-img');
+  const text = document.getElementById('align-modal-text');
+  const title = document.getElementById('align-modal-title');
+  if (img)   img.src = alignImages[id] || '';
+  if (text)  text.textContent = alignInstructions[id] || '';
+  if (title) title.textContent = `${machineNames[id] || id} machine alignment`;
+  document.getElementById('align-modal').classList.add('open');
+}
+
+function closeAlignModal() {
+  document.getElementById('align-modal').classList.remove('open');
+}
+
+function handleAlignOverlayClick(e) {
+  if (e.target === document.getElementById('align-modal')) closeAlignModal();
+}
 
 function zoneSide(zoneId) {
   return (zoneId === '1' || zoneId === '2') ? 'left' : 'right';
@@ -360,7 +399,7 @@ function animateCourtShift(container) {
 
 function selectMachine(id) {
   selectedMachine = id;
-
+  openAlignModal(id);
   const savedSlot = [1, 2, 3, 4]
     .map(n => slots[id][n])
     .find(s => !!s); // grab the first saved slot for this machine, if any
