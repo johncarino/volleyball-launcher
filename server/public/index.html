@@ -376,10 +376,11 @@ function selectMachine(id) {
 
 function selectTarget(id) {
   selectedTarget = id;
-  tempoSelected = false; // Reset tempo selection state when target changes
+  tempoSelected = selectedTempo !== null;
   slotSaved = false;
   refreshCourtPicker();
   refreshTempo();
+  refreshSlots();
 }
 
 function refreshCourtPicker() {
