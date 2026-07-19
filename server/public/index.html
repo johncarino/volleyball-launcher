@@ -1,232 +1,236 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AVSS</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
-<link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AVSS</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
 
-<div class="app">
-  <div class="statusbar">
-    <span class="device">AVSS</span>
-    <span class="conn" id="conn-status">
-      <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
-      <span id="conn-text">Connected</span>
-    </span>
-  </div>
+  <div class="app">
+    <div class="statusbar">
+      <span class="device">AVSS</span>
+      <span class="conn" id="conn-status">
+        <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
+        <span id="conn-text">Connected</span>
+      </span>
+    </div>
 
-  <div class="topbar" id="topbar">
-    <h1 id="page-title">Configure</h1>
-  </div>
+    <div class="topbar" id="topbar">
+      <h1 id="page-title">Configure</h1>
+    </div>
 
-  <div class="modenav" id="modenav" role="tablist" aria-label="Modes">
-    <button class="modetab" role="tab" data-mode="configure">Configure</button>
-    <button class="modetab" role="tab" data-mode="advanced">Advanced</button>
-  </div>
+    <div class="modenav" id="modenav" role="tablist" aria-label="Modes">
+      <button class="modetab" role="tab" data-mode="configure">Configure</button>
+      <button class="modetab" role="tab" data-mode="advanced">Advanced</button>
+    </div>
 
-  <div class="content" id="main-content"></div>
+    <div class="content" id="main-content"></div>
 
-  <div class="modal-overlay" id="court-modal" onclick="handleOverlayClick(event)">
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-header">
-        <span class="modal-title">Court settings</span>
-        <button class="modal-close" onclick="closeModal()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
-      </div>
-      <div class="modal-body">
-        <div class="section" style="margin-bottom:16px">
-          <div class="section-label">Net height</div>
-          <div class="card" style="margin-bottom:0">
-            <div style="margin-bottom:6px">
-              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-                <span style="font-size:13px;color:var(--text-secondary)">Height</span>
-                <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="net-val">243 cm</strong>
-              </div>
-              <input type="range" min="220" max="260" value="243" step="1" style="width:100%"
-                oninput="document.getElementById('net-val').textContent=this.value+' cm'; updateCourtBtn()"
-                onchange="onNetHeightChange(this.value)">
-            </div>
-            <div style="margin-top:4px;font-size:11px;color:var(--text-tertiary)">Standard men's: 243 cm · Women's: 224 cm</div>
-          </div>
+    <div class="modal-overlay" id="court-modal" onclick="handleOverlayClick(event)">
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-header">
+          <span class="modal-title">Court settings</span>
+          <button class="modal-close" onclick="closeModal()" aria-label="Close"><i class="ti ti-x"
+              aria-hidden="true"></i></button>
         </div>
-        <div class="section" style="margin-bottom:0">
-          <div class="section-label">Court dimensions</div>
-          <div class="card" style="margin-bottom:0">
-            <div style="margin-bottom:14px">
-              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-                <span style="font-size:13px;color:var(--text-secondary)">Length</span>
-                <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="len-val">18.0 m</strong>
+        <div class="modal-body">
+          <div class="section" style="margin-bottom:16px">
+            <div class="section-label">Net height</div>
+            <div class="card" style="margin-bottom:0">
+              <div style="margin-bottom:6px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                  <span style="font-size:13px;color:var(--text-secondary)">Height</span>
+                  <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="net-val">243 cm</strong>
+                </div>
+                <input type="range" min="220" max="260" value="243" step="1" style="width:100%"
+                  oninput="document.getElementById('net-val').textContent=this.value+' cm'; updateCourtBtn()"
+                  onchange="onNetHeightChange(this.value)">
               </div>
-              <input type="range" min="10" max="22" value="18" step="0.5" style="width:100%"
-                oninput="document.getElementById('len-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()"
-                onchange="onCourtLengthChange(this.value)">
-            </div>
-            <div>
-              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-                <span style="font-size:13px;color:var(--text-secondary)">Width</span>
-                <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="wid-val">9.0 m</strong>
-              </div>
-              <input type="range" min="5" max="12" value="9" step="0.5" style="width:100%"
-                oninput="document.getElementById('wid-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()"
-                onchange="onCourtWidthChange(this.value)">
+              <div style="margin-top:4px;font-size:11px;color:var(--text-tertiary)">Standard men's: 243 cm · Women's:
+                224 cm</div>
             </div>
           </div>
+          <div class="section" style="margin-bottom:0">
+            <div class="section-label">Court dimensions</div>
+            <div class="card" style="margin-bottom:0">
+              <div style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                  <span style="font-size:13px;color:var(--text-secondary)">Length</span>
+                  <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="len-val">18.0 m</strong>
+                </div>
+                <input type="range" min="10" max="22" value="18" step="0.5" style="width:100%"
+                  oninput="document.getElementById('len-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()"
+                  onchange="onCourtLengthChange(this.value)">
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                  <span style="font-size:13px;color:var(--text-secondary)">Width</span>
+                  <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="wid-val">9.0 m</strong>
+                </div>
+                <input type="range" min="5" max="12" value="9" step="0.5" style="width:100%"
+                  oninput="document.getElementById('wid-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()"
+                  onchange="onCourtWidthChange(this.value)">
+              </div>
+            </div>
+          </div>
         </div>
+        <button class="modal-save" onclick="closeModal()">Save</button>
       </div>
-      <button class="modal-save" onclick="closeModal()">Save</button>
     </div>
   </div>
-</div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
-// Persistent state
-let randomOn = false;
-let repeatState = 0;
-let selectedMachine = null;
-let selectedTarget  = null;
-let selectedTempo = 1;
-let hopperOn = false;
-const machineSocket = (typeof io !== 'undefined') ? io() : null;
-const slots = {
-  L: { 1: null, 2: null, 3: null, 4: null },
-  C: { 1: null, 2: null, 3: null, 4: null },
-  R: { 1: null, 2: null, 3: null, 4: null },
-};
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // Persistent state
+    let randomOn = false;
+    let repeatState = 0;
+    let selectedMachine = null;
+    let selectedTarget = null;
+    let selectedTempo = 1;
+    let hopperOn = false;
+    const machineSocket = (typeof io !== 'undefined') ? io() : null;
+    const slots = {
+      L: { 1: null, 2: null, 3: null, 4: null },
+      C: { 1: null, 2: null, 3: null, 4: null },
+      R: { 1: null, 2: null, 3: null, 4: null },
+    };
 
 
-const repeatLabels = ['Repeat', 'Repeat all', 'Repeat one'];
-const repeatIcons  = ['ti-repeat', 'ti-repeat', 'ti-repeat-once'];
+    const repeatLabels = ['Repeat', 'Repeat all', 'Repeat one'];
+    const repeatIcons = ['ti-repeat', 'ti-repeat', 'ti-repeat-once'];
 
-const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
-const targetNames  = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
+    const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
+    const targetNames = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
 
-function emitMachine(eventName, value) {
-  if (!machineSocket) return;
-  machineSocket.emit(eventName, value);
-}
+    function emitMachine(eventName, value) {
+      if (!machineSocket) return;
+      machineSocket.emit(eventName, value);
+    }
 
-if (machineSocket) {
-  machineSocket.on('connect', () => {
-    machineSocket.emit('page-loaded');
-  });
+    if (machineSocket) {
+      machineSocket.on('connect', () => {
+        machineSocket.emit('page-loaded');
+      });
 
-  machineSocket.on('telemetry-update', (data) => {
-    const rpm = Math.max(0, parseInt(data && data.rpm, 10) || 0);
-    const pct = Math.max(0, Math.min(100, (rpm / 1300) * 100));
+      machineSocket.on('telemetry-update', (data) => {
+        const rpm = Math.max(0, parseInt(data && data.rpm, 10) || 0);
+        const pct = Math.max(0, Math.min(100, (rpm / 1300) * 100));
 
-    const fwl = document.getElementById('fw-l');
-    const fwr = document.getElementById('fw-r');
-    const fwlVal = document.getElementById('fw-l-v');
-    const fwrVal = document.getElementById('fw-r-v');
+        const fwl = document.getElementById('fw-l');
+        const fwr = document.getElementById('fw-r');
+        const fwlVal = document.getElementById('fw-l-v');
+        const fwrVal = document.getElementById('fw-r-v');
 
-    if (fwl) fwl.style.width = pct.toFixed(0) + '%';
-    if (fwr) fwr.style.width = pct.toFixed(0) + '%';
-    if (fwlVal) fwlVal.textContent = rpm + ' rpm';
-    if (fwrVal) fwrVal.textContent = rpm + ' rpm';
-  });
-}
+        if (fwl) fwl.style.width = pct.toFixed(0) + '%';
+        if (fwr) fwr.style.width = pct.toFixed(0) + '%';
+        if (fwlVal) fwlVal.textContent = rpm + ' rpm';
+        if (fwrVal) fwrVal.textContent = rpm + ' rpm';
+      });
+    }
 
-function onAdvancedAngleInput(value) {
-  const val = parseInt(value, 10);
-  document.getElementById('dev-ang-val').textContent = val + '°';
-}
+    function onAdvancedAngleInput(value) {
+      const val = parseInt(value, 10);
+      document.getElementById('dev-ang-val').textContent = val + '°';
+    }
 
-function onAdvancedAngleChange(value) {
-  const val = parseInt(value, 10);
-  document.getElementById('dev-ang-val').textContent = val + '°';
-  emitMachine('setAngle', val);
-}
+    function onAdvancedAngleChange(value) {
+      const val = parseInt(value, 10);
+      document.getElementById('dev-ang-val').textContent = val + '°';
+      emitMachine('setAngle', val);
+    }
 
-function onAdvancedSpeedInput(value) {
-  const val = parseInt(value, 10);
-  document.getElementById('dev-spd-val').textContent = val + '%';
-}
+    function onAdvancedSpeedInput(value) {
+      const val = parseInt(value, 10);
+      document.getElementById('dev-spd-val').textContent = val + '%';
+    }
 
-function onAdvancedSpeedChange(value) {
-  const val = parseInt(value, 10);
-  document.getElementById('dev-spd-val').textContent = val + '%';
-  emitMachine('setSpeed', val);
-}
+    function onAdvancedSpeedChange(value) {
+      const val = parseInt(value, 10);
+      document.getElementById('dev-spd-val').textContent = val + '%';
+      emitMachine('setSpeed', val);
+    }
 
-function onNetHeightChange(value) {
-  const centimeters = parseInt(value, 10);
-  const meters = centimeters / 100;
-  emitMachine('setNetHeight', meters);
-}
+    function onNetHeightChange(value) {
+      const centimeters = parseInt(value, 10);
+      const meters = centimeters / 100;
+      emitMachine('setNetHeight', meters);
+    }
 
-function onCourtLengthChange(value) {
-  const meters = parseFloat(value);
-  emitMachine('setCourtLength', meters);
-}
+    function onCourtLengthChange(value) {
+      const meters = parseFloat(value);
+      emitMachine('setCourtLength', meters);
+    }
 
-function onCourtWidthChange(value) {
-  const meters = parseFloat(value);
-  emitMachine('setCourtWidth', meters);
-}
+    function onCourtWidthChange(value) {
+      const meters = parseFloat(value);
+      emitMachine('setCourtWidth', meters);
+    }
 
-function onHopperControl(action) {
-  emitMachine('hopper-' + action);
-}
+    function onHopperControl(action) {
+      emitMachine('hopper-' + action);
+    }
 
-function toggleHopper() {
-  hopperOn = !hopperOn;
-  const btn = document.getElementById('hopper-toggle-btn');
-  if (btn) {
-    btn.textContent = hopperOn ? 'Hopper On' : 'Hopper Off';
-    btn.classList.toggle('active', hopperOn);
-  }
-  onHopperControl(hopperOn ? 'on' : 'off');
-}
+    function toggleHopper() {
+      hopperOn = !hopperOn;
+      const btn = document.getElementById('hopper-toggle-btn');
+      if (btn) {
+        btn.textContent = hopperOn ? 'Hopper On' : 'Hopper Off';
+        btn.classList.toggle('active', hopperOn);
+      }
+      onHopperControl(hopperOn ? 'on' : 'off');
+    }
 
-function courtPickerHTML(readonly = false) {
-  const mSel = selectedMachine;
-  const tSel = selectedTarget;
+    function courtPickerHTML(readonly = false) {
+      const mSel = selectedMachine;
+      const tSel = selectedTarget;
 
-  const machineSpots = [
-    { id: 'L', cx: 22,  cy: 50 },
-    { id: 'C', cx: 160, cy: 50 },
-    { id: 'R', cx: 298, cy: 50 },
-  ];
-  const targetSpots = [
-    { id: '1', cx: 70,  cy: 38 },
-    { id: '2', cx: 130, cy: 38 },
-    { id: '3', cx: 190, cy: 38 },
-    { id: '4', cx: 250, cy: 38 },
-  ];
+      const machineSpots = [
+        { id: 'L', cx: 22, cy: 50 },
+        { id: 'C', cx: 160, cy: 50 },
+        { id: 'R', cx: 298, cy: 50 },
+      ];
+      const targetSpots = [
+        { id: '1', cx: 70, cy: 38 },
+        { id: '2', cx: 130, cy: 38 },
+        { id: '3', cx: 190, cy: 38 },
+        { id: '4', cx: 250, cy: 38 },
+      ];
 
-  const mCircles = machineSpots.map(s => {
-    const active   = mSel === s.id;
-    const fill     = active ? '#b52a2a' : 'transparent';
-    const stroke   = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
-    const textFill = active ? '#fff' : '#b52a2a';
-    const opacity  = active ? 1 : (readonly ? 0 : 0.7);
-    const onclick  = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
-    const cursor   = readonly ? 'default' : 'pointer';
-    return `<g ${onclick} style="cursor:${cursor}">
+      const mCircles = machineSpots.map(s => {
+        const active = mSel === s.id;
+        const fill = active ? '#b52a2a' : 'transparent';
+        const stroke = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
+        const textFill = active ? '#fff' : '#b52a2a';
+        const opacity = active ? 1 : (readonly ? 0 : 0.7);
+        const onclick = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
+        const cursor = readonly ? 'default' : 'pointer';
+        return `<g ${onclick} style="cursor:${cursor}">
       <circle cx="${s.cx}" cy="${s.cy}" r="16" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}"/>
       ${active ? `<text x="${s.cx}" y="${s.cy + 4}" text-anchor="middle" font-size="9" fill="${textFill}" font-family="system-ui,sans-serif" font-weight="500">${s.id}</text>` : ''}
     </g>`;
-  }).join('');
+      }).join('');
 
-  const tCircles = targetSpots.map(s => {
-    const active   = tSel === s.id;
-    const fill     = active ? '#1a7a3a' : 'transparent';
-    const stroke   = active ? '#1a7a3a' : (readonly ? 'transparent' : '#1a7a3a');
-    const textFill = active ? '#fff' : '#1a7a3a';
-    const opacity  = active ? 1 : (readonly ? 0 : 0.75);
-    const onclick  = readonly ? '' : `onclick="selectTarget('${s.id}')"`;
-    const cursor   = readonly ? 'default' : 'pointer';
-    return `<g ${onclick} style="cursor:${cursor}">
+      const tCircles = targetSpots.map(s => {
+        const active = tSel === s.id;
+        const fill = active ? '#1a7a3a' : 'transparent';
+        const stroke = active ? '#1a7a3a' : (readonly ? 'transparent' : '#1a7a3a');
+        const textFill = active ? '#fff' : '#1a7a3a';
+        const opacity = active ? 1 : (readonly ? 0 : 0.75);
+        const onclick = readonly ? '' : `onclick="selectTarget('${s.id}')"`;
+        const cursor = readonly ? 'default' : 'pointer';
+        return `<g ${onclick} style="cursor:${cursor}">
       <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}"/>
       ${active ? `<text x="${s.cx}" y="${s.cy + 4}" text-anchor="middle" font-size="9" fill="${textFill}" font-family="system-ui,sans-serif" font-weight="500">${s.id}</text>` : ''}
     </g>`;
-  }).join('');
+      }).join('');
 
-  return `
+      return `
     <div class="court-picker" style="${readonly ? 'pointer-events:none;' : ''}">
       <div class="court-svg-wrap">
         <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
@@ -248,46 +252,46 @@ function courtPickerHTML(readonly = false) {
         <div class="legend-item"><div class="legend-dot" style="background:#1a7a3a;opacity:0.8"></div>Target zone</div>
       </div>` : ''}
     </div>`;
-}
+    }
 
-function selectMachine(id) {
-  selectedMachine = id;
-  refreshCourtPicker();
-  refreshSlots();
-}
+    function selectMachine(id) {
+      selectedMachine = id;
+      refreshCourtPicker();
+      refreshSlots();
+    }
 
-function selectTarget(id) {
-  selectedTarget = id;
-  refreshCourtPicker();
-}
+    function selectTarget(id) {
+      selectedTarget = id;
+      refreshCourtPicker();
+    }
 
-function refreshCourtPicker() {
-  const wrap = document.getElementById('court-picker-wrap');
-  if (wrap) wrap.innerHTML = courtPickerHTML();
-}
+    function refreshCourtPicker() {
+      const wrap = document.getElementById('court-picker-wrap');
+      if (wrap) wrap.innerHTML = courtPickerHTML();
+    }
 
-function toggleRandom() {
-  randomOn = !randomOn;
-  const btn = document.getElementById('pb-random');
-  if (!btn) return;
-  btn.classList.toggle('active', randomOn);
-}
+    function toggleRandom() {
+      randomOn = !randomOn;
+      const btn = document.getElementById('pb-random');
+      if (!btn) return;
+      btn.classList.toggle('active', randomOn);
+    }
 
-function cycleRepeat() {
-  repeatState = (repeatState + 1) % 3;
-  const btn = document.getElementById('pb-repeat');
-  if (!btn) return;
-  btn.classList.toggle('active', repeatState > 0);
-  btn.classList.toggle('repeat-one', repeatState === 2);
-  btn.querySelector('.pb-btn-label').textContent = repeatLabels[repeatState];
-  btn.querySelector('i').className = `ti ${repeatIcons[repeatState]}`;
-}
+    function cycleRepeat() {
+      repeatState = (repeatState + 1) % 3;
+      const btn = document.getElementById('pb-repeat');
+      if (!btn) return;
+      btn.classList.toggle('active', repeatState > 0);
+      btn.classList.toggle('repeat-one', repeatState === 2);
+      btn.querySelector('.pb-btn-label').textContent = repeatLabels[repeatState];
+      btn.querySelector('i').className = `ti ${repeatIcons[repeatState]}`;
+    }
 
-function renderPlaybackControls() {
-  const randomActiveClass = randomOn ? 'active' : '';
-  const repeatActiveClass = repeatState > 0 ? 'active' : '';
-  const repeatOneClass    = repeatState === 2 ? 'repeat-one' : '';
-  return `
+    function renderPlaybackControls() {
+      const randomActiveClass = randomOn ? 'active' : '';
+      const repeatActiveClass = repeatState > 0 ? 'active' : '';
+      const repeatOneClass = repeatState === 2 ? 'repeat-one' : '';
+      return `
     <div class="playback-controls">
       <button class="pb-btn ${randomActiveClass}" id="pb-random" onclick="toggleRandom()" aria-label="Random">
         <div class="pb-btn-icon"><i class="ti ti-arrows-shuffle" aria-hidden="true"></i></div>
@@ -303,10 +307,10 @@ function renderPlaybackControls() {
         <span class="pb-dot"></span>
       </button>
     </div>`;
-}
+    }
 
-const screens = {
-  configure: () => `
+    const screens = {
+      configure: () => `
     <div class="section" style="margin-top:8px">
       <div class="section-label">Position</div>
       <div id="court-picker-wrap">${courtPickerHTML()}</div>
@@ -345,7 +349,7 @@ const screens = {
       <button class="op-btn continue-style" onclick="goToLaunch()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue</button>
     </div>`,
 
-  advanced: () => `
+      advanced: () => `
     <div class="section" style="margin-top:8px">
       <div class="section-label">Manual control</div>
       <div class="card">
@@ -394,7 +398,7 @@ const screens = {
       <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
     </div>`,
 
-  launch: () => `
+      launch: () => `
     <div class="section" style="margin-top:8px">
       <div class="section-label">Position</div>
       <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
@@ -416,328 +420,329 @@ const screens = {
       <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
       ${renderPlaybackControls()}
     </div>`
-};
+    };
 
-function openModal() { document.getElementById('court-modal').classList.add('open'); }
-function closeModal() { document.getElementById('court-modal').classList.remove('open'); }
-function handleOverlayClick(e) { if (e.target === document.getElementById('court-modal')) closeModal(); }
+    function openModal() { document.getElementById('court-modal').classList.add('open'); }
+    function closeModal() { document.getElementById('court-modal').classList.remove('open'); }
+    function handleOverlayClick(e) { if (e.target === document.getElementById('court-modal')) closeModal(); }
 
-function updateCourtBtn() {
-  const net = document.getElementById('net-val');
-  const len = document.getElementById('len-val');
-  const wid = document.getElementById('wid-val');
-  const sub = document.getElementById('court-btn-sub');
-  if (net && len && wid && sub) sub.textContent = `Net ${net.textContent} · ${len.textContent} × ${wid.textContent}`;
-}
-
-function getCourtSummary() {
-  const net = document.getElementById('net-val');
-  const len = document.getElementById('len-val');
-  const wid = document.getElementById('wid-val');
-  const netTxt = net ? net.textContent : '243 cm';
-  const lenTxt = len ? len.textContent : '18.0 m';
-  const widTxt = wid ? wid.textContent : '9.0 m';
-  return `Net ${netTxt} · ${lenTxt} × ${widTxt}`;
-}
-
-function setPill(el) {
-  el.closest('.tempo-pills').querySelectorAll('.tempo-pill').forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
-  selectedTempo = parseInt(el.textContent);
-}
-
-function refreshSlots() {
-  const wrap = document.getElementById('slots-wrap');
-  if (wrap) {
-    wrap.innerHTML = slotsHTML(false);
-    return;
-  }
-  const launchWrap = document.querySelector('#main-content .save-slots');
-  if (launchWrap) launchWrap.innerHTML = slotsHTML(true);
-}
-
-function refreshLaunchView() {
-  const courtWrap = document.getElementById('launch-court-picker-wrap');
-  if (courtWrap) courtWrap.innerHTML = courtPickerHTML(true);
-
-  const tempoEl = document.getElementById('sum-tempo');
-  if (tempoEl) tempoEl.textContent = selectedTempo;
-
-  const netVal = document.getElementById('net-val');
-  const netEl = document.getElementById('sum-net');
-  if (netEl && netVal) netEl.textContent = netVal.textContent;
-
-  const lenVal = document.getElementById('len-val');
-  const widVal = document.getElementById('wid-val');
-  const courtEl = document.getElementById('sum-court');
-  if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
-}
-
-let activeSlot = null;
-let slotsLocked = false;
-
-function slotsHTML(readonly = false) {
-  const machineKey = selectedMachine || 'L';
-  const machineSlots = slots[machineKey];
-  return [1, 2, 3, 4].map(n => {
-    const s = machineSlots[n];
-    const isActive = readonly && activeSlot === n;
-    const isLockedOut = readonly && slotsLocked && activeSlot !== n;
-    const isEmptyReadonly = readonly && !s;
-
-    let clickAttr;
-    if (readonly) {
-      clickAttr = (isLockedOut || isEmptyReadonly) ? '' : `onclick="clickSlot(${n})"`;
-    } else {
-      clickAttr = `onclick="saveNewSlot(${n})"`;
+    function updateCourtBtn() {
+      const net = document.getElementById('net-val');
+      const len = document.getElementById('len-val');
+      const wid = document.getElementById('wid-val');
+      const sub = document.getElementById('court-btn-sub');
+      if (net && len && wid && sub) sub.textContent = `Net ${net.textContent} · ${len.textContent} × ${wid.textContent}`;
     }
 
-    const stateClass = isActive ? ' slot-active' : (isLockedOut ? ' locked-out' : (isEmptyReadonly ? ' slot-disabled' : ''));
-    const name = s ? s.name : (readonly ? 'Empty' : 'Tap to save current set');
-    const nameClass = s ? '' : ' empty-name';
+    function getCourtSummary() {
+      const net = document.getElementById('net-val');
+      const len = document.getElementById('len-val');
+      const wid = document.getElementById('wid-val');
+      const netTxt = net ? net.textContent : '243 cm';
+      const lenTxt = len ? len.textContent : '18.0 m';
+      const widTxt = wid ? wid.textContent : '9.0 m';
+      return `Net ${netTxt} · ${lenTxt} × ${widTxt}`;
+    }
 
-    return `<div class="slot${stateClass}" ${clickAttr}>
+    function setPill(el) {
+      el.closest('.tempo-pills').querySelectorAll('.tempo-pill').forEach(p => p.classList.remove('active'));
+      el.classList.add('active');
+      selectedTempo = parseInt(el.textContent);
+    }
+
+    function refreshSlots() {
+      const wrap = document.getElementById('slots-wrap');
+      if (wrap) {
+        wrap.innerHTML = slotsHTML(false);
+        return;
+      }
+      const launchWrap = document.querySelector('#main-content .save-slots');
+      if (launchWrap) launchWrap.innerHTML = slotsHTML(true);
+    }
+
+    function refreshLaunchView() {
+      const courtWrap = document.getElementById('launch-court-picker-wrap');
+      if (courtWrap) courtWrap.innerHTML = courtPickerHTML(true);
+
+      const tempoEl = document.getElementById('sum-tempo');
+      if (tempoEl) tempoEl.textContent = selectedTempo;
+
+      const netVal = document.getElementById('net-val');
+      const netEl = document.getElementById('sum-net');
+      if (netEl && netVal) netEl.textContent = netVal.textContent;
+
+      const lenVal = document.getElementById('len-val');
+      const widVal = document.getElementById('wid-val');
+      const courtEl = document.getElementById('sum-court');
+      if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
+    }
+
+    let activeSlot = null;
+    let slotsLocked = false;
+
+    function slotsHTML(readonly = false) {
+      const machineKey = selectedMachine || 'L';
+      const machineSlots = slots[machineKey];
+      return [1, 2, 3, 4].map(n => {
+        const s = machineSlots[n];
+        const isActive = readonly && activeSlot === n;
+        const isLockedOut = readonly && slotsLocked && activeSlot !== n;
+        const isEmptyReadonly = readonly && !s;
+
+        let clickAttr;
+        if (readonly) {
+          clickAttr = (isLockedOut || isEmptyReadonly) ? '' : `onclick="clickSlot(${n})"`;
+        } else {
+          clickAttr = `onclick="saveNewSlot(${n})"`;
+        }
+
+        const stateClass = isActive ? ' slot-active' : (isLockedOut ? ' locked-out' : (isEmptyReadonly ? ' slot-disabled' : ''));
+        const name = s ? s.name : (readonly ? 'Empty' : 'Tap to save current set');
+        const nameClass = s ? '' : ' empty-name';
+
+        return `<div class="slot${stateClass}" ${clickAttr}>
       <div class="slot-num">Slot ${n}</div>
       <div class="slot-name${nameClass}">${name}</div>
     </div>`;
-  }).join('');
-}
+      }).join('');
+    }
 
-const SLOT_HIGHLIGHT_MS = 4000;
+    const SLOT_HIGHLIGHT_MS = 4000;
 
-function clickSlot(n) {
-  const machineKey = selectedMachine || 'L';
-  const slotData = slots[machineKey][n];
+    function clickSlot(n) {
+      const machineKey = selectedMachine || 'L';
+      const slotData = slots[machineKey][n];
 
-  if (!slotData && !(slotsLocked && activeSlot === n)) return; // empty slots can't be activated
+      if (!slotData && !(slotsLocked && activeSlot === n)) return; // empty slots can't be activated
 
-  if (!slotData) return;
+      if (!slotData) return;
 
-  if (slotsLocked && activeSlot !== n) return; // ignore clicks on other slots while one is active
+      if (slotsLocked && activeSlot !== n) return; // ignore clicks on other slots while one is active
 
-  if (slotsLocked && activeSlot === n) {
-    // clicking the currently-active slot turns it off
-    console.log('Slot deactivated:', machineKey, n);
+      if (slotsLocked && activeSlot === n) {
+        // clicking the currently-active slot turns it off
+        console.log('Slot deactivated:', machineKey, n);
 
-    fetch('/api/slot-click', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ machine: machineKey, slot: n, action: 'stop' })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Server responded with ' + res.status);
-        return res.json().catch(() => ({}));
+        fetch('/api/slot-click', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ machine: machineKey, slot: n, action: 'stop' })
+        })
+          .then(res => {
+            if (!res.ok) throw new Error('Server responded with ' + res.status);
+            return res.json().catch(() => ({}));
+          })
+          .then(json => console.log('Server ack:', json))
+          .catch(err => console.error('Failed to send slot stop to server:', err));
+
+        clearTimeout(window._slotUnlockTimer);
+        slotsLocked = false;
+        activeSlot = null;
+        refreshSlots();
+        return;
+      }
+
+      console.log('Slot clicked:', machineKey, n, slotData);
+
+      const machineToIndex = { L: 0, C: 1, R: 2 };
+      const machineIndex = machineToIndex[machineKey];
+      if (machineIndex !== undefined) {
+        emitMachine('setMachine', {
+          machinePosition: machineIndex,
+          setIndex: n - 1,
+        });
+      }
+
+      fetch('/api/slot-click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ machine: machineKey, slot: n, data: slotData })
       })
-      .then(json => console.log('Server ack:', json))
-      .catch(err => console.error('Failed to send slot stop to server:', err));
+        .then(res => {
+          if (!res.ok) throw new Error('Server responded with ' + res.status);
+          return res.json().catch(() => ({}));
+        })
+        .then(json => console.log('Server ack:', json))
+        .catch(err => console.error('Failed to send slot click to server:', err));
 
-    clearTimeout(window._slotUnlockTimer);
-    slotsLocked = false;
-    activeSlot = null;
-    refreshSlots();
-    return;
-  }
+      slotsLocked = true;
+      activeSlot = n;
+      refreshSlots();
 
-  console.log('Slot clicked:', machineKey, n, slotData);
+      clearTimeout(window._slotUnlockTimer);
+      window._slotUnlockTimer = setTimeout(() => {
+        slotsLocked = false;
+        activeSlot = null;
+        refreshSlots();
+      }, SLOT_HIGHLIGHT_MS);
 
-  const machineToIndex = { L: 0, C: 1, R: 2 };
-  const machineIndex = machineToIndex[machineKey];
-  if (machineIndex !== undefined) {
-    emitMachine('setMachine', {
-      machinePosition: machineIndex,
-      setIndex: n - 1,
-    });
-  }
-
-  fetch('/api/slot-click', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ machine: machineKey, slot: n, data: slotData })
-  })
-    .then(res => {
-      if (!res.ok) throw new Error('Server responded with ' + res.status);
-      return res.json().catch(() => ({}));
-    })
-    .then(json => console.log('Server ack:', json))
-    .catch(err => console.error('Failed to send slot click to server:', err));
-
-slotsLocked = true;
-  activeSlot = n;
-  refreshSlots();
-
-  clearTimeout(window._slotUnlockTimer);
-  window._slotUnlockTimer = setTimeout(() => {
-    slotsLocked = false;
-    activeSlot = null;
-    refreshSlots();
-  }, SLOT_HIGHLIGHT_MS);
-
-  activateSlot(machineKey, n);
-}
-
-// Applies a slot's saved settings and refreshes the on-screen position/summary.
-// Called by clickSlot() for manual taps, and will also be called by the
-// future auto-alternate function so both paths update state the same way.
-function activateSlot(machineKey, n) {
-  const slotData = slots[machineKey][n];
-  if (!slotData) return;
-
-  if (slotData.machine) selectedMachine = slotData.machine;
-  if (slotData.target)  selectedTarget  = slotData.target;
-  if (slotData.tempo)   selectedTempo   = slotData.tempo;
-
-  refreshLaunchView();
-}
-
-function loadSlot(n) {
-  const machineKey = selectedMachine || 'L';
-  const s = slots[machineKey][n];
-  if (!s) return;
-  if (s.machine) { selectedMachine = s.machine; }
-  if (s.target)  { selectedTarget  = s.target;  }
-  if (s.tempo)   { selectedTempo   = s.tempo;   }
-  refreshCourtPicker();
-  refreshSlots();
-  document.querySelectorAll('.tempo-pill').forEach(p => {
-    p.classList.toggle('active', parseInt(p.textContent) === selectedTempo);
-  });
-}
-
-function saveNewSlot(n) {
-  if (!selectedMachine) {
-    console.warn('No machine selected, cannot save slot');
-    return;
-  }
-  if (!selectedTarget) {
-    console.warn('No target selected, cannot save slot');
-    return;
-  }
-  const machinePart = `Machine ${selectedMachine}`;
-  const zonePart   = selectedTarget ? `Zone ${selectedTarget}`   : null;
-  const tempoPart  = `Tempo ${selectedTempo}`;
-  const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
-  slots[selectedMachine][n] = {
-    name,
-    machine: selectedMachine,
-    target: selectedTarget,
-    tempo: selectedTempo,
-  };
-
-  const machineToIndex = { L: 0, C: 1, R: 2 };
-  const machineIndex = machineToIndex[selectedMachine];
-  const targetLocation = parseInt(selectedTarget, 10);
-  const tempo = parseInt(selectedTempo, 10);
-
-  if (machineIndex === undefined || Number.isNaN(targetLocation) || Number.isNaN(tempo)) {
-    console.warn('Invalid slot data, skipping backend save');
-    refreshSlots();
-    return;
-  }
-
-  emitMachine('saveSet', {
-    setIndex: n - 1,
-    machinePosition: machineIndex,
-    targetLocation,
-    tempo,
-  });
-
-  refreshSlots();
-}
-
-function toggleLaunch(btn) {
-  const running = btn.classList.contains('stop');
-  if (running) {
-    btn.classList.remove('stop'); btn.classList.add('start');
-    btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
-    clearInterval(window._telem);
-    if (window._activeMode === 'advanced') {
-      emitMachine('stopMotors');
+      activateSlot(machineKey, n);
     }
-  } else {
-    btn.classList.remove('start'); btn.classList.add('stop');
-    btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
-    startTelemetry();
-    if (window._activeMode === 'advanced') {
-      emitMachine('resumeMotors');
+
+    // Applies a slot's saved settings and refreshes the on-screen position/summary.
+    // Called by clickSlot() for manual taps, and will also be called by the
+    // future auto-alternate function so both paths update state the same way.
+    function activateSlot(machineKey, n) {
+      const slotData = slots[machineKey][n];
+      if (!slotData) return;
+
+      if (slotData.machine) selectedMachine = slotData.machine;
+      if (slotData.target) selectedTarget = slotData.target;
+      if (slotData.tempo) selectedTempo = slotData.tempo;
+
+      refreshLaunchView();
     }
-  }
-}
 
-function goToLaunch() {
-  clearInterval(window._telem);
-  document.getElementById('modenav').style.display = 'none';
-  const topbar = document.getElementById('topbar');
-  topbar.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button><h1 id="page-title">Launch</h1>`;
-  document.getElementById('main-content').innerHTML = screens.launch();
-  const netVal = document.getElementById('net-val');
-  const lenVal = document.getElementById('len-val');
-  const widVal = document.getElementById('wid-val');
-  if (netVal) document.getElementById('sum-net').textContent = netVal.textContent;
-  if (lenVal && widVal) document.getElementById('sum-court').textContent = `${lenVal.textContent} × ${widVal.textContent}`;
-}
-
-function goBack() {
-  clearInterval(window._telem);
-  document.getElementById('modenav').style.display = 'flex';
-  const topbar = document.getElementById('topbar');
-  topbar.innerHTML = `<h1 id="page-title">Configure</h1>`;
-  setMode('configure');
-}
-
-function setMode(mode) {
-  const previousMode = window._activeMode || 'configure';
-  if (previousMode === 'advanced' && mode !== 'advanced') {
-    emitMachine('advanced-leave');
-  }
-
-  document.querySelectorAll('.modetab').forEach(t => t.classList.remove('active'));
-  const tab = document.querySelector(`[data-mode="${mode}"]`);
-  if (tab) tab.classList.add('active');
-  document.getElementById('main-content').innerHTML = screens[mode]();
-  const title = document.getElementById('page-title');
-  if (title) title.textContent = { configure: 'Configure', advanced: 'Advanced' }[mode] || mode;
-  if (mode === 'advanced') {
-    emitMachine('advanced-enter');
-    startTelemetry();
-  }
-  window._activeMode = mode;
-}
-
-function stepSlider(rangeId, valId, suffix, delta) {
-  const input = document.getElementById(rangeId);
-  if (!input) return;
-  input.value = Math.min(input.max, Math.max(input.min, +input.value + delta));
-  document.getElementById(valId).textContent = input.value + suffix;
-
-  if (rangeId === 'dev-ang-range') {
-    emitMachine('setAngle', parseInt(input.value, 10));
-  }
-  if (rangeId === 'dev-spd-range') {
-    emitMachine('setSpeed', parseInt(input.value, 10));
-  }
-}
-
-function startTelemetry() {
-  clearInterval(window._telem);
-
-  if (machineSocket) {
-    machineSocket.emit('requestTelemetry');
-  }
-
-  window._telem = setInterval(() => {
-    const fwl = document.getElementById('fw-l');
-    if (!fwl) return clearInterval(window._telem);
-    if (machineSocket) {
-      machineSocket.emit('requestTelemetry');
+    function loadSlot(n) {
+      const machineKey = selectedMachine || 'L';
+      const s = slots[machineKey][n];
+      if (!s) return;
+      if (s.machine) { selectedMachine = s.machine; }
+      if (s.target) { selectedTarget = s.target; }
+      if (s.tempo) { selectedTempo = s.tempo; }
+      refreshCourtPicker();
+      refreshSlots();
+      document.querySelectorAll('.tempo-pill').forEach(p => {
+        p.classList.toggle('active', parseInt(p.textContent) === selectedTempo);
+      });
     }
-  }, 3000);
-}
 
-document.querySelectorAll('.modetab').forEach(t => t.addEventListener('click', () => {
-  clearInterval(window._telem);
-  setMode(t.dataset.mode);
-}));
-setMode('configure');
-</script>
+    function saveNewSlot(n) {
+      if (!selectedMachine) {
+        console.warn('No machine selected, cannot save slot');
+        return;
+      }
+      if (!selectedTarget) {
+        console.warn('No target selected, cannot save slot');
+        return;
+      }
+      const machinePart = `Machine ${selectedMachine}`;
+      const zonePart = selectedTarget ? `Zone ${selectedTarget}` : null;
+      const tempoPart = `Tempo ${selectedTempo}`;
+      const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
+      slots[selectedMachine][n] = {
+        name,
+        machine: selectedMachine,
+        target: selectedTarget,
+        tempo: selectedTempo,
+      };
+
+      const machineToIndex = { L: 0, C: 1, R: 2 };
+      const machineIndex = machineToIndex[selectedMachine];
+      const targetLocation = parseInt(selectedTarget, 10);
+      const tempo = parseInt(selectedTempo, 10);
+
+      if (machineIndex === undefined || Number.isNaN(targetLocation) || Number.isNaN(tempo)) {
+        console.warn('Invalid slot data, skipping backend save');
+        refreshSlots();
+        return;
+      }
+
+      emitMachine('saveSet', {
+        setIndex: n - 1,
+        machinePosition: machineIndex,
+        targetLocation,
+        tempo,
+      });
+
+      refreshSlots();
+    }
+
+    function toggleLaunch(btn) {
+      const running = btn.classList.contains('stop');
+      if (running) {
+        btn.classList.remove('stop'); btn.classList.add('start');
+        btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+        clearInterval(window._telem);
+        if (window._activeMode === 'advanced') {
+          emitMachine('stopMotors');
+        }
+      } else {
+        btn.classList.remove('start'); btn.classList.add('stop');
+        btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+        startTelemetry();
+        if (window._activeMode === 'advanced') {
+          emitMachine('resumeMotors');
+        }
+      }
+    }
+
+    function goToLaunch() {
+      clearInterval(window._telem);
+      document.getElementById('modenav').style.display = 'none';
+      const topbar = document.getElementById('topbar');
+      topbar.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button><h1 id="page-title">Launch</h1>`;
+      document.getElementById('main-content').innerHTML = screens.launch();
+      const netVal = document.getElementById('net-val');
+      const lenVal = document.getElementById('len-val');
+      const widVal = document.getElementById('wid-val');
+      if (netVal) document.getElementById('sum-net').textContent = netVal.textContent;
+      if (lenVal && widVal) document.getElementById('sum-court').textContent = `${lenVal.textContent} × ${widVal.textContent}`;
+    }
+
+    function goBack() {
+      clearInterval(window._telem);
+      document.getElementById('modenav').style.display = 'flex';
+      const topbar = document.getElementById('topbar');
+      topbar.innerHTML = `<h1 id="page-title">Configure</h1>`;
+      setMode('configure');
+    }
+
+    function setMode(mode) {
+      const previousMode = window._activeMode || 'configure';
+      if (previousMode === 'advanced' && mode !== 'advanced') {
+        emitMachine('advanced-leave');
+      }
+
+      document.querySelectorAll('.modetab').forEach(t => t.classList.remove('active'));
+      const tab = document.querySelector(`[data-mode="${mode}"]`);
+      if (tab) tab.classList.add('active');
+      document.getElementById('main-content').innerHTML = screens[mode]();
+      const title = document.getElementById('page-title');
+      if (title) title.textContent = { configure: 'Configure', advanced: 'Advanced' }[mode] || mode;
+      if (mode === 'advanced') {
+        emitMachine('advanced-enter');
+        startTelemetry();
+      }
+      window._activeMode = mode;
+    }
+
+    function stepSlider(rangeId, valId, suffix, delta) {
+      const input = document.getElementById(rangeId);
+      if (!input) return;
+      input.value = Math.min(input.max, Math.max(input.min, +input.value + delta));
+      document.getElementById(valId).textContent = input.value + suffix;
+
+      if (rangeId === 'dev-ang-range') {
+        emitMachine('setAngle', parseInt(input.value, 10));
+      }
+      if (rangeId === 'dev-spd-range') {
+        emitMachine('setSpeed', parseInt(input.value, 10));
+      }
+    }
+
+    function startTelemetry() {
+      clearInterval(window._telem);
+
+      if (machineSocket) {
+        machineSocket.emit('requestTelemetry');
+      }
+
+      window._telem = setInterval(() => {
+        const fwl = document.getElementById('fw-l');
+        if (!fwl) return clearInterval(window._telem);
+        if (machineSocket) {
+          machineSocket.emit('requestTelemetry');
+        }
+      }, 3000);
+    }
+
+    document.querySelectorAll('.modetab').forEach(t => t.addEventListener('click', () => {
+      clearInterval(window._telem);
+      setMode(t.dataset.mode);
+    }));
+    setMode('configure');
+  </script>
 </body>
+
 </html>
