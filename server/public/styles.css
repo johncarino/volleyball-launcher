@@ -254,6 +254,19 @@ body {
 .slot {
   border: 0.5px solid var(--border-secondary);
   border-radius: var(--radius-md); padding: 10px 12px; cursor: pointer; background: transparent;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.slot-body { min-width: 0; flex: 1; }
+.slot-delete {
+  flex-shrink: 0;
+  width: 24px; height: 24px; border-radius: 50%;
+  border: none; background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-tertiary); font-size: 13px; cursor: pointer;
+}
+.slot-delete:active {
+  background: var(--bg-danger);
+  color: var(--text-danger);
 }
 .slot-num { font-size: 11px; color: var(--text-tertiary); margin-bottom: 4px; }
 .slot-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }

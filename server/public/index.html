@@ -634,7 +634,7 @@ function slotsHTML(readonly = false) {
   const machineKey = selectedMachine || 'L';
   const machineSlots = slots[machineKey];
   const machineEnabled = slotEnabled[machineKey];
-  const readyToSave = !readonly && selectedMachine && selectedTarget && tempoSelected && !slotSaved; // add this line
+  const readyToSave = !readonly && selectedMachine && selectedTarget && tempoSelected && !slotSaved;
   return [1, 2, 3, 4].map(n => {
     const s = machineSlots[n];
     const enabled = readonly && !!s && !!machineEnabled[n];
@@ -649,13 +649,20 @@ function slotsHTML(readonly = false) {
     }
 
     const stateClass = isPlaying ? ' slot-active' : (enabled ? ' slot-enabled' : (isEmptyReadonly ? ' slot-disabled' : ''));
-    const flashClass = readyToSave ? ' selectable-flash' : ''; // add this line
+    const flashClass = readyToSave ? ' selectable-flash' : '';
     const name = s ? s.name : (readonly ? 'Empty' : 'Tap to save current set');
     const nameClass = s ? '' : ' empty-name';
 
+    const deleteBtn = (!readonly && s)
+      ? `<button class="slot-delete" onclick="event.stopPropagation(); deleteSlot('${machineKey}', ${n})" aria-label="Delete slot"><i class="ti ti-x" aria-hidden="true"></i></button>`
+      : '';
+
     return `<div class="slot${stateClass}${flashClass}" ${clickAttr}>
-      <div class="slot-num">Slot ${n}${enabled ? ' <span class="slot-enabled-badge">●</span>' : ''}</div>
-      <div class="slot-name${nameClass}">${name}</div>
+      <div class="slot-body">
+        <div class="slot-num">Slot ${n}${enabled ? ' <span class="slot-enabled-badge">●</span>' : ''}</div>
+        <div class="slot-name${nameClass}">${name}</div>
+      </div>
+      ${deleteBtn}
     </div>`;
   }).join('');
 }
@@ -824,8 +831,24 @@ function saveNewSlot(n) {
   slotEnabled[selectedMachine][n] = true;
   slotSaved = true;
   if (selectedMachine === 'C') {
-    lockedSide = zoneSide(selectedTarget); // add this line
+    lockedSide = zoneSide(selectedTarget);
   }
+  refreshSlots();
+  refreshCourtPicker();
+}
+
+function deleteSlot(machineKey, n) {
+  slots[machineKey][n] = null;
+  slotEnabled[machineKey][n] = false;
+
+  if (machineKey === selectedMachine) {
+    const stillHasSlots = [1, 2, 3, 4].some(i => !!slots[machineKey][i]);
+    if (!stillHasSlots) {
+      lockedSide = null; 
+      slotSaved = false;
+    }
+  }
+
   refreshSlots();
   refreshCourtPicker();
 }

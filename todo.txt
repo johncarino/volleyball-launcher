@@ -8,7 +8,6 @@ FUNCTIONAL
 
 SECONDARY
 - Add images for launcher locations
-- When the middle machine position, selecting one set direction, the other side disappears
 - Fix tempo 5 being cut
 - Move Random and Repeat button next to save slots
 
