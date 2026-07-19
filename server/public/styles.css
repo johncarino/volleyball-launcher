@@ -278,6 +278,27 @@ body {
 .slot-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 3px; }
 .slot.locked-out { opacity: 0.4; pointer-events: none; cursor: default; }
 
+.slots-with-playback {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+.slots-with-playback .save-slots {
+  flex: 1;
+  min-width: 0;
+}
+.slots-narrow .slot {
+  padding: 8px 10px;
+}
+
+.playback-controls.vertical {
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+  flex-shrink: 0;
+  justify-content: center;
+}
+
 .dev-row {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 0; border-bottom: 0.5px solid var(--border);

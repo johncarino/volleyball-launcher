@@ -9,7 +9,6 @@ FUNCTIONAL
 SECONDARY
 - Add images for launcher locations
 - Fix tempo 5 being cut
-- Move Random and Repeat button next to save slots
 
 CONSIDERATION
 - in launch mode, the back button may be too small, a little unintuitive perhaps

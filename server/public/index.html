@@ -418,11 +418,12 @@ function cycleRepeat() {
   btn.querySelector('i').className = `ti ${repeatIcons[repeatState]}`;
 }
 
-function renderPlaybackControls() {
+function renderPlaybackControls(vertical = false) {
   const randomActiveClass = randomOn ? 'active' : '';
   const repeatActiveClass = repeatState > 0 ? 'active' : '';
+  const orientationClass = vertical ? ' vertical' : '';
   return `
-    <div class="playback-controls">
+    <div class="playback-controls${orientationClass}">
       <button class="pb-btn ${randomActiveClass}" id="pb-random" onclick="toggleRandom()" aria-label="Random">
         <div class="pb-btn-icon"><i class="ti ti-arrows-shuffle" aria-hidden="true"></i></div>
         <span class="pb-btn-label">Random</span>
@@ -523,13 +524,15 @@ const screens = {
       </div>
     </div>
     <div class="section">
-      <div class="section-label">Saved Set Slots</div>
-      <div class="save-slots">${slotsHTML(true)}</div>
+      <div class="section-label">Set Slots</div>
+      <div class="slots-with-playback">
+        <div class="save-slots slots-narrow">${slotsHTML(true)}</div>
+        ${renderPlaybackControls(true)}
+      </div>
     </div>
     <div class="section">
       <div class="section-label">Launch</div>
       <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
-      ${renderPlaybackControls()}
     </div>`
 };
 
