@@ -23,10 +23,6 @@
     <div class="topbar-left" id="topbar-left">
       <h1 id="page-title">Configure</h1>
     </div>
-    <div class="modenav" id="modenav" role="tablist" aria-label="Modes" style="display:none">
-      <button class="modetab" role="tab" data-mode="launch">Launch</button>
-      <button class="modetab" role="tab" data-mode="advanced">Advanced</button>
-    </div>
   </div>
 
   <div class="content" id="main-content"></div>
@@ -831,10 +827,21 @@ function toggleLaunch(btn) {
 
 function goToLaunch() {
   clearInterval(window._telem);
-  document.getElementById('modenav').style.display = 'flex';
   const topbarLeft = document.getElementById('topbar-left');
-  topbarLeft.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button><h1 id="page-title">Launch</h1>`;
+  topbarLeft.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+    <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
+      <button class="modetab-header" role="tab" data-mode="launch">Launch</button>
+      <button class="modetab-header" role="tab" data-mode="advanced">Advanced</button>
+    </div>`;
+  attachModeTabListeners();
   setMode('launch');
+}
+
+function attachModeTabListeners() {
+  document.querySelectorAll('.modetab-header').forEach(t => t.addEventListener('click', () => {
+    clearInterval(window._telem);
+    setMode(t.dataset.mode);
+  }));
 }
 
 function goBack() {
@@ -844,7 +851,6 @@ function goBack() {
     emitMachine('advanced-leave');
   }
   window._activeMode = null;
-  document.getElementById('modenav').style.display = 'none';
   const topbarLeft = document.getElementById('topbar-left');
   topbarLeft.innerHTML = `<h1 id="page-title">Configure</h1>`;
   document.getElementById('main-content').innerHTML = screens.configure();
@@ -877,12 +883,10 @@ function setMode(mode) {
     appEl.classList.toggle('mode-advanced', mode === 'advanced');
   }
 
-  document.querySelectorAll('.modetab').forEach(t => t.classList.remove('active'));
-  const tab = document.querySelector(`[data-mode="${mode}"]`);
+  document.querySelectorAll('.modetab-header').forEach(t => t.classList.remove('active'));
+  const tab = document.querySelector(`.modetab-header[data-mode="${mode}"]`);
   if (tab) tab.classList.add('active');
   document.getElementById('main-content').innerHTML = screens[mode]();
-  const title = document.getElementById('page-title');
-  if (title) title.textContent = { launch: 'Launch', advanced: 'Advanced' }[mode] || mode;
   if (mode === 'advanced') {
     emitMachine('advanced-enter');
     startTelemetry();
@@ -919,10 +923,6 @@ function startTelemetry() {
   }, 800);
 }
 
-document.querySelectorAll('.modetab').forEach(t => t.addEventListener('click', () => {
-  clearInterval(window._telem);
-  setMode(t.dataset.mode);
-}));
 document.getElementById('main-content').innerHTML = screens.configure();
 </script>
 </body>

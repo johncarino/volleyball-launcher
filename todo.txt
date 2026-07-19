@@ -11,6 +11,7 @@ SECONDARY
 - When the middle machine position, selecting one set direction, the other side disappears
 - Fix tempo 5 being cut
 - Change launch/advance buttons to be the header
+- Move Random and Repeat button next to save slots
 
 CONSIDERATION
 - in launch mode, the back button may be too small, a little unintuitive perhaps
