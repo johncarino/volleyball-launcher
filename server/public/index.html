@@ -23,6 +23,9 @@
     <div class="topbar-left" id="topbar-left">
       <h1 id="page-title">Configure</h1>
     </div>
+    <button class="power-btn" onclick="powerOff()" aria-label="Power off">
+      <i class="ti ti-power" aria-hidden="true"></i>
+    </button>
   </div>
 
   <div class="content" id="main-content"></div>
@@ -163,6 +166,11 @@ function toggleHopper() {
     btn.classList.toggle('active', hopperOn);
   }
   onHopperControl(hopperOn ? 'on' : 'off');
+}
+
+function powerOff() {
+  if (!confirm('Power off the launcher?')) return;
+  //emitMachine('powerOff');
 }
 
 function courtPickerHTML(readonly = false) {

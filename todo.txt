@@ -2,9 +2,9 @@ PRIORITY
 - Accessable from beaglebone
 
 FUNCTIONAL
-- Power on/off button
 - Popup to help align the machine
 - Make launch menu set selection more intuitive
+- Power off button backend
 
 SECONDARY
 - Add images for launcher locations
