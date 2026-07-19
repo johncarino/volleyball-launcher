@@ -201,20 +201,19 @@ function courtPickerHTML(readonly = false) {
 
   const machineRectW = 32;
   const machineRectH = 74;
+  // Images for the machine - IMAGES ARE A PLACEHOLDER
+  const machineImages = { L: 'images/left.jpg', C: 'images/front.jpg', R: 'images/right.jpg' };
   const mCircles = machineSpots.map(s => {
-    const active   = mSel === s.id;
-    const fill     = active ? '#b52a2a' : 'transparent';
-    const stroke   = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
-    const textFill = active ? '#fff' : '#b52a2a';
-    const opacity  = active ? 1 : (readonly ? 0 : 0.7);
-    const flashClass = (!mSel && !readonly) ? 'selectable-flash' : '';
-    const onclick  = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
-    const cursor   = readonly ? 'default' : 'pointer';
-    const rx       = s.cx - machineRectW / 2;
-    const ry       = s.cy - machineRectH / 2;
+    const active    = mSel === s.id;
+    const ringStroke = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
+    const opacity   = active ? 1 : (readonly ? 0 : 0.7);
+    const onclick   = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
+    const cursor    = readonly ? 'default' : 'pointer';
+    const rx        = s.cx - machineRectW / 2;
+    const ry        = s.cy - machineRectH / 2;
     return `<g ${onclick} style="cursor:${cursor}">
-      <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="${fill}" stroke="${stroke}" stroke-width="2" opacity="${opacity}" class="${flashClass}"/>
-      ${active ? `<text x="${s.cx}" y="${s.cy + 4}" text-anchor="middle" font-size="9" fill="${textFill}" font-family="system-ui,sans-serif" font-weight="500">${s.id}</text>` : ''}
+      <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
+      <image href="${machineImages[s.id]}" x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" preserveAspectRatio="xMidYMid slice" opacity="${opacity}" style="clip-path: inset(0 round 3px)"/>
     </g>`;
   }).join('');
 

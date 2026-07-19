@@ -7,7 +7,6 @@ FUNCTIONAL
 - Power off button backend
 
 SECONDARY
-- Add images for launcher locations
 - Fix tempo 5 being cut
 
 CONSIDERATION
@@ -18,6 +17,7 @@ CONSIDERATION
 - Move JS to separate file
 
 AESTHETIC
+- Add finalized machine images
 - Change background colours to be better
 - Clean up target zone graphic
 - Change to light mode with company colours
