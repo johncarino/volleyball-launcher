@@ -17,6 +17,7 @@
 var socketio = require('socket.io');
 var dgram    = require('dgram');
 var path     = require('path');
+var fs       = require('fs');
 var spawn    = require('child_process').spawn;
 
 // ---- Configuration (override via environment variables) -------------------
@@ -31,6 +32,16 @@ var M2DEMO_BIN    = process.env.M2DEMO_BIN || 'm2demo';
 var GRAPH_CONFIG  = process.env.GESTURE_GRAPH ||
         path.join(__dirname, '..', '..', 'mediapipe_files', 'hand_tracking_custom.pbtxt');
 var CAMERA_INDEX  = process.env.GESTURE_CAMERA || '0';
+
+// Bazel-built binaries resolve MediaPipe resource paths (e.g.
+// "mediapipe/modules/palm_detection/palm_detection_full.tflite") relative to
+// the process's working directory, expecting to be launched the way
+// `bazel run` does: from inside the target's generated runfiles tree. Since
+// we spawn the binary directly, point `cwd` at that runfiles directory
+// (<M2DEMO_BIN>.runfiles/_main) so those relative lookups succeed. Override
+// via M2DEMO_RUNFILES_DIR if your Bazel setup uses a different layout.
+var M2DEMO_RUNFILES_DIR = process.env.M2DEMO_RUNFILES_DIR ||
+        path.join(M2DEMO_BIN + '.runfiles', '_main');
 
 var io;
 var recognizer = null;   // current child_process, or null
@@ -431,12 +442,21 @@ function startRecognizer(socket) {
 		'--udp_port=' + UDP_PORT
 	];
 
-	console.log("Spawning recogniser: " + M2DEMO_BIN + " " + args.join(' '));
+	var spawnOptions = {
+		env: Object.assign({}, process.env, { GLOG_logtostderr: '1' })
+	};
+	if (fs.existsSync(M2DEMO_RUNFILES_DIR)) {
+		spawnOptions.cwd = M2DEMO_RUNFILES_DIR;
+	} else {
+		console.log("[m2demo] Runfiles dir not found (" + M2DEMO_RUNFILES_DIR + "); " +
+				"resource loading may fail if the binary needs it.");
+	}
+
+	console.log("Spawning recogniser: " + M2DEMO_BIN + " " + args.join(' ') +
+			(spawnOptions.cwd ? " (cwd=" + spawnOptions.cwd + ")" : ""));
 
 	try {
-		recognizer = spawn(M2DEMO_BIN, args, {
-			env: Object.assign({}, process.env, { GLOG_logtostderr: '1' })
-		});
+		recognizer = spawn(M2DEMO_BIN, args, spawnOptions);
 	} catch (e) {
 		recognizer = null;
 		socket.emit('gesture-error', "Failed to start recogniser: " + e.message);

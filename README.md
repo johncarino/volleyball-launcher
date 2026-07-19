@@ -85,9 +85,40 @@ This repo now includes [Makefile](Makefile) at its root (`gesture-control/`):
 - OpenCV development headers
 - External `mediapipe/` checkout present at repo root
 
+## Syncing to the Board
+
+The board (BeagleY-AI, `john@192.168.7.2`) has its own clone of this repo,
+currently checked out at `~/Downloads/volleyball-system/gesture-control`. Two
+ways to get local changes onto it:
+
+- **`git pull`** (preferred once changes are committed/pushed) — run on the
+  board inside that directory, on the `gesture-wip` branch.
+- **`rsync`** (for iterating before a commit, or copying uncommitted changes):
+
+  ```bash
+  rsync -avz --delete \
+      --exclude '.git' \
+      --exclude 'mediapipe/' \
+      /home/john/Downloads/volleyball-launcher/ \
+      john@192.168.7.2:/home/john/Downloads/volleyball-system/gesture-control/
+  ```
+
+  `--exclude 'mediapipe/'` is required — the board's external MediaPipe
+  checkout lives at that path and must never be deleted/overwritten by
+  `--delete`. Drop `--delete` if you'd rather leave stale files on the board
+  in place.
+
+  To copy a single changed file instead:
+
+  ```bash
+  scp server/lib/gesture_server.js \
+      john@192.168.7.2:/home/john/Downloads/volleyball-system/gesture-control/server/lib/gesture_server.js
+  ```
+
 ## Typical Board Workflow
 
-1. Update repo on board (`git pull` on `gesture-wip`) or copy changed files.
+1. Update repo on board (`git pull` on `gesture-wip`) or copy changed files
+   (see [Syncing to the Board](#syncing-to-the-board)).
 2. From repo root (`gesture-control/`):
    - `make server`
    - `make m2demo` (when recogniser sources changed)
@@ -101,3 +132,17 @@ This repo now includes [Makefile](Makefile) at its root (`gesture-control/`):
 
 `server/lib/gesture_server.js` parses these and emits `gesture-update` events to
 the browser clients.
+
+## Known Gotcha: `m2demo` Resource Loading
+
+Bazel-built binaries resolve MediaPipe resource paths (e.g.
+`mediapipe/modules/palm_detection/palm_detection_full.tflite`) relative to the
+process's working directory, assuming they're launched the way `bazel run`
+launches them — from inside the target's generated runfiles tree. Since
+`gesture_server.js` spawns `m2demo` directly, it sets the child process's
+`cwd` to `<M2DEMO_BIN>.runfiles/_main` (the runfiles workspace directory name
+under Bazel's bzlmod, confirmed via `ls .runfiles/`) so those relative lookups
+succeed. If model loading fails with `Can't find file: mediapipe/modules/...`,
+check that this runfiles directory exists next to the built binary, or
+override the path with the `M2DEMO_RUNFILES_DIR` environment variable if your
+Bazel setup names it differently.
