@@ -102,12 +102,20 @@ body {
   cursor: pointer; font-size: 16px; color: var(--text-secondary); flex-shrink: 0;
 }
 .power-btn {
-  width: 32px; height: 32px; border-radius: 50%;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
   border: 0.5px solid var(--border-secondary);
   background: transparent;
   display: flex; align-items: center; justify-content: center;
+  gap: 6px;
   cursor: pointer; font-size: 16px; color: var(--text-danger);
   flex-shrink: 0;
+  font-family: inherit;
+}
+.power-btn span {
+  font-size: 13px;
+  font-weight: 500;
 }
 .power-btn:active {
   background: var(--bg-danger);
