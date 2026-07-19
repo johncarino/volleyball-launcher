@@ -17,6 +17,8 @@ CONSIDERATION
 - Change to 5 set locations(?)
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Remove court dimensions from launch screen
+- Make it so selection instructions are not repeated every time
+- Move JS to separate file
 
 AESTHETIC
 - Change background colours to be better
@@ -24,8 +26,6 @@ AESTHETIC
 
 CLEANUP
 - Remove old-old-index.html, old stylesheets
-- Make it so selection instructions are not repeated every time
-- Move JS to separate file
 
 beaglebone/mnt/remote/jp/volleyball_launcher/server/
 npm start

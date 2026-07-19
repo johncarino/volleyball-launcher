@@ -92,6 +92,7 @@ let hoveredTempo = null;
 let hopperOn = false;
 let tempoSelected = false; // Track if tempo has been selected
 let slotSaved = false; // whether the current machine/target/tempo combo has been saved to a slot
+let lockedSide = null; // 'left' | 'right' |
 const machineSocket = (typeof io !== 'undefined') ? io() : null;
 const slots = {
   L: { 1: null, 2: null, 3: null, 4: null },
@@ -109,6 +110,10 @@ const repeatIcons  = ['ti-repeat', 'ti-repeat'];
 
 const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
 const targetNames  = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
+
+function zoneSide(zoneId) {
+  return (zoneId === '1' || zoneId === '2') ? 'left' : 'right';
+}
 
 function emitMachine(eventName, value) {
   if (!machineSocket) return;
@@ -218,10 +223,11 @@ function courtPickerHTML(readonly = false) {
   const targetImgSize = 48; // width/height of the volleyball icon in SVG units
   const tCircles = targetSpots.map(s => {
     const active      = tSel === s.id;
-    const clickable   = isMachineSelected && !readonly;
+    const sideLocked  = mSel === 'C' && !!lockedSide && !active && zoneSide(s.id) !== lockedSide;
+    const clickable   = isMachineSelected && !readonly && !sideLocked;
     const ringStroke  = active ? '#1a7a3a' : (clickable ? '#1a7a3a' : 'transparent');
-    const opacity     = active ? 1 : (clickable ? 0.75 : 0);
-    const lineOpacity = active ? 0.6 : (clickable ? 0.35 : 0);
+    const opacity     = active ? 1 : (sideLocked ? 0 : (clickable ? 0.75 : 0));
+    const lineOpacity = active ? 0.6 : (sideLocked ? 0 : (clickable ? 0.35 : 0));
     const flashClass  = (clickable && !tSel) ? 'selectable-flash' : '';
     const onclick     = clickable ? `onclick="selectTarget('${s.id}')"` : '';
     const cursor      = clickable ? 'pointer' : 'default';
@@ -271,12 +277,14 @@ function courtPickerHTML(readonly = false) {
   }
 
   // Determine the legend text
-  // Determine the legend text
   const dotsLegend = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#b52a2a;opacity:0.8"></span> Machine position <span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a7a3a;opacity:0.8"></span> Target zone</span>';
 
   let legendText = 'Select a machine location';
   let legendClass = 'legend-text-select';
-  if (mSel && !tSel) {
+  if (mSel === 'C' && !tSel) {
+    legendText = 'Select a Target Zone. Only one direction at a time';
+    legendClass = 'legend-text-select';
+  } else if (mSel && !tSel) {
     legendText = 'Select a Target Zone';
     legendClass = 'legend-text-select';
   } else if (mSel && tSel && !tempoSelected && !readonly) {
@@ -343,9 +351,24 @@ function animateCourtShift(container) {
 
 function selectMachine(id) {
   selectedMachine = id;
-  selectedTarget = null; // Reset target when machine changes
-  tempoSelected = false; // Reset tempo selection state
-  slotSaved = false;
+
+  const savedSlot = [1, 2, 3, 4]
+    .map(n => slots[id][n])
+    .find(s => !!s); // grab the first saved slot for this machine, if any
+
+  if (savedSlot) {
+    selectedTarget = savedSlot.target;
+    selectedTempo  = savedSlot.tempo;
+    tempoSelected  = true;
+    slotSaved      = true;
+    lockedSide     = (id === 'C') ? zoneSide(savedSlot.target) : null;
+  } else {
+    selectedTarget = null;
+    tempoSelected = false;
+    slotSaved = false;
+    lockedSide = null;
+  }
+
   refreshCourtPicker();
   refreshSlots();
   refreshTempo();
@@ -800,6 +823,9 @@ function saveNewSlot(n) {
   };
   slotEnabled[selectedMachine][n] = true;
   slotSaved = true;
+  if (selectedMachine === 'C') {
+    lockedSide = zoneSide(selectedTarget); // add this line
+  }
   refreshSlots();
   refreshCourtPicker();
 }
