@@ -1,357 +1,362 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AVSS</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
-<link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DimeTime</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
 
-<div class="app">
-  <!--
+  <div class="app">
+    <!--
   <div class="statusbar">
-    <span class="device">AVSS</span>
+    <span class="device">DimeTime</span>
     <span class="conn" id="conn-status">
       <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
       <span id="conn-text">Connected</span>
     </span>
   </div>
   -->
-  <div class="topbar" id="topbar">
-    <div class="topbar-left" id="topbar-left">
-      <h1 id="page-title">Configure</h1>
-    </div>
-    <button class="power-btn" onclick="powerOff()" aria-label="Power off">
-      <span>Power Off</span>
-      <i class="ti ti-power" aria-hidden="true"></i>
-    </button>
-  </div>
-
-  <div class="content" id="main-content"></div>
-
-  <div class="modal-overlay" id="court-modal" onclick="handleOverlayClick(event)">
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-header">
-        <span class="modal-title">Court settings</span>
-        <button class="modal-close" onclick="closeModal()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+    <div class="topbar" id="topbar">
+      <div class="topbar-left" id="topbar-left">
+        <h1 id="page-title">Configure</h1>
       </div>
-      <div class="modal-body">
-        <div class="section" style="margin-bottom:16px">
-          <div class="section-label">Net height</div>
-          <div class="card" style="margin-bottom:0">
-            <div style="margin-bottom:6px">
-              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-                <span style="font-size:13px;color:var(--text-secondary)">Height</span>
-                <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="net-val">243 cm</strong>
-              </div>
-              <input type="range" min="220" max="260" value="243" step="1" style="width:100%"
-                oninput="document.getElementById('net-val').textContent=this.value+' cm'; updateCourtBtn()">
-            </div>
-            <div style="margin-top:4px;font-size:11px;color:var(--text-tertiary)">Standard men's: 243 cm · Women's: 224 cm</div>
-          </div>
+      <button class="power-btn" onclick="powerOff()" aria-label="Power off">
+        <span>Power Off</span>
+        <i class="ti ti-power" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <div class="content" id="main-content"></div>
+
+    <div class="modal-overlay" id="court-modal" onclick="handleOverlayClick(event)">
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-header">
+          <span class="modal-title">Court settings</span>
+          <button class="modal-close" onclick="closeModal()" aria-label="Close"><i class="ti ti-x"
+              aria-hidden="true"></i></button>
         </div>
-        <div class="section" style="margin-bottom:0">
-          <div class="section-label">Court dimensions</div>
-          <div class="card" style="margin-bottom:0">
-            <div style="margin-bottom:14px">
-              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-                <span style="font-size:13px;color:var(--text-secondary)">Length</span>
-                <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="len-val">18.0 m</strong>
+        <div class="modal-body">
+          <div class="section" style="margin-bottom:16px">
+            <div class="section-label">Net height</div>
+            <div class="card" style="margin-bottom:0">
+              <div style="margin-bottom:6px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                  <span style="font-size:13px;color:var(--text-secondary)">Height</span>
+                  <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="net-val">243 cm</strong>
+                </div>
+                <input type="range" min="220" max="260" value="243" step="1" style="width:100%"
+                  oninput="document.getElementById('net-val').textContent=this.value+' cm'; updateCourtBtn()">
               </div>
-              <input type="range" min="10" max="22" value="18" step="0.5" style="width:100%"
-                oninput="document.getElementById('len-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()">
-            </div>
-            <div>
-              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-                <span style="font-size:13px;color:var(--text-secondary)">Width</span>
-                <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="wid-val">9.0 m</strong>
-              </div>
-              <input type="range" min="5" max="12" value="9" step="0.5" style="width:100%"
-                oninput="document.getElementById('wid-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()">
+              <div style="margin-top:4px;font-size:11px;color:var(--text-tertiary)">Standard men's: 243 cm · Women's:
+                224 cm</div>
             </div>
           </div>
+          <div class="section" style="margin-bottom:0">
+            <div class="section-label">Court dimensions</div>
+            <div class="card" style="margin-bottom:0">
+              <div style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                  <span style="font-size:13px;color:var(--text-secondary)">Length</span>
+                  <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="len-val">18.0 m</strong>
+                </div>
+                <input type="range" min="10" max="22" value="18" step="0.5" style="width:100%"
+                  oninput="document.getElementById('len-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()">
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                  <span style="font-size:13px;color:var(--text-secondary)">Width</span>
+                  <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="wid-val">9.0 m</strong>
+                </div>
+                <input type="range" min="5" max="12" value="9" step="0.5" style="width:100%"
+                  oninput="document.getElementById('wid-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()">
+              </div>
+            </div>
+          </div>
         </div>
+        <button class="modal-save" onclick="closeModal()">Save</button>
       </div>
-      <button class="modal-save" onclick="closeModal()">Save</button>
+    </div>
+    <div class="modal-overlay" id="align-modal" onclick="handleAlignOverlayClick(event)">
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-header">
+          <span class="modal-title" id="align-modal-title">Machine alignment</span>
+          <button class="modal-close" onclick="closeAlignModal()" aria-label="Close"><i class="ti ti-x"
+              aria-hidden="true"></i></button>
+        </div>
+        <div class="modal-body">
+          <img id="align-modal-img" src="" alt="Machine alignment reference" class="align-modal-img">
+          <p id="align-modal-text" class="align-modal-text"></p>
+        </div>
+        <button class="modal-save" onclick="closeAlignModal()">Got it</button>
+      </div>
     </div>
   </div>
-  <div class="modal-overlay" id="align-modal" onclick="handleAlignOverlayClick(event)">
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-header">
-        <span class="modal-title" id="align-modal-title">Machine alignment</span>
-        <button class="modal-close" onclick="closeAlignModal()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
-      </div>
-      <div class="modal-body">
-        <img id="align-modal-img" src="" alt="Machine alignment reference" class="align-modal-img">
-        <p id="align-modal-text" class="align-modal-text"></p>
-      </div>
-      <button class="modal-save" onclick="closeAlignModal()">Got it</button>
-    </div>
-  </div>
-</div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
-// Persistent state
-let randomOn = false;
-let repeatState = 0;
-let selectedMachine = null;
-let selectedTarget  = null;
-let selectedTempo = null;
-let hoveredTempo = null;
-let hopperOn = false;
-let tempoSelected = false; // Track if tempo has been selected
-let slotSaved = false; // whether the current machine/target/tempo combo has been saved to a slot
-let lockedSide = null; // 'left' | 'right' |
-const machineSocket = (typeof io !== 'undefined') ? io() : null;
-const slots = {
-  L: { 1: null, 2: null, 3: null, 4: null },
-  C: { 1: null, 2: null, 3: null, 4: null },
-  R: { 1: null, 2: null, 3: null, 4: null },
-};
-const slotEnabled = {
-  L: { 1: false, 2: false, 3: false, 4: false },
-  C: { 1: false, 2: false, 3: false, 4: false },
-  R: { 1: false, 2: false, 3: false, 4: false },
-};
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // Persistent state
+    let randomOn = false;
+    let repeatState = 0;
+    let selectedMachine = null;
+    let selectedTarget = null;
+    let selectedTempo = null;
+    let hoveredTempo = null;
+    let hopperOn = false;
+    let tempoSelected = false; // Track if tempo has been selected
+    let slotSaved = false; // whether the current machine/target/tempo combo has been saved to a slot
+    let lockedSide = null; // 'left' | 'right' |
+    const machineSocket = (typeof io !== 'undefined') ? io() : null;
+    const slots = {
+      L: { 1: null, 2: null, 3: null, 4: null },
+      C: { 1: null, 2: null, 3: null, 4: null },
+      R: { 1: null, 2: null, 3: null, 4: null },
+    };
+    const slotEnabled = {
+      L: { 1: false, 2: false, 3: false, 4: false },
+      C: { 1: false, 2: false, 3: false, 4: false },
+      R: { 1: false, 2: false, 3: false, 4: false },
+    };
 
-const repeatLabels = ['Repeat', 'Repeat'];
-const repeatIcons  = ['ti-repeat', 'ti-repeat'];
+    const repeatLabels = ['Repeat', 'Repeat'];
+    const repeatIcons = ['ti-repeat', 'ti-repeat'];
 
-const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
-const targetNames  = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
+    const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
+    const targetNames = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
 
-const alignImages = { L: 'images/left.jpg', C: 'images/front.jpg', R: 'images/right.jpg' };
-const alignInstructions = {
-  L: 'Placeholder instructions for aligning the machine at the LEFT position.',
-  C: 'Placeholder instructions for aligning the machine at the CENTER position.',
-  R: 'Placeholder instructions for aligning the machine at the RIGHT position.',
-};
+    const alignImages = { L: 'images/left.jpg', C: 'images/front.jpg', R: 'images/right.jpg' };
+    const alignInstructions = {
+      L: 'Placeholder instructions for aligning the machine at the LEFT position.',
+      C: 'Placeholder instructions for aligning the machine at the CENTER position.',
+      R: 'Placeholder instructions for aligning the machine at the RIGHT position.',
+    };
 
-function openAlignModal(id) {
-  const img = document.getElementById('align-modal-img');
-  const text = document.getElementById('align-modal-text');
-  const title = document.getElementById('align-modal-title');
-  if (img)   img.src = alignImages[id] || '';
-  if (text)  text.textContent = alignInstructions[id] || '';
-  if (title) title.textContent = `${machineNames[id] || id} machine alignment`;
-  document.getElementById('align-modal').classList.add('open');
-}
+    function openAlignModal(id) {
+      const img = document.getElementById('align-modal-img');
+      const text = document.getElementById('align-modal-text');
+      const title = document.getElementById('align-modal-title');
+      if (img) img.src = alignImages[id] || '';
+      if (text) text.textContent = alignInstructions[id] || '';
+      if (title) title.textContent = `${machineNames[id] || id} machine alignment`;
+      document.getElementById('align-modal').classList.add('open');
+    }
 
-function closeAlignModal() {
-  document.getElementById('align-modal').classList.remove('open');
-}
+    function closeAlignModal() {
+      document.getElementById('align-modal').classList.remove('open');
+    }
 
-function handleAlignOverlayClick(e) {
-  if (e.target === document.getElementById('align-modal')) closeAlignModal();
-}
+    function handleAlignOverlayClick(e) {
+      if (e.target === document.getElementById('align-modal')) closeAlignModal();
+    }
 
-function zoneSide(zoneId) {
-  return (zoneId === '1' || zoneId === '2') ? 'left' : 'right';
-}
+    function zoneSide(zoneId) {
+      return (zoneId === '1' || zoneId === '2') ? 'left' : 'right';
+    }
 
-function emitMachine(eventName, value) {
-  if (!machineSocket) return;
-  machineSocket.emit(eventName, value);
-}
+    function emitMachine(eventName, value) {
+      if (!machineSocket) return;
+      machineSocket.emit(eventName, value);
+    }
 
-if (machineSocket) {
-  machineSocket.on('connect', () => {
-    machineSocket.emit('page-loaded');
-  });
-}
+    if (machineSocket) {
+      machineSocket.on('connect', () => {
+        machineSocket.emit('page-loaded');
+      });
+    }
 
-function onAdvancedAngleInput(value) {
-  const val = parseInt(value, 10);
-  document.getElementById('dev-ang-val').textContent = val + '°';
-}
+    function onAdvancedAngleInput(value) {
+      const val = parseInt(value, 10);
+      document.getElementById('dev-ang-val').textContent = val + '°';
+    }
 
-function onAdvancedAngleChange(value) {
-  const val = parseInt(value, 10);
-  document.getElementById('dev-ang-val').textContent = val + '°';
-  emitMachine('setAngle', val);
-}
+    function onAdvancedAngleChange(value) {
+      const val = parseInt(value, 10);
+      document.getElementById('dev-ang-val').textContent = val + '°';
+      emitMachine('setAngle', val);
+    }
 
-function onAdvancedSpeedInput(value) {
-  const val = parseInt(value, 10);
-  document.getElementById('dev-spd-val').textContent = val + '%';
-}
+    function onAdvancedSpeedInput(value) {
+      const val = parseInt(value, 10);
+      document.getElementById('dev-spd-val').textContent = val + '%';
+    }
 
-function onAdvancedSpeedChange(value) {
-  const val = parseInt(value, 10);
-  document.getElementById('dev-spd-val').textContent = val + '%';
-  emitMachine('setSpeed', val);
-}
+    function onAdvancedSpeedChange(value) {
+      const val = parseInt(value, 10);
+      document.getElementById('dev-spd-val').textContent = val + '%';
+      emitMachine('setSpeed', val);
+    }
 
-function onHopperControl(action) {
-  emitMachine('hopper-' + action);
-}
+    function onHopperControl(action) {
+      emitMachine('hopper-' + action);
+    }
 
-function pulseHopper(btn) {
-  if (btn.disabled) return; // do nothing if already running
-  btn.disabled = true;
-  btn.classList.add('active');
-  onHopperControl('pulse');
+    function pulseHopper(btn) {
+      if (btn.disabled) return; // do nothing if already running
+      btn.disabled = true;
+      btn.classList.add('active');
+      onHopperControl('pulse');
 
-  setTimeout(() => {
-    btn.classList.remove('active');
-    btn.disabled = false;
-  }, 4000); // Change this value to adjust duration of pulse
-}
+      setTimeout(() => {
+        btn.classList.remove('active');
+        btn.disabled = false;
+      }, 4000); // Change this value to adjust duration of pulse
+    }
 
-function toggleHopper() {
-  hopperOn = !hopperOn;
-  const btn = document.getElementById('hopper-toggle-btn');
-  if (btn) {
-    btn.textContent = hopperOn ? 'Hopper On' : 'Hopper Off';
-    btn.classList.toggle('active', hopperOn);
-  }
-  onHopperControl(hopperOn ? 'on' : 'off');
-}
+    function toggleHopper() {
+      hopperOn = !hopperOn;
+      const btn = document.getElementById('hopper-toggle-btn');
+      if (btn) {
+        btn.textContent = hopperOn ? 'Hopper On' : 'Hopper Off';
+        btn.classList.toggle('active', hopperOn);
+      }
+      onHopperControl(hopperOn ? 'on' : 'off');
+    }
 
-function powerOff() {
-  if (!confirm('Power off the launcher?')) return;
-  //emitMachine('powerOff');
-}
+    function powerOff() {
+      if (!confirm('Power off the launcher?')) return;
+      //emitMachine('powerOff');
+    }
 
-function courtPickerHTML(readonly = false) {
-  const mSel = selectedMachine;
-  const tSel = selectedTarget;
+    function courtPickerHTML(readonly = false) {
+      const mSel = selectedMachine;
+      const tSel = selectedTarget;
 
-  const baseOffset = 25; // default vertical offset
-  const isFullySelected = !!(mSel && tSel);
-  const targetShift = isFullySelected ? 85 - baseOffset : 0; // extra shift added on top of baseOffset
+      const baseOffset = 25; // default vertical offset
+      const isFullySelected = !!(mSel && tSel);
+      const targetShift = isFullySelected ? 85 - baseOffset : 0; // extra shift added on top of baseOffset
 
-  const machineSpots = [
-    { id: 'L', cx: 18,  cy: 133 + baseOffset },
-    { id: 'C', cx: 160, cy: 133 + baseOffset },
-    { id: 'R', cx: 302, cy: 133 + baseOffset },
-  ];
-  const targetSpots = [
-    { id: '1', cx: 70,  cy: 20 + baseOffset },
-    { id: '2', cx: 130, cy: 20 + baseOffset },
-    { id: '3', cx: 190, cy: 20 + baseOffset },
-    { id: '4', cx: 250, cy: 20 + baseOffset },
-  ];
+      const machineSpots = [
+        { id: 'L', cx: 18, cy: 133 + baseOffset },
+        { id: 'C', cx: 160, cy: 133 + baseOffset },
+        { id: 'R', cx: 302, cy: 133 + baseOffset },
+      ];
+      const targetSpots = [
+        { id: '1', cx: 70, cy: 20 + baseOffset },
+        { id: '2', cx: 130, cy: 20 + baseOffset },
+        { id: '3', cx: 190, cy: 20 + baseOffset },
+        { id: '4', cx: 250, cy: 20 + baseOffset },
+      ];
 
-  // Images for the machine - IMAGES ARE A PLACEHOLDER
-  const machineRectW = 32;
-  const machineRectH = 74;
-  const machineImages = { L: 'images/left.jpg', R: 'images/right.jpg' };
-  function machineImageFor(id) {
-    if (id !== 'C') return machineImages[id];
-    if (lockedSide === 'left')  return 'images/left.jpg';
-    if (lockedSide === 'right') return 'images/right.jpg';
-    return 'images/front.jpg';
-  }
-  const mCircles = machineSpots.map(s => {
-    const active    = mSel === s.id;
-    const ringStroke = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
-    const opacity   = active ? 1 : (readonly ? 0 : 0.7);
-    const onclick   = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
-    const cursor    = readonly ? 'default' : 'pointer';
-    const rx        = s.cx - machineRectW / 2;
-    const ry        = s.cy - machineRectH / 2;
-    return `<g ${onclick} style="cursor:${cursor}">
+      // Images for the machine - IMAGES ARE A PLACEHOLDER
+      const machineRectW = 32;
+      const machineRectH = 74;
+      const machineImages = { L: 'images/left.jpg', R: 'images/right.jpg' };
+      function machineImageFor(id) {
+        if (id !== 'C') return machineImages[id];
+        if (lockedSide === 'left') return 'images/left.jpg';
+        if (lockedSide === 'right') return 'images/right.jpg';
+        return 'images/front.jpg';
+      }
+      const mCircles = machineSpots.map(s => {
+        const active = mSel === s.id;
+        const ringStroke = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
+        const opacity = active ? 1 : (readonly ? 0 : 0.7);
+        const onclick = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
+        const cursor = readonly ? 'default' : 'pointer';
+        const rx = s.cx - machineRectW / 2;
+        const ry = s.cy - machineRectH / 2;
+        return `<g ${onclick} style="cursor:${cursor}">
       <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
       <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" preserveAspectRatio="xMidYMid slice" opacity="${opacity}" style="clip-path: inset(0 round 3px)"/>
     </g>`;
-  }).join('');
+      }).join('');
 
-  const isMachineSelected = mSel !== null;
+      const isMachineSelected = mSel !== null;
 
-  const targetImgSize = 48; // width/height of the volleyball icon in SVG units
-  const tCircles = targetSpots.map(s => {
-    const active      = tSel === s.id;
-    const sideLocked  = mSel === 'C' && !!lockedSide && !active && zoneSide(s.id) !== lockedSide;
-    const clickable   = isMachineSelected && !readonly && !sideLocked;
-    const ringStroke  = active ? '#1a7a3a' : (clickable ? '#1a7a3a' : 'transparent');
-    const opacity     = active ? 1 : (sideLocked ? 0 : (clickable ? 0.75 : 0));
-    const lineOpacity = active ? 0.6 : (sideLocked ? 0 : (clickable ? 0.35 : 0));
-    const flashClass  = (clickable && !tSel) ? 'selectable-flash' : '';
-    const onclick     = clickable ? `onclick="selectTarget('${s.id}')"` : '';
-    const cursor      = clickable ? 'pointer' : 'default';
-    const half        = targetImgSize / 2;
-    return `<g ${onclick} style="cursor:${cursor}">
+      const targetImgSize = 48; // width/height of the volleyball icon in SVG units
+      const tCircles = targetSpots.map(s => {
+        const active = tSel === s.id;
+        const sideLocked = mSel === 'C' && !!lockedSide && !active && zoneSide(s.id) !== lockedSide;
+        const clickable = isMachineSelected && !readonly && !sideLocked;
+        const ringStroke = active ? '#1a7a3a' : (clickable ? '#1a7a3a' : 'transparent');
+        const opacity = active ? 1 : (sideLocked ? 0 : (clickable ? 0.75 : 0));
+        const lineOpacity = active ? 0.6 : (sideLocked ? 0 : (clickable ? 0.35 : 0));
+        const flashClass = (clickable && !tSel) ? 'selectable-flash' : '';
+        const onclick = clickable ? `onclick="selectTarget('${s.id}')"` : '';
+        const cursor = clickable ? 'pointer' : 'default';
+        const half = targetImgSize / 2;
+        return `<g ${onclick} style="cursor:${cursor}">
       <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="${46 + baseOffset}" stroke="#1a7a3a" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
       <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
       <image href="images/volleyball.png" x="${s.cx - half}" y="${s.cy - half}" width="${targetImgSize}" height="${targetImgSize}" opacity="${opacity}" class="${flashClass}"/>
     </g>`;
-  }).join('');
+      }).join('');
 
-  let tempoArcs = '';
-  if (mSel && tSel) {
-    const m = machineSpots.find(s => s.id === mSel);
-    const t = targetSpots.find(s => s.id === tSel);
-    const startX = m.cx;
-    const startY = m.cy - machineRectH / 2;
-    const endX   = t.cx;
-    const endY   = t.cy;
-    const midX   = (startX + endX) / 2;
-    const baseMidY = (startY + endY) / 2;
+      let tempoArcs = '';
+      if (mSel && tSel) {
+        const m = machineSpots.find(s => s.id === mSel);
+        const t = targetSpots.find(s => s.id === tSel);
+        const startX = m.cx;
+        const startY = m.cy - machineRectH / 2;
+        const endX = t.cx;
+        const endY = t.cy;
+        const midX = (startX + endX) / 2;
+        const baseMidY = (startY + endY) / 2;
 
-    const highlightTempo = hoveredTempo || selectedTempo;
-    tempoArcs = [1, 2, 3, 4, 5].map(tempo => {
-      const active      = tempo === highlightTempo;
-      const isSelected  = tempo === selectedTempo;
-      const arcHeight   = 16 + tempo * 50;
-      const ctrlY       = baseMidY - arcHeight;
-      const stroke      = active ? '#e08a1e' : '#c2b8ab';
-      const strokeWidth = active ? 2.5 : 1;
-      const opacity     = active ? 0.95 : 0.4;
-      const flashClass  = (!readonly && !tempoSelected) ? 'selectable-flash' : '';
-      const hitProps    = readonly
-        ? ''
-        : `onclick="selectTempo(${tempo})" onmouseenter="onTempoHover(${tempo})" onmouseleave="onTempoHover(null)" style="cursor:pointer"`;
-      const hitArea = readonly ? '' : `<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="transparent" stroke-width="14" ${hitProps}/>`;
-      const labelT = 0.35; // 0 = at machine, 0.5 = arc midpoint, 1 = at target. Lower = closer to machine.
-      const oneMinusT = 1 - labelT;
-      const peakX = oneMinusT * oneMinusT * startX + 2 * labelT * oneMinusT * midX + labelT * labelT * endX;
-      const peakY = oneMinusT * oneMinusT * startY + 2 * labelT * oneMinusT * ctrlY + labelT * labelT * endY;
-      const pillW = 44;
-      const pillH = 16;
-      const label = isSelected
-        ? `<g>
+        const highlightTempo = hoveredTempo || selectedTempo;
+        tempoArcs = [1, 2, 3, 4, 5].map(tempo => {
+          const active = tempo === highlightTempo;
+          const isSelected = tempo === selectedTempo;
+          const arcHeight = 16 + tempo * 50;
+          const ctrlY = baseMidY - arcHeight;
+          const stroke = active ? '#e08a1e' : '#c2b8ab';
+          const strokeWidth = active ? 2.5 : 1;
+          const opacity = active ? 0.95 : 0.4;
+          const flashClass = (!readonly && !tempoSelected) ? 'selectable-flash' : '';
+          const hitProps = readonly
+            ? ''
+            : `onclick="selectTempo(${tempo})" onmouseenter="onTempoHover(${tempo})" onmouseleave="onTempoHover(null)" style="cursor:pointer"`;
+          const hitArea = readonly ? '' : `<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="transparent" stroke-width="14" ${hitProps}/>`;
+          const labelT = 0.35; // 0 = at machine, 0.5 = arc midpoint, 1 = at target. Lower = closer to machine.
+          const oneMinusT = 1 - labelT;
+          const peakX = oneMinusT * oneMinusT * startX + 2 * labelT * oneMinusT * midX + labelT * labelT * endX;
+          const peakY = oneMinusT * oneMinusT * startY + 2 * labelT * oneMinusT * ctrlY + labelT * labelT * endY;
+          const pillW = 44;
+          const pillH = 16;
+          const label = isSelected
+            ? `<g>
             <rect x="${peakX - pillW / 2}" y="${peakY - 9 - pillH / 2}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="#e08a1e"/>
             <text x="${peakX}" y="${peakY - 6}" text-anchor="middle" font-size="9" fill="#fff" font-family="system-ui,sans-serif" font-weight="600">Tempo ${tempo}</text>
           </g>`
-        : '';
-      return `${hitArea}<path id="tempo-line-${tempo}" d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="${opacity}" class="${flashClass}" style="pointer-events:none"/>${label}`;
-    }).join('');
-  }
+            : '';
+          return `${hitArea}<path id="tempo-line-${tempo}" d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="${opacity}" class="${flashClass}" style="pointer-events:none"/>${label}`;
+        }).join('');
+      }
 
-  // Determine the legend text
-  const dotsLegend = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#b52a2a;opacity:0.8"></span> Machine position <span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a7a3a;opacity:0.8"></span> Target zone</span>';
+      // Determine the legend text
+      const dotsLegend = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#b52a2a;opacity:0.8"></span> Machine position <span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a7a3a;opacity:0.8"></span> Target zone</span>';
 
-  let legendText = 'Select a machine location';
-  let legendClass = 'legend-text-select';
-  if (mSel === 'C' && !tSel) {
-    legendText = 'Select a Target Zone. Only one direction at a time';
-    legendClass = 'legend-text-select';
-  } else if (mSel && !tSel) {
-    legendText = 'Select a Target Zone';
-    legendClass = 'legend-text-select';
-  } else if (mSel && tSel && !tempoSelected && !readonly) {
-    legendText = 'Select an Arc Tempo';
-    legendClass = 'legend-text-select';
-  } else if (mSel && tSel && tempoSelected && !slotSaved && !readonly) {
-    legendText = 'Save to Set Slot';
-    legendClass = 'legend-text-select';
-  } else if (mSel && tSel && tempoSelected && slotSaved && !readonly) {
-    legendText = dotsLegend;
-    legendClass = '';
-  } else if (mSel && tSel && readonly) {
-    legendText = dotsLegend;
-    legendClass = '';
-  }
+      let legendText = 'Select a machine location';
+      let legendClass = 'legend-text-select';
+      if (mSel === 'C' && !tSel) {
+        legendText = 'Select a Target Zone. Only one direction at a time';
+        legendClass = 'legend-text-select';
+      } else if (mSel && !tSel) {
+        legendText = 'Select a Target Zone';
+        legendClass = 'legend-text-select';
+      } else if (mSel && tSel && !tempoSelected && !readonly) {
+        legendText = 'Select an Arc Tempo';
+        legendClass = 'legend-text-select';
+      } else if (mSel && tSel && tempoSelected && !slotSaved && !readonly) {
+        legendText = 'Save to Set Slot';
+        legendClass = 'legend-text-select';
+      } else if (mSel && tSel && tempoSelected && slotSaved && !readonly) {
+        legendText = dotsLegend;
+        legendClass = '';
+      } else if (mSel && tSel && readonly) {
+        legendText = dotsLegend;
+        legendClass = '';
+      }
 
-  const showTempo = !readonly && mSel && tSel;
+      const showTempo = !readonly && mSel && tSel;
 
-  return `
+      return `
     <div class="court-picker" style="${readonly ? 'pointer-events:none;' : ''}">
       <div class="court-svg-wrap">
         <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
@@ -381,96 +386,96 @@ function courtPickerHTML(readonly = false) {
         </div>
       </div>` : ''}
     </div>`;
-}
+    }
 
-let lastCourtShift = 0;
+    let lastCourtShift = 0;
 
-function animateCourtShift(container) {
-  const g = container.querySelector('#court-shift-g');
-  if (!g) return;
-  const target = parseFloat(g.dataset.targetShift);
-  g.style.transition = 'none';
-  g.style.transform = `translateY(${lastCourtShift}px)`;
-  void g.getBoundingClientRect(); // force reflow so the browser registers the starting position
-  g.style.transition = 'transform 0.35s ease';
-  g.style.transform = `translateY(${target}px)`;
-  lastCourtShift = target;
-}
+    function animateCourtShift(container) {
+      const g = container.querySelector('#court-shift-g');
+      if (!g) return;
+      const target = parseFloat(g.dataset.targetShift);
+      g.style.transition = 'none';
+      g.style.transform = `translateY(${lastCourtShift}px)`;
+      void g.getBoundingClientRect(); // force reflow so the browser registers the starting position
+      g.style.transition = 'transform 0.35s ease';
+      g.style.transform = `translateY(${target}px)`;
+      lastCourtShift = target;
+    }
 
-function selectMachine(id) {
-  selectedMachine = id;
-  openAlignModal(id);
-  const savedSlot = [1, 2, 3, 4]
-    .map(n => slots[id][n])
-    .find(s => !!s); // grab the first saved slot for this machine, if any
+    function selectMachine(id) {
+      selectedMachine = id;
+      openAlignModal(id);
+      const savedSlot = [1, 2, 3, 4]
+        .map(n => slots[id][n])
+        .find(s => !!s); // grab the first saved slot for this machine, if any
 
-  if (savedSlot) {
-    selectedTarget = savedSlot.target;
-    selectedTempo  = savedSlot.tempo;
-    tempoSelected  = true;
-    slotSaved      = true;
-    lockedSide     = (id === 'C') ? zoneSide(savedSlot.target) : null;
-  } else {
-    selectedTarget = null;
-    tempoSelected = false;
-    slotSaved = false;
-    lockedSide = null;
-  }
+      if (savedSlot) {
+        selectedTarget = savedSlot.target;
+        selectedTempo = savedSlot.tempo;
+        tempoSelected = true;
+        slotSaved = true;
+        lockedSide = (id === 'C') ? zoneSide(savedSlot.target) : null;
+      } else {
+        selectedTarget = null;
+        tempoSelected = false;
+        slotSaved = false;
+        lockedSide = null;
+      }
 
-  refreshCourtPicker();
-  refreshSlots();
-  refreshTempo();
-}
+      refreshCourtPicker();
+      refreshSlots();
+      refreshTempo();
+    }
 
-function selectTarget(id) {
-  selectedTarget = id;
-  tempoSelected = selectedTempo !== null;
-  refreshCourtPicker();
-  refreshTempo();
-  refreshSlots();
-}
+    function selectTarget(id) {
+      selectedTarget = id;
+      tempoSelected = selectedTempo !== null;
+      refreshCourtPicker();
+      refreshTempo();
+      refreshSlots();
+    }
 
-function refreshCourtPicker() {
-  const wrap = document.getElementById('court-picker-wrap');
-  if (wrap) {
-    wrap.innerHTML = courtPickerHTML();
-    animateCourtShift(wrap);
-  }
+    function refreshCourtPicker() {
+      const wrap = document.getElementById('court-picker-wrap');
+      if (wrap) {
+        wrap.innerHTML = courtPickerHTML();
+        animateCourtShift(wrap);
+      }
 
-  const showTempo = !!(selectedMachine && selectedTarget);
+      const showTempo = !!(selectedMachine && selectedTarget);
 
-  const tempoWrap = document.getElementById('tempo-wrap');
-  if (tempoWrap) {
-    tempoWrap.innerHTML = tempoPillsHTML();
-    tempoWrap.classList.toggle('tempo-visible', showTempo);
-  }
+      const tempoWrap = document.getElementById('tempo-wrap');
+      if (tempoWrap) {
+        tempoWrap.innerHTML = tempoPillsHTML();
+        tempoWrap.classList.toggle('tempo-visible', showTempo);
+      }
 
-  if (wrap) {
-    wrap.classList.toggle('tempo-open', showTempo);
-  }
-}
+      if (wrap) {
+        wrap.classList.toggle('tempo-open', showTempo);
+      }
+    }
 
-function toggleRandom() {
-  randomOn = !randomOn;
-  const btn = document.getElementById('pb-random');
-  if (!btn) return;
-  btn.classList.toggle('active', randomOn);
-}
+    function toggleRandom() {
+      randomOn = !randomOn;
+      const btn = document.getElementById('pb-random');
+      if (!btn) return;
+      btn.classList.toggle('active', randomOn);
+    }
 
-function cycleRepeat() {
-  repeatState = (repeatState + 1) % 2;
-  const btn = document.getElementById('pb-repeat');
-  if (!btn) return;
-  btn.classList.toggle('active', repeatState > 0);
-  btn.querySelector('.pb-btn-label').textContent = repeatLabels[repeatState];
-  btn.querySelector('i').className = `ti ${repeatIcons[repeatState]}`;
-}
+    function cycleRepeat() {
+      repeatState = (repeatState + 1) % 2;
+      const btn = document.getElementById('pb-repeat');
+      if (!btn) return;
+      btn.classList.toggle('active', repeatState > 0);
+      btn.querySelector('.pb-btn-label').textContent = repeatLabels[repeatState];
+      btn.querySelector('i').className = `ti ${repeatIcons[repeatState]}`;
+    }
 
-function renderPlaybackControls(vertical = false) {
-  const randomActiveClass = randomOn ? 'active' : '';
-  const repeatActiveClass = repeatState > 0 ? 'active' : '';
-  const orientationClass = vertical ? ' vertical' : '';
-  return `
+    function renderPlaybackControls(vertical = false) {
+      const randomActiveClass = randomOn ? 'active' : '';
+      const repeatActiveClass = repeatState > 0 ? 'active' : '';
+      const orientationClass = vertical ? ' vertical' : '';
+      return `
     <div class="playback-controls${orientationClass}">
       <button class="pb-btn ${randomActiveClass}" id="pb-random" onclick="toggleRandom()" aria-label="Random">
         <div class="pb-btn-icon"><i class="ti ti-arrows-shuffle" aria-hidden="true"></i></div>
@@ -483,10 +488,10 @@ function renderPlaybackControls(vertical = false) {
         <span class="pb-btn-label">${repeatLabels[repeatState]}</span>
       </button>
     </div>`;
-}
+    }
 
-const screens = {
-  configure: () => `
+    const screens = {
+      configure: () => `
     <div class="section" style="margin-top:8px">
       <div class="section-label">Position</div>
       <div id="court-picker-wrap">${courtPickerHTML()}</div>
@@ -512,7 +517,7 @@ const screens = {
       <button class="op-btn continue-style" onclick="goToLaunch()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue</button>
     </div>`,
 
-  advanced: () => `
+      advanced: () => `
     <div class="section" style="margin-top:8px">
       <div class="section-label">Manual control</div>
       <div class="card">
@@ -560,7 +565,7 @@ const screens = {
       <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
     </div>`,
 
-  launch: () => `
+      launch: () => `
     <div class="section" style="margin-top:8px">
       <div class="section-label">Position</div>
       <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
@@ -580,471 +585,472 @@ const screens = {
       <div class="section-label">Launch</div>
       <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
     </div>`
-};
+    };
 
-function openModal() { document.getElementById('court-modal').classList.add('open'); }
-function closeModal() { document.getElementById('court-modal').classList.remove('open'); }
-function handleOverlayClick(e) { if (e.target === document.getElementById('court-modal')) closeModal(); }
+    function openModal() { document.getElementById('court-modal').classList.add('open'); }
+    function closeModal() { document.getElementById('court-modal').classList.remove('open'); }
+    function handleOverlayClick(e) { if (e.target === document.getElementById('court-modal')) closeModal(); }
 
-function updateCourtBtn() {
-  const net = document.getElementById('net-val');
-  const len = document.getElementById('len-val');
-  const wid = document.getElementById('wid-val');
-  const sub = document.getElementById('court-btn-sub');
-  if (net && len && wid && sub) sub.textContent = `Net ${net.textContent} · ${len.textContent} × ${wid.textContent}`;
-}
+    function updateCourtBtn() {
+      const net = document.getElementById('net-val');
+      const len = document.getElementById('len-val');
+      const wid = document.getElementById('wid-val');
+      const sub = document.getElementById('court-btn-sub');
+      if (net && len && wid && sub) sub.textContent = `Net ${net.textContent} · ${len.textContent} × ${wid.textContent}`;
+    }
 
-function getCourtSummary() {
-  const net = document.getElementById('net-val');
-  const len = document.getElementById('len-val');
-  const wid = document.getElementById('wid-val');
-  const netTxt = net ? net.textContent : '243 cm';
-  const lenTxt = len ? len.textContent : '18.0 m';
-  const widTxt = wid ? wid.textContent : '9.0 m';
-  return `Net ${netTxt} · ${lenTxt} × ${widTxt}`;
-}
+    function getCourtSummary() {
+      const net = document.getElementById('net-val');
+      const len = document.getElementById('len-val');
+      const wid = document.getElementById('wid-val');
+      const netTxt = net ? net.textContent : '243 cm';
+      const lenTxt = len ? len.textContent : '18.0 m';
+      const widTxt = wid ? wid.textContent : '9.0 m';
+      return `Net ${netTxt} · ${lenTxt} × ${widTxt}`;
+    }
 
-function tempoPillsHTML() {
-  const flashClass = !tempoSelected ? ' selectable-flash' : '';
-  const pills = [1, 2, 3, 4, 5].map(n =>
-    `<button class="tempo-pill${flashClass} ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
+    function tempoPillsHTML() {
+      const flashClass = !tempoSelected ? ' selectable-flash' : '';
+      const pills = [1, 2, 3, 4, 5].map(n =>
+        `<button class="tempo-pill${flashClass} ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
       onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)">${n}</button>`
-  ).join('');
-  return `
+      ).join('');
+      return `
     <div class="tempo-row">
       <span class="tempo-label">Tempo</span>
       <div class="tempo-pills">${pills}</div>
     </div>`;
-}
-
-function onTempoHover(n) {
-  hoveredTempo = n;
-  const highlightTempo = hoveredTempo || selectedTempo;
-  for (let tempo = 1; tempo <= 5; tempo++) {
-    const line = document.getElementById('tempo-line-' + tempo);
-    if (!line) continue;
-    const active = tempo === highlightTempo;
-    line.setAttribute('stroke', active ? '#e08a1e' : '#c2b8ab');
-    line.setAttribute('stroke-width', active ? '2.5' : '1');
-    line.setAttribute('opacity', active ? '0.95' : '0.4');
-  }
-}
-
-function flashLegendAttention() {
-  const el = document.getElementById('legend-span');
-  if (!el) return;
-  el.classList.remove('legend-attention');
-  void el.offsetWidth; // force reflow so removing+re-adding the class actually restarts the animation
-  el.classList.add('legend-attention');
-}
-
-function refreshTempo() {
-  const wrap = document.getElementById('tempo-wrap');
-  if (wrap) wrap.innerHTML = tempoPillsHTML();
-}
-
-function setPill(el) {
-  selectTempo(parseInt(el.textContent));
-}
-
-function selectTempo(n) {
-  selectedTempo = n;
-  tempoSelected = true; // Mark that tempo has been selected
-  refreshTempo();
-  refreshCourtPicker();
-  refreshSlots();
-}
-
-function refreshSlots() {
-  const wrap = document.getElementById('slots-wrap');
-  if (wrap) {
-    wrap.innerHTML = slotsHTML(false);
-    return;
-  }
-  const launchWrap = document.querySelector('#main-content .save-slots');
-  if (launchWrap) launchWrap.innerHTML = slotsHTML(true);
-}
-
-function refreshLaunchView() {
-  const courtWrap = document.getElementById('launch-court-picker-wrap');
-  if (courtWrap) courtWrap.innerHTML = courtPickerHTML(true);
-
-  const netVal = document.getElementById('net-val');
-  const netEl = document.getElementById('sum-net');
-  if (netEl && netVal) netEl.textContent = netVal.textContent;
-
-  const lenVal = document.getElementById('len-val');
-  const widVal = document.getElementById('wid-val');
-  const courtEl = document.getElementById('sum-court');
-  if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
-}
-
-// --- Run sequence state (drives the Launch screen's Start button) ---
-let isRunning = false;
-let runQueue = [];       // ordered list of { machine, n } to fire through
-let runIndex = 0;
-let currentRunSlot = null; // { machine, n } currently firing, for the "now playing" highlight
-const SET_RUN_DURATION_MS = 6000; // assumed dwell time per set before advancing
-
-function slotsHTML(readonly = false) {
-  const machineKey = selectedMachine || 'L';
-  const machineSlots = slots[machineKey];
-  const machineEnabled = slotEnabled[machineKey];
-  const readyToSave = !readonly && selectedMachine && selectedTarget && tempoSelected && !slotSaved;
-  return [1, 2, 3, 4].map(n => {
-    const s = machineSlots[n];
-    const enabled = readonly && !!s && !!machineEnabled[n];
-    const isPlaying = readonly && !!currentRunSlot && currentRunSlot.machine === machineKey && currentRunSlot.n === n;
-    const isEmptyReadonly = readonly && !s;
-
-    let clickAttr;
-    if (readonly) {
-      clickAttr = isEmptyReadonly ? '' : `onclick="clickSlot(${n})"`;
-    } else {
-      clickAttr = `onclick="saveNewSlot(${n})"`;
     }
 
-    const stateClass = isPlaying ? ' slot-active' : (enabled ? ' slot-enabled' : (isEmptyReadonly ? ' slot-disabled' : ''));
-    const flashClass = readyToSave ? ' selectable-flash' : '';
-    const name = s ? (s.name + (isPlaying ? ' - Running' : '')) : (readonly ? 'Empty' : 'Tap to save current set');
-    const nameClass = s ? '' : ' empty-name';
+    function onTempoHover(n) {
+      hoveredTempo = n;
+      const highlightTempo = hoveredTempo || selectedTempo;
+      for (let tempo = 1; tempo <= 5; tempo++) {
+        const line = document.getElementById('tempo-line-' + tempo);
+        if (!line) continue;
+        const active = tempo === highlightTempo;
+        line.setAttribute('stroke', active ? '#e08a1e' : '#c2b8ab');
+        line.setAttribute('stroke-width', active ? '2.5' : '1');
+        line.setAttribute('opacity', active ? '0.95' : '0.4');
+      }
+    }
 
-    const deleteBtn = (!readonly && s)
-      ? `<button class="slot-delete" onclick="event.stopPropagation(); deleteSlot('${machineKey}', ${n})" aria-label="Delete slot"><i class="ti ti-x" aria-hidden="true"></i></button>`
-      : '';
+    function flashLegendAttention() {
+      const el = document.getElementById('legend-span');
+      if (!el) return;
+      el.classList.remove('legend-attention');
+      void el.offsetWidth; // force reflow so removing+re-adding the class actually restarts the animation
+      el.classList.add('legend-attention');
+    }
 
-    return `<div class="slot${stateClass}${flashClass}" ${clickAttr}>
+    function refreshTempo() {
+      const wrap = document.getElementById('tempo-wrap');
+      if (wrap) wrap.innerHTML = tempoPillsHTML();
+    }
+
+    function setPill(el) {
+      selectTempo(parseInt(el.textContent));
+    }
+
+    function selectTempo(n) {
+      selectedTempo = n;
+      tempoSelected = true; // Mark that tempo has been selected
+      refreshTempo();
+      refreshCourtPicker();
+      refreshSlots();
+    }
+
+    function refreshSlots() {
+      const wrap = document.getElementById('slots-wrap');
+      if (wrap) {
+        wrap.innerHTML = slotsHTML(false);
+        return;
+      }
+      const launchWrap = document.querySelector('#main-content .save-slots');
+      if (launchWrap) launchWrap.innerHTML = slotsHTML(true);
+    }
+
+    function refreshLaunchView() {
+      const courtWrap = document.getElementById('launch-court-picker-wrap');
+      if (courtWrap) courtWrap.innerHTML = courtPickerHTML(true);
+
+      const netVal = document.getElementById('net-val');
+      const netEl = document.getElementById('sum-net');
+      if (netEl && netVal) netEl.textContent = netVal.textContent;
+
+      const lenVal = document.getElementById('len-val');
+      const widVal = document.getElementById('wid-val');
+      const courtEl = document.getElementById('sum-court');
+      if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
+    }
+
+    // --- Run sequence state (drives the Launch screen's Start button) ---
+    let isRunning = false;
+    let runQueue = [];       // ordered list of { machine, n } to fire through
+    let runIndex = 0;
+    let currentRunSlot = null; // { machine, n } currently firing, for the "now playing" highlight
+    const SET_RUN_DURATION_MS = 6000; // assumed dwell time per set before advancing
+
+    function slotsHTML(readonly = false) {
+      const machineKey = selectedMachine || 'L';
+      const machineSlots = slots[machineKey];
+      const machineEnabled = slotEnabled[machineKey];
+      const readyToSave = !readonly && selectedMachine && selectedTarget && tempoSelected && !slotSaved;
+      return [1, 2, 3, 4].map(n => {
+        const s = machineSlots[n];
+        const enabled = readonly && !!s && !!machineEnabled[n];
+        const isPlaying = readonly && !!currentRunSlot && currentRunSlot.machine === machineKey && currentRunSlot.n === n;
+        const isEmptyReadonly = readonly && !s;
+
+        let clickAttr;
+        if (readonly) {
+          clickAttr = isEmptyReadonly ? '' : `onclick="clickSlot(${n})"`;
+        } else {
+          clickAttr = `onclick="saveNewSlot(${n})"`;
+        }
+
+        const stateClass = isPlaying ? ' slot-active' : (enabled ? ' slot-enabled' : (isEmptyReadonly ? ' slot-disabled' : ''));
+        const flashClass = readyToSave ? ' selectable-flash' : '';
+        const name = s ? (s.name + (isPlaying ? ' - Running' : '')) : (readonly ? 'Empty' : 'Tap to save current set');
+        const nameClass = s ? '' : ' empty-name';
+
+        const deleteBtn = (!readonly && s)
+          ? `<button class="slot-delete" onclick="event.stopPropagation(); deleteSlot('${machineKey}', ${n})" aria-label="Delete slot"><i class="ti ti-x" aria-hidden="true"></i></button>`
+          : '';
+
+        return `<div class="slot${stateClass}${flashClass}" ${clickAttr}>
       <div class="slot-body">
         <div class="slot-num">Slot ${n}${enabled ? ' <span class="slot-enabled-badge">●</span>' : ''}</div>
         <div class="slot-name${nameClass}">${name}</div>
       </div>
       ${deleteBtn}
     </div>`;
-  }).join('');
-}
+      }).join('');
+    }
 
-// Tapping a slot in the Launch screen now enables/disables it for the run
-// queue, instead of immediately running it.
-function clickSlot(n) {
-  const machineKey = selectedMachine || 'L';
-  if (!slots[machineKey][n]) return; // nothing saved in this slot, nothing to toggle
-  slotEnabled[machineKey][n] = !slotEnabled[machineKey][n];
-  refreshSlots();
-}
+    // Tapping a slot in the Launch screen now enables/disables it for the run
+    // queue, instead of immediately running it.
+    function clickSlot(n) {
+      const machineKey = selectedMachine || 'L';
+      if (!slots[machineKey][n]) return; // nothing saved in this slot, nothing to toggle
+      slotEnabled[machineKey][n] = !slotEnabled[machineKey][n];
+      refreshSlots();
+    }
 
-function fireSet(machine, n, slotData) {
-  fetch('/api/slot-click', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ machine, slot: n, data: slotData })
-  })
-    .then(res => {
-      if (!res.ok) throw new Error('Server responded with ' + res.status);
-      return res.json().catch(() => ({}));
-    })
-    .then(json => console.log('Server ack:', json))
-    .catch(err => console.error('Failed to send slot fire to server:', err));
-}
+    function fireSet(machine, n, slotData) {
+      fetch('/api/slot-click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ machine, slot: n, data: slotData })
+      })
+        .then(res => {
+          if (!res.ok) throw new Error('Server responded with ' + res.status);
+          return res.json().catch(() => ({}));
+        })
+        .then(json => console.log('Server ack:', json))
+        .catch(err => console.error('Failed to send slot fire to server:', err));
+    }
 
-function stopFiring(machine, n) {
-  fetch('/api/slot-click', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ machine, slot: n, action: 'stop' })
-  })
-    .then(res => {
-      if (!res.ok) throw new Error('Server responded with ' + res.status);
-      return res.json().catch(() => ({}));
-    })
-    .catch(err => console.error('Failed to send slot stop to server:', err));
-}
+    function stopFiring(machine, n) {
+      fetch('/api/slot-click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ machine, slot: n, action: 'stop' })
+      })
+        .then(res => {
+          if (!res.ok) throw new Error('Server responded with ' + res.status);
+          return res.json().catch(() => ({}));
+        })
+        .catch(err => console.error('Failed to send slot stop to server:', err));
+    }
 
-function shuffleArray(arr) {
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+    function shuffleArray(arr) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
 
-function buildRunQueue() {
-  const machineKey = selectedMachine || 'L';
-  let ns = [1, 2, 3, 4].filter(n => slots[machineKey][n] && slotEnabled[machineKey][n]);
-  if (randomOn) ns = shuffleArray(ns);
-  return ns.map(n => ({ machine: machineKey, n }));
-}
+    function buildRunQueue() {
+      const machineKey = selectedMachine || 'L';
+      let ns = [1, 2, 3, 4].filter(n => slots[machineKey][n] && slotEnabled[machineKey][n]);
+      if (randomOn) ns = shuffleArray(ns);
+      return ns.map(n => ({ machine: machineKey, n }));
+    }
 
-function startRunSequence() {
-  runQueue = buildRunQueue();
-  if (runQueue.length === 0) {
-    console.warn('No enabled sets to run');
-    stopRunSequence();
-    return;
-  }
-  runIndex = 0;
-  isRunning = true;
-  emitMachine('resumeMotors');
-  runNextInQueue();
-}
-
-function runNextInQueue() {
-  if (!isRunning) return;
-
-  const { machine, n } = runQueue[runIndex];
-  const slotData = slots[machine][n];
-  currentRunSlot = { machine, n };
-  activateSlot(machine, n);
-  refreshSlots();
-  fireSet(machine, n, slotData);
-
-  clearTimeout(window._runTimer);
-  window._runTimer = setTimeout(() => {
-    stopFiring(machine, n);
-
-    runIndex++;
-    if (runIndex >= runQueue.length) {
-      if (repeatState === 1) {
-        // Repeat on: start the queue over, reshuffling if random is on
-        runQueue = buildRunQueue();
-        runIndex = 0;
-        if (runQueue.length === 0) { stopRunSequence(); return; }
-      } else {
+    function startRunSequence() {
+      runQueue = buildRunQueue();
+      if (runQueue.length === 0) {
+        console.warn('No enabled sets to run');
         stopRunSequence();
         return;
       }
-    }
-    runNextInQueue();
-  }, SET_RUN_DURATION_MS);
-}
-
-function stopRunSequence() {
-  const wasRunning = isRunning;
-  isRunning = false;
-  clearTimeout(window._runTimer);
-  if (wasRunning && currentRunSlot) {
-    stopFiring(currentRunSlot.machine, currentRunSlot.n);
-  }
-  currentRunSlot = null;
-  refreshSlots();
-  emitMachine('stopMotors');
-
-  const btn = document.getElementById('launch-main-btn');
-  if (btn) {
-    btn.classList.remove('stop'); btn.classList.add('start');
-    btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
-  }
-}
-
-function activateSlot(machineKey, n) {
-  const slotData = slots[machineKey][n];
-  if (!slotData) return;
-
-  if (slotData.machine) selectedMachine = slotData.machine;
-  if (slotData.target)  selectedTarget  = slotData.target;
-  if (slotData.tempo)   selectedTempo   = slotData.tempo;
-
-  hoveredTempo = null;
-  tempoSelected = true; // Mark tempo as selected when loading from slot
-  refreshLaunchView();
-}
-
-function loadSlot(n) {
-  const machineKey = selectedMachine || 'L';
-  const s = slots[machineKey][n];
-  if (!s) return;
-  if (s.machine) { selectedMachine = s.machine; }
-  if (s.target)  { selectedTarget  = s.target;  }
-  if (s.tempo)   { selectedTempo   = s.tempo;   }
-  tempoSelected = true;
-   slotSaved = true;
-  refreshCourtPicker();
-  refreshSlots();
-  document.querySelectorAll('.tempo-pill').forEach(p => {
-    p.classList.toggle('active', parseInt(p.textContent) === selectedTempo);
-  });
-}
-
-function saveNewSlot(n) {
-  if (!selectedMachine) {
-    console.warn('No machine selected, cannot save slot');
-    flashLegendAttention();
-    return;
-  }
-  if (!selectedTarget) {
-    console.warn('No target selected, cannot save slot');
-    flashLegendAttention();
-    return;
-  }
-  if (!tempoSelected) {
-    console.warn('No tempo selected, cannot save slot');
-    flashLegendAttention();
-    return;
-  }
-  const machinePart = `Machine ${selectedMachine}`;
-  const zonePart   = selectedTarget ? `Zone ${selectedTarget}`   : null;
-  const tempoPart  = `Tempo ${selectedTempo}`;
-  const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
-  slots[selectedMachine][n] = {
-    name,
-    machine: selectedMachine,
-    target: selectedTarget,
-    tempo: selectedTempo,
-  };
-  slotEnabled[selectedMachine][n] = true;
-  slotSaved = true;
-  if (selectedMachine === 'C') {
-    lockedSide = zoneSide(selectedTarget);
-  }
-  refreshSlots();
-  refreshCourtPicker();
-}
-
-function deleteSlot(machineKey, n) {
-  slots[machineKey][n] = null;
-  slotEnabled[machineKey][n] = false;
-
-  if (machineKey === selectedMachine) {
-    const stillHasSlots = [1, 2, 3, 4].some(i => !!slots[machineKey][i]);
-    if (!stillHasSlots) {
-      lockedSide = null; 
-      slotSaved = false;
-    }
-  }
-
-  refreshSlots();
-  refreshCourtPicker();
-}
-
-function toggleLaunch(btn) {
-  if (window._activeMode === 'launch') {
-    if (isRunning) {
-      stopRunSequence();
-    } else {
-      btn.classList.remove('start'); btn.classList.add('stop');
-      btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
-      startRunSequence();
-    }
-    return;
-  }
-
-  const running = btn.classList.contains('stop');
-  if (running) {
-    btn.classList.remove('stop'); btn.classList.add('start');
-    btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
-    clearInterval(window._telem);
-    if (window._activeMode === 'advanced') {
-      emitMachine('stopMotors');
-    }
-  } else {
-    btn.classList.remove('start'); btn.classList.add('stop');
-    btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
-    startTelemetry();
-    if (window._activeMode === 'advanced') {
+      runIndex = 0;
+      isRunning = true;
       emitMachine('resumeMotors');
+      runNextInQueue();
     }
-  }
-}
 
-function goToLaunch() {
-  clearInterval(window._telem);
-  const topbarLeft = document.getElementById('topbar-left');
-  topbarLeft.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+    function runNextInQueue() {
+      if (!isRunning) return;
+
+      const { machine, n } = runQueue[runIndex];
+      const slotData = slots[machine][n];
+      currentRunSlot = { machine, n };
+      activateSlot(machine, n);
+      refreshSlots();
+      fireSet(machine, n, slotData);
+
+      clearTimeout(window._runTimer);
+      window._runTimer = setTimeout(() => {
+        stopFiring(machine, n);
+
+        runIndex++;
+        if (runIndex >= runQueue.length) {
+          if (repeatState === 1) {
+            // Repeat on: start the queue over, reshuffling if random is on
+            runQueue = buildRunQueue();
+            runIndex = 0;
+            if (runQueue.length === 0) { stopRunSequence(); return; }
+          } else {
+            stopRunSequence();
+            return;
+          }
+        }
+        runNextInQueue();
+      }, SET_RUN_DURATION_MS);
+    }
+
+    function stopRunSequence() {
+      const wasRunning = isRunning;
+      isRunning = false;
+      clearTimeout(window._runTimer);
+      if (wasRunning && currentRunSlot) {
+        stopFiring(currentRunSlot.machine, currentRunSlot.n);
+      }
+      currentRunSlot = null;
+      refreshSlots();
+      emitMachine('stopMotors');
+
+      const btn = document.getElementById('launch-main-btn');
+      if (btn) {
+        btn.classList.remove('stop'); btn.classList.add('start');
+        btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+      }
+    }
+
+    function activateSlot(machineKey, n) {
+      const slotData = slots[machineKey][n];
+      if (!slotData) return;
+
+      if (slotData.machine) selectedMachine = slotData.machine;
+      if (slotData.target) selectedTarget = slotData.target;
+      if (slotData.tempo) selectedTempo = slotData.tempo;
+
+      hoveredTempo = null;
+      tempoSelected = true; // Mark tempo as selected when loading from slot
+      refreshLaunchView();
+    }
+
+    function loadSlot(n) {
+      const machineKey = selectedMachine || 'L';
+      const s = slots[machineKey][n];
+      if (!s) return;
+      if (s.machine) { selectedMachine = s.machine; }
+      if (s.target) { selectedTarget = s.target; }
+      if (s.tempo) { selectedTempo = s.tempo; }
+      tempoSelected = true;
+      slotSaved = true;
+      refreshCourtPicker();
+      refreshSlots();
+      document.querySelectorAll('.tempo-pill').forEach(p => {
+        p.classList.toggle('active', parseInt(p.textContent) === selectedTempo);
+      });
+    }
+
+    function saveNewSlot(n) {
+      if (!selectedMachine) {
+        console.warn('No machine selected, cannot save slot');
+        flashLegendAttention();
+        return;
+      }
+      if (!selectedTarget) {
+        console.warn('No target selected, cannot save slot');
+        flashLegendAttention();
+        return;
+      }
+      if (!tempoSelected) {
+        console.warn('No tempo selected, cannot save slot');
+        flashLegendAttention();
+        return;
+      }
+      const machinePart = `Machine ${selectedMachine}`;
+      const zonePart = selectedTarget ? `Zone ${selectedTarget}` : null;
+      const tempoPart = `Tempo ${selectedTempo}`;
+      const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
+      slots[selectedMachine][n] = {
+        name,
+        machine: selectedMachine,
+        target: selectedTarget,
+        tempo: selectedTempo,
+      };
+      slotEnabled[selectedMachine][n] = true;
+      slotSaved = true;
+      if (selectedMachine === 'C') {
+        lockedSide = zoneSide(selectedTarget);
+      }
+      refreshSlots();
+      refreshCourtPicker();
+    }
+
+    function deleteSlot(machineKey, n) {
+      slots[machineKey][n] = null;
+      slotEnabled[machineKey][n] = false;
+
+      if (machineKey === selectedMachine) {
+        const stillHasSlots = [1, 2, 3, 4].some(i => !!slots[machineKey][i]);
+        if (!stillHasSlots) {
+          lockedSide = null;
+          slotSaved = false;
+        }
+      }
+
+      refreshSlots();
+      refreshCourtPicker();
+    }
+
+    function toggleLaunch(btn) {
+      if (window._activeMode === 'launch') {
+        if (isRunning) {
+          stopRunSequence();
+        } else {
+          btn.classList.remove('start'); btn.classList.add('stop');
+          btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+          startRunSequence();
+        }
+        return;
+      }
+
+      const running = btn.classList.contains('stop');
+      if (running) {
+        btn.classList.remove('stop'); btn.classList.add('start');
+        btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+        clearInterval(window._telem);
+        if (window._activeMode === 'advanced') {
+          emitMachine('stopMotors');
+        }
+      } else {
+        btn.classList.remove('start'); btn.classList.add('stop');
+        btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+        startTelemetry();
+        if (window._activeMode === 'advanced') {
+          emitMachine('resumeMotors');
+        }
+      }
+    }
+
+    function goToLaunch() {
+      clearInterval(window._telem);
+      const topbarLeft = document.getElementById('topbar-left');
+      topbarLeft.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
     <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
       <button class="modetab-header" role="tab" data-mode="launch">Launch</button>
       <button class="modetab-header" role="tab" data-mode="advanced">Advanced</button>
     </div>`;
-  attachModeTabListeners();
-  setMode('launch');
-}
+      attachModeTabListeners();
+      setMode('launch');
+    }
 
-function attachModeTabListeners() {
-  document.querySelectorAll('.modetab-header').forEach(t => t.addEventListener('click', () => {
-    clearInterval(window._telem);
-    setMode(t.dataset.mode);
-  }));
-}
+    function attachModeTabListeners() {
+      document.querySelectorAll('.modetab-header').forEach(t => t.addEventListener('click', () => {
+        clearInterval(window._telem);
+        setMode(t.dataset.mode);
+      }));
+    }
 
-function goBack() {
-  clearInterval(window._telem);
-  if (isRunning) stopRunSequence();
-  if (window._activeMode === 'advanced') {
-    emitMachine('advanced-leave');
-  }
-  window._activeMode = null;
-  const topbarLeft = document.getElementById('topbar-left');
-  topbarLeft.innerHTML = `<h1 id="page-title">Configure</h1>`;
-  document.getElementById('main-content').innerHTML = screens.configure();
+    function goBack() {
+      clearInterval(window._telem);
+      if (isRunning) stopRunSequence();
+      if (window._activeMode === 'advanced') {
+        emitMachine('advanced-leave');
+      }
+      window._activeMode = null;
+      const topbarLeft = document.getElementById('topbar-left');
+      topbarLeft.innerHTML = `<h1 id="page-title">Configure</h1>`;
+      document.getElementById('main-content').innerHTML = screens.configure();
 
-  const appEl = document.querySelector('.app');
-  if (appEl) appEl.classList.remove('mode-launch', 'mode-advanced');
-}
+      const appEl = document.querySelector('.app');
+      if (appEl) appEl.classList.remove('mode-launch', 'mode-advanced');
+    }
 
-function syncLaunchSummary() {
-  const netVal = document.getElementById('net-val');
-  const lenVal = document.getElementById('len-val');
-  const widVal = document.getElementById('wid-val');
-  const netEl = document.getElementById('sum-net');
-  const courtEl = document.getElementById('sum-court');
-  if (netEl && netVal) netEl.textContent = netVal.textContent;
-  if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
-}
+    function syncLaunchSummary() {
+      const netVal = document.getElementById('net-val');
+      const lenVal = document.getElementById('len-val');
+      const widVal = document.getElementById('wid-val');
+      const netEl = document.getElementById('sum-net');
+      const courtEl = document.getElementById('sum-court');
+      if (netEl && netVal) netEl.textContent = netVal.textContent;
+      if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
+    }
 
-function setMode(mode) {
-  const previousMode = window._activeMode || 'launch';
-  if (previousMode === 'launch' && mode !== 'launch' && isRunning) {
-    stopRunSequence();
-  }
-  if (previousMode === 'advanced' && mode !== 'advanced') {
-    emitMachine('advanced-leave');
-  }
-  const appEl = document.querySelector('.app');
-  if (appEl) {
-    appEl.classList.toggle('mode-launch', mode === 'launch');
-    appEl.classList.toggle('mode-advanced', mode === 'advanced');
-  }
+    function setMode(mode) {
+      const previousMode = window._activeMode || 'launch';
+      if (previousMode === 'launch' && mode !== 'launch' && isRunning) {
+        stopRunSequence();
+      }
+      if (previousMode === 'advanced' && mode !== 'advanced') {
+        emitMachine('advanced-leave');
+      }
+      const appEl = document.querySelector('.app');
+      if (appEl) {
+        appEl.classList.toggle('mode-launch', mode === 'launch');
+        appEl.classList.toggle('mode-advanced', mode === 'advanced');
+      }
 
-  document.querySelectorAll('.modetab-header').forEach(t => t.classList.remove('active'));
-  const tab = document.querySelector(`.modetab-header[data-mode="${mode}"]`);
-  if (tab) tab.classList.add('active');
-  document.getElementById('main-content').innerHTML = screens[mode]();
-  if (mode === 'advanced') {
-    emitMachine('advanced-enter');
-    startTelemetry();
-  }
-  if (mode === 'launch') {
-    syncLaunchSummary();
-  }
-  window._activeMode = mode;
-}
+      document.querySelectorAll('.modetab-header').forEach(t => t.classList.remove('active'));
+      const tab = document.querySelector(`.modetab-header[data-mode="${mode}"]`);
+      if (tab) tab.classList.add('active');
+      document.getElementById('main-content').innerHTML = screens[mode]();
+      if (mode === 'advanced') {
+        emitMachine('advanced-enter');
+        startTelemetry();
+      }
+      if (mode === 'launch') {
+        syncLaunchSummary();
+      }
+      window._activeMode = mode;
+    }
 
-function stepSlider(rangeId, valId, suffix, delta) {
-  const input = document.getElementById(rangeId);
-  if (!input) return;
-  input.value = Math.min(input.max, Math.max(input.min, +input.value + delta));
-  document.getElementById(valId).textContent = input.value + suffix;
+    function stepSlider(rangeId, valId, suffix, delta) {
+      const input = document.getElementById(rangeId);
+      if (!input) return;
+      input.value = Math.min(input.max, Math.max(input.min, +input.value + delta));
+      document.getElementById(valId).textContent = input.value + suffix;
 
-  if (rangeId === 'dev-ang-range') {
-    emitMachine('setAngle', parseInt(input.value, 10));
-  }
-  if (rangeId === 'dev-spd-range') {
-    emitMachine('setSpeed', parseInt(input.value, 10));
-  }
-}
+      if (rangeId === 'dev-ang-range') {
+        emitMachine('setAngle', parseInt(input.value, 10));
+      }
+      if (rangeId === 'dev-spd-range') {
+        emitMachine('setSpeed', parseInt(input.value, 10));
+      }
+    }
 
-function startTelemetry() {
-  clearInterval(window._telem);
-  window._telem = setInterval(() => {
-    const fwl = document.getElementById('fw-l');
-    if (!fwl) return clearInterval(window._telem);
-    const jitter = v => Math.max(0, Math.min(100, v + (Math.random() - 0.5) * 4));
-    const lPct = jitter(74);
-    fwl.style.width = lPct.toFixed(0) + '%';
-    document.getElementById('fw-l-v').textContent = Math.round(lPct * 40) + ' rpm';
-  }, 800);
-}
+    function startTelemetry() {
+      clearInterval(window._telem);
+      window._telem = setInterval(() => {
+        const fwl = document.getElementById('fw-l');
+        if (!fwl) return clearInterval(window._telem);
+        const jitter = v => Math.max(0, Math.min(100, v + (Math.random() - 0.5) * 4));
+        const lPct = jitter(74);
+        fwl.style.width = lPct.toFixed(0) + '%';
+        document.getElementById('fw-l-v').textContent = Math.round(lPct * 40) + ' rpm';
+      }, 800);
+    }
 
-document.getElementById('main-content').innerHTML = screens.configure();
-</script>
+    document.getElementById('main-content').innerHTML = screens.configure();
+  </script>
 </body>
+
 </html>
