@@ -706,7 +706,7 @@ function slotsHTML(readonly = false) {
 
     const stateClass = isPlaying ? ' slot-active' : (enabled ? ' slot-enabled' : (isEmptyReadonly ? ' slot-disabled' : ''));
     const flashClass = readyToSave ? ' selectable-flash' : '';
-    const name = s ? s.name : (readonly ? 'Empty' : 'Tap to save current set');
+    const name = s ? (s.name + (isPlaying ? ' - Running' : '')) : (readonly ? 'Empty' : 'Tap to save current set');
     const nameClass = s ? '' : ' empty-name';
 
     const deleteBtn = (!readonly && s)
