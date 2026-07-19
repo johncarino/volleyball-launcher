@@ -7,7 +7,6 @@ FUNCTIONAL
 - Power off button backend
 
 SECONDARY
-- Fix tempo 5 being cut
 
 CONSIDERATION
 - in launch mode, the back button may be too small, a little unintuitive perhaps

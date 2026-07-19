@@ -263,8 +263,10 @@ function courtPickerHTML(readonly = false) {
         ? ''
         : `onclick="selectTempo(${tempo})" onmouseenter="onTempoHover(${tempo})" onmouseleave="onTempoHover(null)" style="cursor:pointer"`;
       const hitArea = readonly ? '' : `<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="transparent" stroke-width="14" ${hitProps}/>`;
-      const peakX = midX;
-      const peakY = 0.25 * startY + 0.5 * ctrlY + 0.25 * endY;
+      const labelT = 0.35; // 0 = at machine, 0.5 = arc midpoint, 1 = at target. Lower = closer to machine.
+      const oneMinusT = 1 - labelT;
+      const peakX = oneMinusT * oneMinusT * startX + 2 * labelT * oneMinusT * midX + labelT * labelT * endX;
+      const peakY = oneMinusT * oneMinusT * startY + 2 * labelT * oneMinusT * ctrlY + labelT * labelT * endY;
       const label = isSelected
         ? `<g>
             <circle cx="${peakX}" cy="${peakY - 9}" r="8" fill="#e08a1e"/>
