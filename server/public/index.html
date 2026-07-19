@@ -329,7 +329,7 @@ function courtPickerHTML(readonly = false) {
       ${!readonly ? `
       <div class="court-legend">
         <div class="legend-item" style="justify-content:center;width:100%">
-          <span class="${legendClass}" style="color:var(--text-secondary);font-size:13px">${legendText}</span>
+          <span id="legend-span" class="${legendClass}" style="color:var(--text-secondary);font-size:13px">${legendText}</span>
         </div>
       </div>` : ''}
     </div>`;
@@ -581,6 +581,14 @@ function onTempoHover(n) {
   }
 }
 
+function flashLegendAttention() {
+  const el = document.getElementById('legend-span');
+  if (!el) return;
+  el.classList.remove('legend-attention');
+  void el.offsetWidth; // force reflow so removing+re-adding the class actually restarts the animation
+  el.classList.add('legend-attention');
+}
+
 function refreshTempo() {
   const wrap = document.getElementById('tempo-wrap');
   if (wrap) wrap.innerHTML = tempoPillsHTML();
@@ -812,10 +820,17 @@ function loadSlot(n) {
 function saveNewSlot(n) {
   if (!selectedMachine) {
     console.warn('No machine selected, cannot save slot');
+    flashLegendAttention();
     return;
   }
   if (!selectedTarget) {
     console.warn('No target selected, cannot save slot');
+    flashLegendAttention();
+    return;
+  }
+  if (!tempoSelected) {
+    console.warn('No tempo selected, cannot save slot');
+    flashLegendAttention();
     return;
   }
   const machinePart = `Machine ${selectedMachine}`;

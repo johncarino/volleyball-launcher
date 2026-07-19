@@ -423,6 +423,14 @@ input[type=range] { accent-color: var(--blue); }
   color: var(--text-primary) !important;
   opacity: 0.85;
 }
+.legend-attention,
+.legend-text-select.legend-attention {
+  animation: legend-attention-flash 0.35s ease-in-out 3 !important;
+}
+@keyframes legend-attention-flash {
+  0%, 100% { opacity: 1; color: var(--text-primary); }
+  50% { opacity: 0.15; color: var(--text-danger); }
+}
 
 .selectable-flash {
   animation: legend-flash 1.5s ease-in-out infinite;
