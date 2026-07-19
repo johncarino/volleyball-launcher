@@ -273,10 +273,12 @@ function courtPickerHTML(readonly = false) {
       const oneMinusT = 1 - labelT;
       const peakX = oneMinusT * oneMinusT * startX + 2 * labelT * oneMinusT * midX + labelT * labelT * endX;
       const peakY = oneMinusT * oneMinusT * startY + 2 * labelT * oneMinusT * ctrlY + labelT * labelT * endY;
+      const pillW = 44;
+      const pillH = 16;
       const label = isSelected
         ? `<g>
-            <circle cx="${peakX}" cy="${peakY - 9}" r="8" fill="#e08a1e"/>
-            <text x="${peakX}" y="${peakY - 6}" text-anchor="middle" font-size="9" fill="#fff" font-family="system-ui,sans-serif" font-weight="600">${tempo}</text>
+            <rect x="${peakX - pillW / 2}" y="${peakY - 9 - pillH / 2}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="#e08a1e"/>
+            <text x="${peakX}" y="${peakY - 6}" text-anchor="middle" font-size="9" fill="#fff" font-family="system-ui,sans-serif" font-weight="600">Tempo ${tempo}</text>
           </g>`
         : '';
       return `${hitArea}<path id="tempo-line-${tempo}" d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="${opacity}" class="${flashClass}" style="pointer-events:none"/>${label}`;
