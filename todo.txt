@@ -1,8 +1,8 @@
 PRIORITY
 - Accessable from beaglebone
+- Popup to help align the machine
 
 FUNCTIONAL
-- Popup to help align the machine
 - Make launch menu set selection more intuitive
 - Power off button backend
 
@@ -13,18 +13,20 @@ SECONDARY
 
 CONSIDERATION
 - in launch mode, the back button may be too small, a little unintuitive perhaps
-- Change to 5 set locations(?)
+- Change to 5 set locations
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Remove court dimensions from launch screen
-- Make it so selection instructions are not repeated every time
 - Move JS to separate file
 
 AESTHETIC
 - Change background colours to be better
 - Clean up target zone graphic
+- Change to light mode with company colours
+- Add company logo
 
 CLEANUP
 - Remove old-old-index.html, old stylesheets
+- Remove any unused code
 
 beaglebone/mnt/remote/jp/volleyball_launcher/server/
 npm start
