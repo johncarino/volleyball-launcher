@@ -2,11 +2,11 @@ PRIORITY
 - Accessable from beaglebone
 - Popup to help align the machine
 
+SECONDARY
+
 FUNCTIONAL
 - Make launch menu set selection more intuitive
 - Power off button backend
-
-SECONDARY
 
 CONSIDERATION
 - in launch mode, the back button may be too small, a little unintuitive perhaps
@@ -21,6 +21,7 @@ AESTHETIC
 - Clean up target zone graphic
 - Change to light mode with company colours
 - Add company logo
+- Change set slot text
 
 CLEANUP
 - Remove old-old-index.html, old stylesheets
