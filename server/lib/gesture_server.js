@@ -191,6 +191,19 @@ function handleCommand(socket) {
 		stopRecognizer(socket);
 	});
 
+	// Allow the web UI to cleanly terminate the whole server process (in place
+	// of Ctrl+C in the terminal). Broadcast first so every connected browser
+	// (not just the one that clicked Quit) can show a "shutting down" state,
+	// then exit; the already-registered process 'exit' handler stops the
+	// recogniser and cleans up the operation hardware before the process ends.
+	socket.on('quit-server', function() {
+		console.log("Got quit-server command. Shutting down server...");
+		if (io) io.sockets.emit('server-shutdown', 'Server is shutting down...');
+		setTimeout(function() {
+			process.exit(0);
+		}, 250);
+	});
+
 	socket.on('page-loaded', function() {
 		console.log("Got page-loaded event. Applying default calibration.");
 		try {

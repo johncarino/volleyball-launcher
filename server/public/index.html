@@ -12,10 +12,15 @@
 <div class="app">
   <div class="statusbar">
     <span class="device">AVSS</span>
-    <span class="conn" id="conn-status">
-      <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
-      <span id="conn-text">Connected</span>
-    </span>
+    <div class="statusbar-right">
+      <span class="conn" id="conn-status">
+        <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
+        <span id="conn-text">Connected</span>
+      </span>
+      <button class="quit-btn" id="quit-btn" onclick="confirmQuit()" aria-label="Quit server">
+        <i class="ti ti-power" aria-hidden="true"></i>
+      </button>
+    </div>
   </div>
 
   <div class="topbar" id="topbar">
@@ -25,6 +30,7 @@
   <div class="modenav" id="modenav" role="tablist" aria-label="Modes">
     <button class="modetab" role="tab" data-mode="configure">Configure</button>
     <button class="modetab" role="tab" data-mode="advanced">Advanced</button>
+    <button class="modetab" role="tab" data-mode="gesture">Gesture</button>
   </div>
 
   <div class="content" id="main-content"></div>
@@ -128,6 +134,15 @@ if (machineSocket) {
     if (fwlVal) fwlVal.textContent = rpm + ' rpm';
     if (fwrVal) fwrVal.textContent = rpm + ' rpm';
   });
+
+  // ---- Gesture recogniser (m2demo) ----------------------------------------
+  machineSocket.on('gesture-update', (data) => { renderGesture(data); });
+  machineSocket.on('state-reply', (state) => { setGestureRunning(state === 'RUNNING'); });
+  machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); renderGesture(null); });
+  machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); });
+
+  // ---- Server shutdown ------------------------------------------------------
+  machineSocket.on('server-shutdown', () => { showShuttingDown(); });
 }
 
 function onAdvancedAngleInput(value) {
@@ -180,6 +195,80 @@ function toggleHopper() {
     btn.classList.toggle('active', hopperOn);
   }
   onHopperControl(hopperOn ? 'on' : 'off');
+}
+
+// ---- Gesture recogniser controls -------------------------------------------
+const FINGER_KEYS = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+
+function startGesture() {
+  emitMachine('start');
+}
+
+function stopGesture() {
+  emitMachine('stop');
+}
+
+function setGestureRunning(running) {
+  const pill = document.getElementById('gesture-state-pill');
+  const startBtn = document.getElementById('gestureStartBtn');
+  const stopBtn = document.getElementById('gestureStopBtn');
+  if (pill) pill.textContent = running ? 'Running' : 'Idle';
+  if (startBtn) startBtn.disabled = running;
+  if (stopBtn) stopBtn.disabled = !running;
+}
+
+function renderGesture(data) {
+  const nameEl = document.getElementById('gesture-name');
+  if (!nameEl) return; // Gesture tab not currently on screen
+  const countEl = document.getElementById('gesture-count');
+
+  if (!data) {
+    nameEl.textContent = 'NONE';
+    if (countEl) countEl.textContent = '0 fingers';
+    FINGER_KEYS.forEach((k) => setFingerChip(k, false));
+    return;
+  }
+
+  nameEl.textContent = data.name || 'UNKNOWN';
+  if (countEl) countEl.textContent = (data.count != null ? data.count : 0) + ' fingers';
+  const fingers = data.fingers || {};
+  FINGER_KEYS.forEach((k) => setFingerChip(k, !!fingers[k]));
+}
+
+function setFingerChip(key, up) {
+  const chip = document.getElementById('finger-' + key);
+  if (!chip) return;
+  chip.classList.toggle('up', up);
+  chip.classList.toggle('down', !up);
+  const state = chip.querySelector('.finger-state');
+  if (state) state.textContent = up ? 'UP' : 'down';
+}
+
+function showGestureError(message) {
+  const box = document.getElementById('gesture-error-box');
+  const text = document.getElementById('gesture-error-text');
+  if (!box || !text) return;
+  text.textContent = message;
+  box.style.display = 'block';
+  clearTimeout(window._gestureErrTimer);
+  window._gestureErrTimer = setTimeout(() => { box.style.display = 'none'; }, 5000);
+}
+
+// ---- Server shutdown --------------------------------------------------------
+function confirmQuit() {
+  const ok = window.confirm('Shut down the AVSS server? The recogniser and web app will stop, and the program must be restarted on the device.');
+  if (!ok) return;
+  emitMachine('quit-server');
+  showShuttingDown();
+}
+
+function showShuttingDown() {
+  if (document.getElementById('shutdown-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'shutdown-overlay';
+  overlay.className = 'shutdown-overlay';
+  overlay.innerHTML = '<div class="shutdown-box"><i class="ti ti-power" aria-hidden="true"></i><div>Server is shutting down\u2026</div></div>';
+  document.body.appendChild(overlay);
 }
 
 function courtPickerHTML(readonly = false) {
@@ -415,6 +504,38 @@ const screens = {
       <div class="section-label">Launch</div>
       <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
       ${renderPlaybackControls()}
+    </div>`,
+
+  gesture: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Recogniser</div>
+      <div class="card">
+        <div class="field-row">
+          <span class="field-label"><i class="ti ti-hand-stop" aria-hidden="true"></i> Status</span>
+          <span class="field-value" id="gesture-state-pill">Idle</span>
+        </div>
+      </div>
+      <div class="gesture-buttons">
+        <button class="op-btn start" id="gestureStartBtn" onclick="startGesture()"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+        <button class="op-btn stop" id="gestureStopBtn" onclick="stopGesture()" disabled><i class="ti ti-player-stop" aria-hidden="true"></i> Stop</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Live gesture</div>
+      <div class="card gesture-readout">
+        <div class="gesture-name" id="gesture-name">NONE</div>
+        <div class="gesture-count" id="gesture-count">0 fingers</div>
+        <div class="finger-chips">
+          <div class="finger-chip down" id="finger-thumb"><span>Thumb</span><span class="finger-state">down</span></div>
+          <div class="finger-chip down" id="finger-index"><span>Index</span><span class="finger-state">down</span></div>
+          <div class="finger-chip down" id="finger-middle"><span>Middle</span><span class="finger-state">down</span></div>
+          <div class="finger-chip down" id="finger-ring"><span>Ring</span><span class="finger-state">down</span></div>
+          <div class="finger-chip down" id="finger-pinky"><span>Pinky</span><span class="finger-state">down</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="section" id="gesture-error-box" style="display:none">
+      <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
     </div>`
 };
 
@@ -695,7 +816,7 @@ function setMode(mode) {
   if (tab) tab.classList.add('active');
   document.getElementById('main-content').innerHTML = screens[mode]();
   const title = document.getElementById('page-title');
-  if (title) title.textContent = { configure: 'Configure', advanced: 'Advanced' }[mode] || mode;
+  if (title) title.textContent = { configure: 'Configure', advanced: 'Advanced', gesture: 'Gesture' }[mode] || mode;
   if (mode === 'advanced') {
     emitMachine('advanced-enter');
     startTelemetry();
