@@ -199,10 +199,16 @@ function courtPickerHTML(readonly = false) {
     { id: '4', cx: 250, cy: 20 + baseOffset },
   ];
 
+  // Images for the machine - IMAGES ARE A PLACEHOLDER
   const machineRectW = 32;
   const machineRectH = 74;
-  // Images for the machine - IMAGES ARE A PLACEHOLDER
-  const machineImages = { L: 'images/left.jpg', C: 'images/front.jpg', R: 'images/right.jpg' };
+  const machineImages = { L: 'images/left.jpg', R: 'images/right.jpg' };
+  function machineImageFor(id) {
+    if (id !== 'C') return machineImages[id];
+    if (lockedSide === 'left')  return 'images/left.jpg';
+    if (lockedSide === 'right') return 'images/right.jpg';
+    return 'images/front.jpg';
+  }
   const mCircles = machineSpots.map(s => {
     const active    = mSel === s.id;
     const ringStroke = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
@@ -213,7 +219,7 @@ function courtPickerHTML(readonly = false) {
     const ry        = s.cy - machineRectH / 2;
     return `<g ${onclick} style="cursor:${cursor}">
       <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
-      <image href="${machineImages[s.id]}" x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" preserveAspectRatio="xMidYMid slice" opacity="${opacity}" style="clip-path: inset(0 round 3px)"/>
+      <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" preserveAspectRatio="xMidYMid slice" opacity="${opacity}" style="clip-path: inset(0 round 3px)"/>
     </g>`;
   }).join('');
 
@@ -378,7 +384,6 @@ function selectMachine(id) {
 function selectTarget(id) {
   selectedTarget = id;
   tempoSelected = selectedTempo !== null;
-  slotSaved = false;
   refreshCourtPicker();
   refreshTempo();
   refreshSlots();
@@ -604,7 +609,6 @@ function setPill(el) {
 function selectTempo(n) {
   selectedTempo = n;
   tempoSelected = true; // Mark that tempo has been selected
-  slotSaved = false;
   refreshTempo();
   refreshCourtPicker();
   refreshSlots();
