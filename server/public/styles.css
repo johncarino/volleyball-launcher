@@ -343,6 +343,16 @@ input[type=range] { accent-color: var(--blue); }
 .court-btn-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
 .court-btn-chevron { font-size: 16px; color: var(--text-tertiary); }
 
+.court-summary-card {
+  background: var(--bg-secondary);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  padding: 4px 12px 2px;
+  margin-top: -8px;
+}
+.court-summary-card .summary-row {
+  padding: 8px 0;
+}
+
 .modal-overlay {
   position: absolute; inset: 0;
   background: rgba(0,0,0,0.4);
