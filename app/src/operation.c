@@ -290,11 +290,11 @@ void operation_init() {
     curr_speed = 0;
     curr_rpm = 0;
 
-    /*fprintf(stderr, "[operation] initializing tachometer\n");
+    fprintf(stderr, "[operation] initializing tachometer\n");
     if (tach_init() != 0) {
         fprintf(stderr, "Failed to initialize tachometer\n");
         return;
-    }*/
+    }
 
     fprintf(stderr, "[operation] initializing MPU6050 IMU\n");
     if (mpu6050_init(NULL) != 0) {
@@ -341,7 +341,7 @@ void operation_cleanup() {
 
     hopper_stop();
 
-    //tach_cleanup();
+    tach_cleanup();
     mpu6050_close();
     mcp4725_set_raw(&dac1, 0);
     tb6600_enable(&motor, 1);
@@ -694,10 +694,10 @@ void resume_machine() {
 }
 
 int get_tach_reading() {
-    //int rpm = (int)get_tach_rpm();
-    // printf("Current RPM: %d\n", rpm);
-    //return rpm;
-    return 1;
+    int rpm = (int)get_tach_rpm();
+    printf("Current RPM: %d\n", rpm);
+    return rpm;
+    //return 1;
 }
 
 /*
