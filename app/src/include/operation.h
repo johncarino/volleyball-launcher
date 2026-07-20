@@ -59,6 +59,20 @@ void pause_machine();
 void repeat_set();
 void shuffle_set_sequence();
 
+/*
+* Software interrupt (emergency abort) support.
+*
+* Raising the interrupt — via SIGINT/SIGUSR1 delivered to the process,
+* or by calling operation_request_interrupt() directly — asks any
+* in-progress blocking operation in operation.c (tilt/speed feedback
+* loops, hopper stepping, etc.) to abort as soon as possible and leave
+* the motors in a safe, stopped state.
+*/
+void operation_install_interrupt_handler(void);
+void operation_request_interrupt(void);
+int  operation_interrupt_pending(void);
+void operation_clear_interrupt(void);
+
 #ifdef __cplusplus
 }
 #endif

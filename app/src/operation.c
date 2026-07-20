@@ -1,9 +1,10 @@
 #include "app/src/include/operation.h"
 #include <math.h>
 #include <pthread.h>
+#include <signal.h>
+#include <string.h>
 
 float curr_tilt_angle = 0.0;
-float curr_yaw_angle = 0.0;
 float curr_speed = 0;
 int curr_rpm = 0;
 
@@ -37,6 +38,56 @@ tb6600_t motor;
 static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 static pthread_t hopper_thread;
 static volatile int hopper_thread_created = 0;
+
+/*
+ * Software interrupt (emergency abort) support.
+ *
+ * g_operation_interrupt is a sig_atomic_t so it can be set safely from a
+ * signal handler. It is checked cooperatively by the blocking loops in
+ * this file (tilt_with_feedback, speed_with_feedback, ...) so they can
+ * bail out and leave the motors stopped instead of running to completion.
+ *
+ * hopper_running / launcher_running are also cleared directly from the
+ * handler because they are the exit conditions already polled by
+ * tb6600_step_continuous() and speed_with_feedback()'s loop -- clearing
+ * them is what actually breaks out of those blocking HAL calls, rather
+ * than waiting for the next cooperative check.
+ */
+static volatile sig_atomic_t g_operation_interrupt = 0;
+
+static void operation_interrupt_handler(int signo) {
+    (void)signo;
+    g_operation_interrupt = 1;
+    hopper_running = 0;
+    launcher_running = 0;
+}
+
+void operation_install_interrupt_handler(void) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = operation_interrupt_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0; // deliberately no SA_RESTART: let blocking syscalls (usleep, etc.) return early
+
+    if (sigaction(SIGUSR1, &sa, NULL) != 0) {
+        perror("Failed to install SIGUSR1 interrupt handler");
+    }
+    if (sigaction(SIGINT, &sa, NULL) != 0) {
+        perror("Failed to install SIGINT interrupt handler");
+    }
+}
+
+void operation_request_interrupt(void) {
+    operation_interrupt_handler(0);
+}
+
+int operation_interrupt_pending(void) {
+    return g_operation_interrupt;
+}
+
+void operation_clear_interrupt(void) {
+    g_operation_interrupt = 0;
+}
 
 static void* hopper_step_thread(void *arg) {
     (void)arg;
@@ -228,14 +279,14 @@ void operation_init() {
     if (operation_initialized) {
         return;
     }
+
+    operation_install_interrupt_handler();
+
     hopper_enabled = 1;
     hopper_running = 0;
     launcher_running = 0;
 
-    curr_tilt_angle = INITIAL_TILT_ANGLE;
-    curr_yaw_angle = 0.0;
-    curr_tilt_angle = 0.0;
-    curr_yaw_angle = 0.0;
+    //curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_speed = 0;
     curr_rpm = 0;
 
@@ -249,6 +300,10 @@ void operation_init() {
     if (mpu6050_init(NULL) != 0) {
         fprintf(stderr, "Failed to initialize MPU6050 — is I2C enabled?\n");
         return;
+    }
+    double initial_tilt_angle = 0.0;
+    if (read_tilt_feedback_angle(&initial_tilt_angle) == 0) {
+        curr_tilt_angle = (float)initial_tilt_angle;
     }
 
     fprintf(stderr, "[operation] initializing BTS/BTN7960 motor driver\n");
@@ -299,17 +354,23 @@ void operation_cleanup() {
 
 void homing_sequence() {
     printf("Homing sequence initiated. Moving to default position...\n");
-    //tilt_signal(INITIAL_TILT_ANGLE);
-    //yaw_signal(0.0);
-    tilt_with_feedback(INITIAL_TILT_ANGLE);
+    tilt_signal(INITIAL_TILT_ANGLE);
     curr_tilt_angle = INITIAL_TILT_ANGLE;
-    curr_yaw_angle = 0.0;
 }
 
 void tilt_signal(float angle) {
 
-    if (angle > 90.0 || angle < INITIAL_TILT_ANGLE) {
-        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 90 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
+    if (angle > 87.0 || angle < INITIAL_TILT_ANGLE) {
+        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 87 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
+        return;
+    }
+
+    if (operation_interrupt_pending()) {
+        // forward_ms()/reverse_ms() are fixed-duration blocking HAL calls
+        // that can't be aborted mid-flight, so refuse to start a new tilt
+        // move while an interrupt is pending rather than run to completion.
+        fprintf(stderr, "Tilt signal aborted before start due to pending interrupt.\n");
+        operation_clear_interrupt();
         return;
     }
 
@@ -317,68 +378,40 @@ void tilt_signal(float angle) {
     mcp4725_set_raw(&dac1, 0);
 
     float delta_angle = angle - curr_tilt_angle;
-    long tilt_duration = 0.0;
-    //duty_cycle of linear actuator, as a percentage
-    //keep this a constant
-    int duty_cycle = 100;
+    long duration_us = tilt_angle_to_time(curr_tilt_angle, angle);
 
     if (delta_angle == 0) {
-        printf("No change in tilt angle\n");
+        printf("No Change in tilt angle\n");
         return;
     }
-    else if (delta_angle > 0) {
-        //convert delta_angle to tilt_duration
-        tilt_duration = tilt_angle_to_time(curr_tilt_angle, angle);
-        printf("tilting forward by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
 
-        //(void)duty_cycle; // Avoid unused variable warning
-        forward_ms(duty_cycle, tilt_duration);
-    }
-    else { // if delta_angle < 0
-        delta_angle = -delta_angle;
-        //convert delta_angle to tilt_duration
-        tilt_duration = tilt_angle_to_time(curr_tilt_angle, angle);
-        printf("tilting reverse by %.2f degrees to %.2f degrees for %ld ms\n", delta_angle, angle, tilt_duration);
-        reverse_ms(duty_cycle, tilt_duration);
+    if (curr_tilt_angle > 80.0) {
+        if (angle > 80.0) {
+            if (delta_angle > 0) {
+                forward_ms(100, duration_us);
+            } else if (delta_angle < 0) {
+                reverse_ms(100, duration_us);
+            }
+        } else {
+            tilt_with_feedback(angle);
+        }
+    } else {
+        if (angle < 80.0) {
+            tilt_with_feedback(angle);
+        } else {
+            tilt_with_feedback(80.0);
+            usleep(100000); // Small delay to ensure the tilt operation completes
+            duration_us = tilt_angle_to_time(80.0, angle);
+            forward_ms(100, duration_us);
+        }
     }
 
     curr_tilt_angle = angle;
-}
 
-void yaw_signal(float angle) {
-
-    //set rpm to 0
-    mcp4725_set_raw(&dac1, 0);
-
-    float delta_angle = angle - curr_yaw_angle;
-    int yaw_steps = 0.0;
-    //delay of stepper motor, in us
-    //keep this a constant
-    int delay = 500;
-
-    if (delta_angle == 0) {
-        printf("No change in yaw angle\n");
-        return;
+    //resume the speed after tilt operation if the machine was running
+    if (launcher_running) {
+        mcp4725_set_mv(&dac1, (uint16_t)curr_speed);
     }
-    else if (delta_angle > 0) {
-        tb6600_set_direction(&motor, 1);
-        //convert delta_angle to yaw steps
-        yaw_steps = delta_angle * YAW_COEFF;
-        printf("yaw right by %.2f degrees to %.2f degrees for %d steps\n", delta_angle, angle, yaw_steps);
-
-        //(void)delay; // Avoid unused variable warning
-        tb6600_step(&motor, yaw_steps, delay);
-    }
-    else { // if delta_angle < 0
-        tb6600_set_direction(&motor, 0);
-        delta_angle = -delta_angle;
-        //convert delta_angle to yaw steps
-        yaw_steps = delta_angle * YAW_COEFF;
-        printf("yaw left by %.2f degrees to %.2f degrees for %d steps\n", delta_angle, angle, yaw_steps);
-        tb6600_step(&motor, yaw_steps, delay);
-    }
-
-    curr_yaw_angle = angle;
 }
 
 void speed_signal(float speed) {
@@ -438,27 +471,7 @@ void set_machine(int machine_position, int set_index) {
     //speed_signal(set_seq[set_index]->rpm_output);
 }
 
-void tilt_signal_advanced(float angle) {
-    mcp4725_set_raw(&dac1, 0);
-    tilt_signal(angle);
-    speed_signal(curr_rpm);
-}
-
-void yaw_signal_advanced(float angle) {
-    mcp4725_set_raw(&dac1, 0);
-    yaw_signal(angle);
-    speed_signal(curr_rpm);
-}
-
 void tilt_with_feedback(float angle) {
-
-    if (angle > 90.0 || angle < INITIAL_TILT_ANGLE) {
-        fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 90 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
-        return;
-    }
-
-    //first set speed to 0
-    mcp4725_set_raw(&dac1, 0);
 
     const double target_angle = (double)angle;
     double current_angle = 0.0;
@@ -467,6 +480,13 @@ void tilt_with_feedback(float angle) {
     time_t start_time = time(NULL);
 
     while (1) {
+        if (operation_interrupt_pending()) {
+            fprintf(stderr, "Tilt operation interrupted -- stopping motor.\n");
+            bts_stop();
+            operation_clear_interrupt();
+            return;
+        }
+
         if (read_tilt_feedback_angle(&current_angle) != 0) {
             fprintf(stderr, "Failed to read from MPU6050\n");
             bts_stop();
@@ -510,13 +530,43 @@ void tilt_with_feedback(float angle) {
             break;
         }
     }
+}
 
-    curr_tilt_angle = (float)current_angle;
-
-    //resume the speed after tilt operation if the machine was running
-    if (launcher_running) {
-        mcp4725_set_mv(&dac1, (uint16_t)curr_speed);
+void speed_with_feedback(float rpm) {
+    if (rpm > 1200.0) {
+        fprintf(stderr, "Invalid RPM: %.2f (must be 1200 or less). Skipping speed.\n", rpm);
+        return;
     }
+    uint16_t mv = 0;
+    //convert speed to mv
+    mv = rpm_to_mv(rpm);
+
+    while (launcher_running) {
+        if (operation_interrupt_pending()) {
+            fprintf(stderr, "Speed operation interrupted -- stopping motor.\n");
+            mcp4725_set_raw(&dac1, 0);
+            operation_clear_interrupt();
+            break;
+        }
+
+        //tach reading
+        int actual_rpm = get_tach_rpm();
+
+        if (actual_rpm < rpm) {
+            // Increase speed
+            mv += 10; // Increment by a small value
+            if (mv > 4095) mv = 4095; // Cap at max DAC value
+        } else if (actual_rpm > rpm) {
+            // Decrease speed
+            mv -= 10; // Decrement by a small value
+            if (mv < 0) mv = 0; // Cap at min DAC value
+        }
+
+        mcp4725_set_mv(&dac1, mv);
+        usleep(100000); // Adjust every 100ms
+    }
+    curr_speed = (float)mv;
+    curr_rpm = rpm;
 }
 
 void toggle_hopper() {
@@ -590,6 +640,12 @@ void hopper_pulse() {
         return;
     }
 
+    if (operation_interrupt_pending()) {
+        fprintf(stderr, "Hopper pulse aborted before start due to pending interrupt.\n");
+        operation_clear_interrupt();
+        return;
+    }
+
     //turn hopper off if it is running
     if (hopper_running) {
         hopper_stop();
@@ -607,10 +663,6 @@ void hopper_pulse() {
 
 float get_tilt_angle() {
     return curr_tilt_angle;
-}
-
-float get_yaw_angle() {
-    return curr_yaw_angle;
 }
 
 int get_speed() {

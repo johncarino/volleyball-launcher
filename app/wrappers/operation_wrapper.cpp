@@ -151,6 +151,23 @@ Value getTachReading(const CallbackInfo& info) {
     return Number::New(env, rpm);
 }
 
+// --- requestInterrupt() ---
+// Raises the software interrupt (emergency abort), asking any in-progress
+// blocking operation (tilt/speed feedback loops, hopper stepping, etc.)
+// to abort and leave the motors stopped.
+Value requestInterrupt(const CallbackInfo& info) {
+    Env env = info.Env();
+    operation_request_interrupt();
+    std::cerr << "[operation] software interrupt requested" << std::endl;
+    return env.Undefined();
+}
+
+// --- isInterruptPending() ---
+Value isInterruptPending(const CallbackInfo& info) {
+    Env env = info.Env();
+    return Boolean::New(env, operation_interrupt_pending() != 0);
+}
+
 // --- Module Init ---
 Object Init(Env env, Object exports) {
     exports.Set("operationInit", Function::New(env, operationInit));
@@ -166,6 +183,9 @@ Object Init(Env env, Object exports) {
     exports.Set("hopperStart", Function::New(env, hopperStart));
     exports.Set("hopperStop", Function::New(env, hopperStop));
     exports.Set("hopperPulse", Function::New(env, hopperPulse));
+    exports.Set("requestInterrupt", Function::New(env, requestInterrupt));
+    exports.Set("isInterruptPending", Function::New(env, isInterruptPending));
+    exports.Set("clearInterrupt", Function::New(env, clearInterrupt));
     return exports;
 }
 
