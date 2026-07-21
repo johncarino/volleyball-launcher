@@ -23,7 +23,11 @@
   -->
     <div class="topbar" id="topbar">
       <div class="topbar-left" id="topbar-left">
-        <h1 id="page-title">Configure</h1>
+        <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
+          <button class="modetab-header active" role="tab" data-mode="configure">Configure</button>
+          <button class="modetab-header" role="tab" data-mode="launch">Launch</button>
+          <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
+        </div>
       </div>
       <button class="power-btn" onclick="powerOff()" aria-label="Power off">
         <span>Power Off</span>
@@ -953,13 +957,6 @@
 
     function goToLaunch() {
       clearInterval(window._telem);
-      const topbarLeft = document.getElementById('topbar-left');
-      topbarLeft.innerHTML = `<button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
-    <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
-      <button class="modetab-header" role="tab" data-mode="launch">Launch</button>
-      <button class="modetab-header" role="tab" data-mode="advanced">Advanced</button>
-    </div>`;
-      attachModeTabListeners();
       setMode('launch');
     }
 
@@ -968,21 +965,6 @@
         clearInterval(window._telem);
         setMode(t.dataset.mode);
       }));
-    }
-
-    function goBack() {
-      clearInterval(window._telem);
-      if (isRunning) stopRunSequence();
-      if (window._activeMode === 'advanced') {
-        emitMachine('advanced-leave');
-      }
-      window._activeMode = null;
-      const topbarLeft = document.getElementById('topbar-left');
-      topbarLeft.innerHTML = `<h1 id="page-title">Configure</h1>`;
-      document.getElementById('main-content').innerHTML = screens.configure();
-
-      const appEl = document.querySelector('.app');
-      if (appEl) appEl.classList.remove('mode-launch', 'mode-advanced');
     }
 
     function syncLaunchSummary() {
@@ -996,7 +978,7 @@
     }
 
     function setMode(mode) {
-      const previousMode = window._activeMode || 'launch';
+      const previousMode = window._activeMode || 'configure';
       if (previousMode === 'launch' && mode !== 'launch' && isRunning) {
         stopRunSequence();
       }
@@ -1007,6 +989,7 @@
       if (appEl) {
         appEl.classList.toggle('mode-launch', mode === 'launch');
         appEl.classList.toggle('mode-advanced', mode === 'advanced');
+        appEl.classList.toggle('mode-configure', mode === 'configure');
       }
 
       document.querySelectorAll('.modetab-header').forEach(t => t.classList.remove('active'));
@@ -1049,7 +1032,8 @@
       }, 800);
     }
 
-    document.getElementById('main-content').innerHTML = screens.configure();
+    attachModeTabListeners();
+    setMode('configure');
   </script>
 </body>
 
