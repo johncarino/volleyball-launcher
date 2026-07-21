@@ -35,6 +35,7 @@ var server = http.createServer(function (request, response) {
 server.listen(PORT_NUMBER, '0.0.0.0', function() {
   console.log("Server listening on port " + PORT_NUMBER);
   console.log("Access from other machines at: http://YOUR_IP:" + PORT_NUMBER);
+  console.log("Board IP: 172.16.189.4");
 });
 
 
