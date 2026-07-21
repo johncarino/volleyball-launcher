@@ -9,7 +9,6 @@ FUNCTIONAL
 - Power off button backend
 
 CONSIDERATION
-- in launch mode, the back button may be too small, a little unintuitive perhaps
 - Change to 5 set locations
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Remove court dimensions from launch screen
