@@ -34,6 +34,12 @@
 #define TACH_LINE 0
 #endif
 
+// Optional second hall sensor line used as a one-shot trigger.
+// Set to -1 to disable this feature.
+#ifndef TACH_GATE_LINE
+#define TACH_GATE_LINE -1
+#endif
+
 // Number of hall-effect magnets glued to the motor shaft per revolution.
 #ifndef TACH_PULSES_PER_REV
 #define TACH_PULSES_PER_REV 1
@@ -77,5 +83,10 @@ void tach_cleanup(void);
 // Thread-safe read of the current smoothed RPM value.
 // Returns 0.0 if the motor is stopped or tach_init() has not been called.
 float get_tach_rpm(void);
+
+// Returns 1 exactly once per magnet approach on TACH_GATE_LINE, then resets
+// to 0 until the magnet leaves (rising edge) and approaches again.
+// Returns 0 when no new one-shot trigger is pending.
+int tach_gate_consume_signal(void);
 
 #endif // HAL_TACHOMETER_H

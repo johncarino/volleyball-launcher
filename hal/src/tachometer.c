@@ -22,6 +22,14 @@ volatile int    tach_running = 0;
 static struct gpiod_line_request   *tach_request      = NULL;
 static struct gpiod_edge_event_buffer *tach_event_buffer = NULL;
 
+static pthread_t       tach_gate_thread;
+static pthread_mutex_t tach_gate_mutex = PTHREAD_MUTEX_INITIALIZER;
+static volatile int    tach_gate_running = 0;
+static struct gpiod_line_request      *tach_gate_request      = NULL;
+static struct gpiod_edge_event_buffer *tach_gate_event_buffer = NULL;
+static int tach_gate_armed   = 1;
+static int tach_gate_pending = 0;
+
 static double tach_periods[TACH_AVG_WINDOW];
 static int    tach_period_count = 0;
 static int    tach_period_idx   = 0;
@@ -129,6 +137,60 @@ void *tach_worker(void *arg)
     return NULL;
 }
 
+// Optional one-shot hall sensor worker. Emits exactly one pending signal per
+// magnet approach (falling edge) and rearms after magnet leave (rising edge).
+static void *tach_gate_worker(void *arg)
+{
+    (void)arg;
+
+    const int64_t timeout_ns = 200000000LL;
+
+    while (!shutdown) {
+        int wait_result = gpiod_line_request_wait_edge_events(
+            tach_gate_request, timeout_ns);
+
+        if (wait_result < 0) {
+            fprintf(stderr, "Tach gate: wait_edge_events failed\n");
+            break;
+        }
+        if (wait_result == 0) {
+            continue;
+        }
+
+        int num_events = gpiod_line_request_read_edge_events(
+            tach_gate_request, tach_gate_event_buffer, 1);
+        if (num_events < 0) {
+            fprintf(stderr, "Tach gate: read_edge_events failed\n");
+            break;
+        }
+        if (num_events == 0) {
+            continue;
+        }
+
+        struct gpiod_edge_event *ev =
+            gpiod_edge_event_buffer_get_event(tach_gate_event_buffer, 0);
+        if (!ev) {
+            continue;
+        }
+
+        enum gpiod_edge_event_type ev_type =
+            gpiod_edge_event_get_event_type(ev);
+
+        pthread_mutex_lock(&tach_gate_mutex);
+        if (ev_type == GPIOD_EDGE_EVENT_FALLING_EDGE) {
+            if (tach_gate_armed) {
+                tach_gate_pending = 1;
+                tach_gate_armed = 0;
+            }
+        } else if (ev_type == GPIOD_EDGE_EVENT_RISING_EDGE) {
+            tach_gate_armed = 1;
+        }
+        pthread_mutex_unlock(&tach_gate_mutex);
+    }
+
+    return NULL;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -217,18 +279,128 @@ int tach_init(void)
     printf("Tachometer initialized on gpiochip%d line %d "
            "(%d pulse(s)/rev, %d-sample average)\n",
            TACH_GPIOCHIP, TACH_LINE, TACH_PULSES_PER_REV, TACH_AVG_WINDOW);
+
+#if TACH_GATE_LINE >= 0
+    struct gpiod_chip *gate_chip = gpiod_chip_open(chip_path);
+    if (!gate_chip) {
+        fprintf(stderr,
+                "Tach gate: failed to open %s for line %d\n",
+                chip_path, TACH_GATE_LINE);
+        tach_cleanup();
+        return -1;
+    }
+
+    struct gpiod_line_settings *gate_settings = gpiod_line_settings_new();
+    if (!gate_settings) {
+        fprintf(stderr, "Tach gate: failed to allocate line settings\n");
+        gpiod_chip_close(gate_chip);
+        tach_cleanup();
+        return -1;
+    }
+    gpiod_line_settings_set_direction(gate_settings, GPIOD_LINE_DIRECTION_INPUT);
+    gpiod_line_settings_set_edge_detection(gate_settings, GPIOD_LINE_EDGE_BOTH);
+    gpiod_line_settings_set_bias(gate_settings, GPIOD_LINE_BIAS_DISABLED);
+    gpiod_line_settings_set_debounce_period_us(gate_settings, TACH_DEBOUNCE_US);
+
+    struct gpiod_line_config *gate_line_cfg = gpiod_line_config_new();
+    if (!gate_line_cfg) {
+        fprintf(stderr, "Tach gate: failed to allocate line config\n");
+        gpiod_line_settings_free(gate_settings);
+        gpiod_chip_close(gate_chip);
+        tach_cleanup();
+        return -1;
+    }
+
+    unsigned int gate_offset = TACH_GATE_LINE;
+    if (gpiod_line_config_add_line_settings(gate_line_cfg, &gate_offset, 1,
+                                            gate_settings) < 0) {
+        fprintf(stderr, "Tach gate: failed to add line settings\n");
+        gpiod_line_config_free(gate_line_cfg);
+        gpiod_line_settings_free(gate_settings);
+        gpiod_chip_close(gate_chip);
+        tach_cleanup();
+        return -1;
+    }
+
+    struct gpiod_request_config *gate_req_cfg = gpiod_request_config_new();
+    if (gate_req_cfg) {
+        gpiod_request_config_set_consumer(gate_req_cfg, "dime_time_tach_gate");
+    }
+
+    tach_gate_request = gpiod_chip_request_lines(gate_chip, gate_req_cfg,
+                                                 gate_line_cfg);
+
+    if (gate_req_cfg) {
+        gpiod_request_config_free(gate_req_cfg);
+    }
+    gpiod_line_config_free(gate_line_cfg);
+    gpiod_line_settings_free(gate_settings);
+    gpiod_chip_close(gate_chip);
+
+    if (!tach_gate_request) {
+        fprintf(stderr, "Tach gate: gpiod_chip_request_lines failed\n");
+        tach_cleanup();
+        return -1;
+    }
+
+    tach_gate_event_buffer = gpiod_edge_event_buffer_new(1);
+    if (!tach_gate_event_buffer) {
+        fprintf(stderr, "Tach gate: failed to allocate event buffer\n");
+        tach_cleanup();
+        return -1;
+    }
+
+    pthread_mutex_lock(&tach_gate_mutex);
+    tach_gate_armed = 1;
+    tach_gate_pending = 0;
+    pthread_mutex_unlock(&tach_gate_mutex);
+
+    if (pthread_create(&tach_gate_thread, NULL, tach_gate_worker, NULL) != 0) {
+        fprintf(stderr, "Tach gate: failed to create thread\n");
+        tach_cleanup();
+        return -1;
+    }
+
+    tach_gate_running = 1;
+    printf("Tach gate initialized on gpiochip%d line %d (one-shot trigger)\n",
+           TACH_GPIOCHIP, TACH_GATE_LINE);
+#else
+    printf("Tach gate disabled (set TACH_GATE_LINE >= 0 to enable)\n");
+#endif
+
     return 0;
 }
 
 void tach_cleanup(void)
 {
-    if (!tach_running) {
+    if (!tach_running && !tach_gate_running) {
         return;
     }
 
-    // 'shutdown' is set by operation_cleanup() before this is called;
-    // tach_worker will exit within ~TACH_STALE_TIMEOUT_SEC seconds.
-    pthread_join(tach_thread, NULL);
+    if (tach_gate_running) {
+        pthread_join(tach_gate_thread, NULL);
+        tach_gate_running = 0;
+    }
+
+    if (tach_gate_event_buffer) {
+        gpiod_edge_event_buffer_free(tach_gate_event_buffer);
+        tach_gate_event_buffer = NULL;
+    }
+    if (tach_gate_request) {
+        gpiod_line_request_release(tach_gate_request);
+        tach_gate_request = NULL;
+    }
+
+    pthread_mutex_lock(&tach_gate_mutex);
+    tach_gate_pending = 0;
+    tach_gate_armed = 1;
+    pthread_mutex_unlock(&tach_gate_mutex);
+
+    if (tach_running) {
+        // 'shutdown' is set by operation_cleanup() before this is called;
+        // tach_worker will exit within ~TACH_STALE_TIMEOUT_SEC seconds.
+        pthread_join(tach_thread, NULL);
+    }
 
     if (tach_event_buffer) {
         gpiod_edge_event_buffer_free(tach_event_buffer);
@@ -248,4 +420,16 @@ float get_tach_rpm(void)
     float rpm = (float)tach_current_rpm;
     pthread_mutex_unlock(&tach_mutex);
     return rpm;
+}
+
+int tach_gate_consume_signal(void)
+{
+    int signal = 0;
+    pthread_mutex_lock(&tach_gate_mutex);
+    if (tach_gate_pending) {
+        signal = 1;
+        tach_gate_pending = 0;
+    }
+    pthread_mutex_unlock(&tach_gate_mutex);
+    return signal;
 }

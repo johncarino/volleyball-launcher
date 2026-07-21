@@ -31,6 +31,7 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_END_DELAY_US 450
 #define HOPPER_PULSE_ACCEL_STEPS 300
 #define HOPPER_CONTINUOUS_DELAY_US 500
+#define HOPPER_RESET_INTERVAL_PULSES 4
 
 volatile float tilt_angle_w = 0;
 
@@ -38,6 +39,7 @@ tb6600_t motor;
 static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 static pthread_t hopper_thread;
 static volatile int hopper_thread_created = 0;
+static unsigned int hopper_pulse_count = 0;
 
 /*
  * Software interrupt (emergency abort) support.
@@ -356,6 +358,8 @@ void homing_sequence() {
     printf("Homing sequence initiated. Moving to default position...\n");
     tilt_signal(INITIAL_TILT_ANGLE);
     curr_tilt_angle = INITIAL_TILT_ANGLE;
+
+    
 }
 
 void tilt_signal(float angle) {
@@ -651,7 +655,18 @@ void hopper_pulse() {
         hopper_stop();
     }
 
+    hopper_pulse_count++;
+    if (hopper_pulse_count >= HOPPER_RESET_INTERVAL_PULSES) {
+        hopper_pulse_count = 0;
+        printf("Hopper pulse #%d: running reset instead of pulse.\n",
+               HOPPER_RESET_INTERVAL_PULSES);
+        hopper_reset();
+        return;
+    }
+
     printf("Pulsing hopper...\n");
+
+    
     tb6600_enable(&motor, 1);
     tb6600_step_accel(&motor, HOPPER_PULSE_STEPS, HOPPER_PULSE_START_DELAY_US, HOPPER_PULSE_END_DELAY_US, HOPPER_PULSE_ACCEL_STEPS);
     tb6600_enable(&motor, 0);
@@ -659,6 +674,54 @@ void hopper_pulse() {
     printf("Hopper pulse complete.\n");
 
     //speed_signal(curr_rpm);
+}
+
+void hopper_reset() {
+    if (!motor.request) {
+        fprintf(stderr, "Cannot reset hopper: motor not initialized\n");
+        return;
+    }
+
+    if (!tach_running) {
+        fprintf(stderr, "Cannot reset hopper: tachometer not initialized\n");
+        return;
+    }
+
+    if (operation_interrupt_pending()) {
+        fprintf(stderr, "Hopper reset aborted before start due to pending interrupt.\n");
+        operation_clear_interrupt();
+        return;
+    }
+
+    if (hopper_running) {
+        hopper_stop();
+    }
+
+    printf("Resetting hopper: stepping until sensor trigger...\n");
+    hopper_start();
+
+    if (!hopper_running) {
+        fprintf(stderr, "Hopper reset failed: unable to start hopper\n");
+        return;
+    }
+
+    while (hopper_running) {
+        if (operation_interrupt_pending()) {
+            fprintf(stderr, "Hopper reset interrupted -- stopping hopper.\n");
+            operation_clear_interrupt();
+            break;
+        }
+
+        if (tach_gate_consume_signal()) {
+            printf("Hopper reset sensor triggered.\n");
+            break;
+        }
+
+        usleep(1000);
+    }
+
+    hopper_stop();
+    printf("Hopper reset complete.\n");
 }
 
 float get_tilt_angle() {

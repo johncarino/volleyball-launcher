@@ -46,6 +46,7 @@ void toggle_hopper();
 void hopper_start();
 void hopper_stop();
 void hopper_pulse();
+void hopper_reset();
 int get_tach_reading();
 
 float get_tilt_angle();
