@@ -1,5 +1,5 @@
 PRIORITY
-- Accessable from beaglebone
+- Direct connection to beaglebone
 
 SECONDARY
 - Fill in alignment modal
@@ -42,5 +42,4 @@ Make three menus:
 - Manual
 
 Court calibration just make it its own tab and more obvious (4th menu)
-Check if we need an internet connection to run it because you wouldn't want to do that in a court
 Add shot variance variable
