@@ -1,4 +1,6 @@
 PRIORITY
+- Finalize menu layouts
+- Where to put power button
 - Direct connection to beaglebone
 
 SECONDARY
@@ -36,11 +38,6 @@ npm run build
 tb6600_test reverse
 
 Daniel feedback:
-Make three menus:
-- Single shot
-- Sequence
-- Manual
-
 Court calibration just make it its own tab and more obvious (4th menu)
 
 Option 1:
