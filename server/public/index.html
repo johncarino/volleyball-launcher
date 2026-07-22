@@ -258,6 +258,9 @@ function showGestureError(message) {
 function confirmQuit() {
   const ok = window.confirm('Shut down the AVSS server? The recogniser and web app will stop, and the program must be restarted on the device.');
   if (!ok) return;
+  // Trigger the software interrupt (emergency abort) first so any in-progress
+  // motor operation stops immediately, then proceed with server shutdown.
+  emitMachine('requestInterrupt');
   emitMachine('quit-server');
   showShuttingDown();
 }

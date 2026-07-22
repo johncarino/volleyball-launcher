@@ -74,7 +74,10 @@ var operation = (function() {
 			hopperStop: function(){},
 			hopperPulse: function(){},
 			resumeMachine: function(){},
-			pauseMachine: function(){}
+			pauseMachine: function(){},
+			requestInterrupt: function(){},
+			isInterruptPending: function(){ return false; },
+			clearInterrupt: function(){}
 		};
 	}
 }());
@@ -202,13 +205,39 @@ function handleCommand(socket) {
 		stopRecognizer(socket);
 	});
 
+	// Software interrupt (emergency abort): asks any in-progress blocking
+	// operation (tilt/speed feedback loops, hopper stepping, etc.) to abort
+	// and leave the motors stopped. Wired to the UI's poweroff/quit button so
+	// the hardware is halted before the server process exits.
+	socket.on('requestInterrupt', function() {
+		console.log("Got requestInterrupt command (emergency abort).");
+		try {
+			if (typeof operation.requestInterrupt === 'function') {
+				operation.requestInterrupt();
+			}
+		} catch (e) {
+			console.log('[operation] requestInterrupt failed: ' + e.message);
+		}
+	});
+
 	// Allow the web UI to cleanly terminate the whole server process (in place
-	// of Ctrl+C in the terminal). Broadcast first so every connected browser
-	// (not just the one that clicked Quit) can show a "shutting down" state,
-	// then exit; the already-registered process 'exit' handler stops the
-	// recogniser and cleans up the operation hardware before the process ends.
+	// of Ctrl+C in the terminal). Request the software interrupt first so any
+	// in-progress motor operation stops immediately, then run operation
+	// cleanup right away (releasing the GPIO/I2C motor handles) rather than
+	// waiting on the process 'exit' handler, then broadcast so every
+	// connected browser (not just the one that clicked Quit) can show a
+	// "shutting down" state, then exit.
 	socket.on('quit-server', function() {
 		console.log("Got quit-server command. Shutting down server...");
+		try {
+			if (typeof operation.requestInterrupt === 'function') {
+				operation.requestInterrupt();
+				console.log('[operation] software interrupt requested before shutdown.');
+			}
+		} catch (e) {
+			console.log('[operation] requestInterrupt failed: ' + e.message);
+		}
+		cleanupOperation(null, 'quit-server');
 		if (io) io.sockets.emit('server-shutdown', 'Server is shutting down...');
 		setTimeout(function() {
 			process.exit(0);
@@ -538,6 +567,14 @@ function parseGestureLine(line) {
 
 // ---- Clean up the child process when the server stops ----------------------
 function shutdownRecognizer() {
+	try {
+		if (typeof operation.requestInterrupt === 'function') {
+			operation.requestInterrupt();
+		}
+	} catch (e) {
+		console.log('[operation] requestInterrupt failed during shutdown: ' + e.message);
+	}
+
 	if (recognizer) {
 		recognizer.kill('SIGTERM');
 		recognizer = null;

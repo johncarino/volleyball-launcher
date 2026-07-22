@@ -37,7 +37,20 @@
 // Optional second hall sensor line used as a one-shot trigger.
 // Set to -1 to disable this feature.
 #ifndef TACH_GATE_LINE
-#define TACH_GATE_LINE -1
+#define TACH_GATE_LINE 9
+#endif
+
+// Internal bias for the gate line. Defaults to an internal pull-up because
+// this second sensor is typically wired WITHOUT the external 10 kΩ
+// pull-up resistor used on the primary A3144 line (see wiring notes above).
+// Without a pull-up of some kind (internal or external), the line floats
+// when the sensor's open-drain output isn't actively pulling it low, which
+// can leave the one-shot latch permanently "stuck" (no clean rising edge
+// to rearm it) -- symptom: the sensor's raw signal looks fine in isolation,
+// but hopper_reset() never sees a trigger. If your second sensor DOES have
+// its own external pull-up, override with -DTACH_GATE_BIAS=GPIOD_LINE_BIAS_DISABLED.
+#ifndef TACH_GATE_BIAS
+#define TACH_GATE_BIAS GPIOD_LINE_BIAS_PULL_UP
 #endif
 
 // Number of hall-effect magnets glued to the motor shaft per revolution.
@@ -46,8 +59,26 @@
 #endif
 
 // Minimum inter-pulse gap (µs) used as a software debounce backstop.
-// The kernel debounce (set in tach_init) is the primary filter.
+// This is the primary (and, by default, only) debounce filter -- see
+// TACH_KERNEL_DEBOUNCE_US below for why kernel-side debounce is disabled
+// by default.
 #define TACH_DEBOUNCE_US 1000
+
+// Kernel-side (hardware) debounce period in microseconds, requested via
+// gpiod_line_settings_set_debounce_period_us(). Disabled (0) by default.
+//
+// Some GPIO controllers only support a small number of coarse debounce
+// steps and silently round a small request (e.g. 1000us) up to a much
+// larger interval (tens to hundreds of ms). Symptom: RPM reads correctly
+// at low speed, then drops straight to 0 once the true inter-pulse period
+// falls below that (undocumented, rounded) interval -- e.g. a hard cutoff
+// around 200 RPM. Since the software backstop above already filters
+// contact-bounce noise, kernel debounce is unnecessary; only enable it
+// (via -DTACH_KERNEL_DEBOUNCE_US=N) if you've confirmed your platform's
+// driver honors small periods accurately.
+#ifndef TACH_KERNEL_DEBOUNCE_US
+#define TACH_KERNEL_DEBOUNCE_US 0
+#endif
 
 // Seconds without a pulse before RPM is reported as 0 (motor stopped).
 #define TACH_STALE_TIMEOUT_SEC 2
@@ -74,9 +105,8 @@ extern volatile int    tach_running;
 // Returns 0 on success, -1 on failure (error printed to stderr).
 int  tach_init(void);
 
-// Signal the tach thread to stop and join it, then release the GPIO line
-// request and event buffer. Relies on the global 'shutdown' flag being set
-// to 1 before calling (same convention as the tilt/yaw workers).
+// Signal the tach thread(s) to stop and join them, then release the GPIO
+// line request(s) and event buffer(s).
 // Safe to call even if tach_init() was never called or failed.
 void tach_cleanup(void);
 

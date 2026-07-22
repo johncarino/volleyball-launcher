@@ -168,6 +168,14 @@ Value isInterruptPending(const CallbackInfo& info) {
     return Boolean::New(env, operation_interrupt_pending() != 0);
 }
 
+// --- clearInterrupt() ---
+Value clearInterrupt(const CallbackInfo& info) {
+    Env env = info.Env();
+    operation_clear_interrupt();
+    std::cerr << "[operation] software interrupt cleared" << std::endl;
+    return env.Undefined();
+}
+
 // --- Module Init ---
 Object Init(Env env, Object exports) {
     exports.Set("operationInit", Function::New(env, operationInit));

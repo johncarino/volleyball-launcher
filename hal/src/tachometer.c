@@ -6,12 +6,6 @@
 #include <pthread.h>
 
 // ---------------------------------------------------------------------------
-// Shared shutdown flag – defined in operation.c, set to 1 on program exit.
-// The tach thread polls this on every TACH_STALE_TIMEOUT_SEC wait cycle.
-// ---------------------------------------------------------------------------
-extern volatile int shutdown;
-
-// ---------------------------------------------------------------------------
 // Module-level state
 // ---------------------------------------------------------------------------
 
@@ -54,7 +48,7 @@ void *tach_worker(void *arg)
     const int64_t timeout_ns =
         (int64_t)TACH_STALE_TIMEOUT_SEC * 1000000000LL;
 
-    while (!shutdown) {
+    while (tach_running) {
         int wait_result = gpiod_line_request_wait_edge_events(
             tach_request, timeout_ns);
 
@@ -67,13 +61,15 @@ void *tach_worker(void *arg)
             // No pulse within timeout: motor is likely stopped.
             if (have_last) {
                 pthread_mutex_lock(&tach_mutex);
+                double last_rpm    = tach_current_rpm;
                 tach_current_rpm  = 0.0;
                 tach_period_count = 0;
                 tach_period_idx   = 0;
                 pthread_mutex_unlock(&tach_mutex);
 
-                printf("Tachometer: RPM = 0.0 (no pulses for %ds)\n",
-                       TACH_STALE_TIMEOUT_SEC);
+                printf("Tachometer: RPM = 0.0 (no pulses for %ds; last "
+                       "reading was %.1f RPM)\n",
+                       TACH_STALE_TIMEOUT_SEC, last_rpm);
                 have_last = 0;
             }
             continue;
@@ -137,6 +133,7 @@ void *tach_worker(void *arg)
     return NULL;
 }
 
+#if TACH_GATE_LINE >= 0
 // Optional one-shot hall sensor worker. Emits exactly one pending signal per
 // magnet approach (falling edge) and rearms after magnet leave (rising edge).
 static void *tach_gate_worker(void *arg)
@@ -145,7 +142,7 @@ static void *tach_gate_worker(void *arg)
 
     const int64_t timeout_ns = 200000000LL;
 
-    while (!shutdown) {
+    while (tach_gate_running) {
         int wait_result = gpiod_line_request_wait_edge_events(
             tach_gate_request, timeout_ns);
 
@@ -190,6 +187,7 @@ static void *tach_gate_worker(void *arg)
 
     return NULL;
 }
+#endif
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -219,7 +217,13 @@ int tach_init(void)
     // External 10 kΩ pull-up to 3.3 V per the wiring notes, so internal
     // bias is left disabled rather than fighting the external resistor.
     gpiod_line_settings_set_bias(settings, GPIOD_LINE_BIAS_DISABLED);
-    gpiod_line_settings_set_debounce_period_us(settings, TACH_DEBOUNCE_US);
+#if TACH_KERNEL_DEBOUNCE_US > 0
+    // Only requested if explicitly enabled -- see the comment on
+    // TACH_KERNEL_DEBOUNCE_US in tachometer.h for why this is off by
+    // default (coarse hardware debounce steps can silently swallow real
+    // edges once the motor spins fast enough).
+    gpiod_line_settings_set_debounce_period_us(settings, TACH_KERNEL_DEBOUNCE_US);
+#endif
 
     struct gpiod_line_config *line_cfg = gpiod_line_config_new();
     if (!line_cfg) {
@@ -266,8 +270,11 @@ int tach_init(void)
         return -1;
     }
 
+    tach_running = 1;
+
     if (pthread_create(&tach_thread, NULL, tach_worker, NULL) != 0) {
         fprintf(stderr, "Tachometer: failed to create thread\n");
+        tach_running = 0;
         gpiod_edge_event_buffer_free(tach_event_buffer);
         tach_event_buffer = NULL;
         gpiod_line_request_release(tach_request);
@@ -275,7 +282,6 @@ int tach_init(void)
         return -1;
     }
 
-    tach_running = 1;
     printf("Tachometer initialized on gpiochip%d line %d "
            "(%d pulse(s)/rev, %d-sample average)\n",
            TACH_GPIOCHIP, TACH_LINE, TACH_PULSES_PER_REV, TACH_AVG_WINDOW);
@@ -299,8 +305,12 @@ int tach_init(void)
     }
     gpiod_line_settings_set_direction(gate_settings, GPIOD_LINE_DIRECTION_INPUT);
     gpiod_line_settings_set_edge_detection(gate_settings, GPIOD_LINE_EDGE_BOTH);
-    gpiod_line_settings_set_bias(gate_settings, GPIOD_LINE_BIAS_DISABLED);
-    gpiod_line_settings_set_debounce_period_us(gate_settings, TACH_DEBOUNCE_US);
+    // See TACH_GATE_BIAS in tachometer.h -- defaults to internal pull-up
+    // since this sensor is typically wired without an external pull-up.
+    gpiod_line_settings_set_bias(gate_settings, TACH_GATE_BIAS);
+#if TACH_KERNEL_DEBOUNCE_US > 0
+    gpiod_line_settings_set_debounce_period_us(gate_settings, TACH_KERNEL_DEBOUNCE_US);
+#endif
 
     struct gpiod_line_config *gate_line_cfg = gpiod_line_config_new();
     if (!gate_line_cfg) {
@@ -350,18 +360,36 @@ int tach_init(void)
         return -1;
     }
 
+    // Initialize the one-shot latch from the line's actual current level
+    // rather than assuming it idles HIGH. The sensor pulls the line LOW
+    // (INACTIVE, given the default active-high polarity) when the magnet
+    // is near. If the magnet happens to already be resting near the
+    // sensor when this runs, starting "armed" would wait forever for a
+    // falling edge that already happened; starting unarmed in that case
+    // correctly waits for the magnet to leave (rising edge) before the
+    // next approach can trigger.
+    enum gpiod_line_value gate_initial_value =
+        gpiod_line_request_get_value(tach_gate_request, gate_offset);
+
     pthread_mutex_lock(&tach_gate_mutex);
-    tach_gate_armed = 1;
+    if (gate_initial_value == GPIOD_LINE_VALUE_INACTIVE) {
+        // Line already LOW: magnet is near right now -- start unarmed.
+        tach_gate_armed = 0;
+    } else {
+        tach_gate_armed = 1;
+    }
     tach_gate_pending = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
+    tach_gate_running = 1;
+
     if (pthread_create(&tach_gate_thread, NULL, tach_gate_worker, NULL) != 0) {
         fprintf(stderr, "Tach gate: failed to create thread\n");
+        tach_gate_running = 0;
         tach_cleanup();
         return -1;
     }
 
-    tach_gate_running = 1;
     printf("Tach gate initialized on gpiochip%d line %d (one-shot trigger)\n",
            TACH_GPIOCHIP, TACH_GATE_LINE);
 #else
@@ -377,9 +405,14 @@ void tach_cleanup(void)
         return;
     }
 
-    if (tach_gate_running) {
+    int was_gate_running = tach_gate_running;
+    int was_tach_running = tach_running;
+
+    tach_gate_running = 0;
+    tach_running = 0;
+
+    if (was_gate_running) {
         pthread_join(tach_gate_thread, NULL);
-        tach_gate_running = 0;
     }
 
     if (tach_gate_event_buffer) {
@@ -396,9 +429,8 @@ void tach_cleanup(void)
     tach_gate_armed = 1;
     pthread_mutex_unlock(&tach_gate_mutex);
 
-    if (tach_running) {
-        // 'shutdown' is set by operation_cleanup() before this is called;
-        // tach_worker will exit within ~TACH_STALE_TIMEOUT_SEC seconds.
+    if (was_tach_running) {
+        // tach_worker exits within ~TACH_STALE_TIMEOUT_SEC seconds.
         pthread_join(tach_thread, NULL);
     }
 
@@ -411,7 +443,6 @@ void tach_cleanup(void)
         tach_request = NULL;
     }
 
-    tach_running = 0;
 }
 
 float get_tach_rpm(void)

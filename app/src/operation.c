@@ -26,10 +26,10 @@ volatile int launcher_running = 0;
 #define TILT_MEDIUM_WINDOW_DEG 5.0
 #define TILT_COARSE_WINDOW_DEG 15.0
 
-#define HOPPER_PULSE_STEPS 11900
-#define HOPPER_PULSE_START_DELAY_US 700
-#define HOPPER_PULSE_END_DELAY_US 450
-#define HOPPER_PULSE_ACCEL_STEPS 300
+#define HOPPER_PULSE_STEPS 2400
+#define HOPPER_PULSE_START_DELAY_US 1000
+#define HOPPER_PULSE_END_DELAY_US 500
+#define HOPPER_PULSE_ACCEL_STEPS 400
 #define HOPPER_CONTINUOUS_DELAY_US 500
 #define HOPPER_RESET_INTERVAL_PULSES 4
 
@@ -105,7 +105,7 @@ static uint16_t rpm_to_mv(float rpm) {
 }
 
 static double calibrate_tilt_angle(double raw_angle) {
-    return (0.0008655 * raw_angle * raw_angle) + (0.9043201 * raw_angle) + 0.4493167;
+    return (0.0001033733f * raw_angle * raw_angle) + (1.05823572f * raw_angle) + 0.38731707f;
 }
 
 static int read_tilt_feedback_angle(double *angle_out) {
@@ -356,10 +356,19 @@ void operation_cleanup() {
 
 void homing_sequence() {
     printf("Homing sequence initiated. Moving to default position...\n");
+    // Move to default tilt angle
     tilt_signal(INITIAL_TILT_ANGLE);
     curr_tilt_angle = INITIAL_TILT_ANGLE;
 
-    
+    // Run the motor at a low speed
+    mcp4725_set_raw(&dac1, 1600);
+
+    // Reset the hopper position
+    hopper_reset();
+    hopper_pulse_count = 0;
+
+    // Stop the motor after homing
+    mcp4725_set_raw(&dac1, 0);
 }
 
 void tilt_signal(float angle) {
@@ -541,7 +550,7 @@ void speed_with_feedback(float rpm) {
         fprintf(stderr, "Invalid RPM: %.2f (must be 1200 or less). Skipping speed.\n", rpm);
         return;
     }
-    uint16_t mv = 0;
+    int mv = 0;
     //convert speed to mv
     mv = rpm_to_mv(rpm);
 
@@ -566,7 +575,7 @@ void speed_with_feedback(float rpm) {
             if (mv < 0) mv = 0; // Cap at min DAC value
         }
 
-        mcp4725_set_mv(&dac1, mv);
+        mcp4725_set_mv(&dac1, (uint16_t)mv);
         usleep(100000); // Adjust every 100ms
     }
     curr_speed = (float)mv;
