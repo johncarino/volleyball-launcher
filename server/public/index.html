@@ -26,6 +26,7 @@
         <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
           <button class="modetab-header active" role="tab" data-mode="configure">Configure</button>
           <button class="modetab-header" role="tab" data-mode="launch">Launch</button>
+          <button class="modetab-header" role="tab" data-mode="single_shot">Single Shot</button>
           <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
         </div>
       </div>
@@ -588,6 +589,27 @@
     <div class="section">
       <div class="section-label">Launch</div>
       <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+    </div>`,
+
+    single_shot: () => `
+    <div class="section" style="margin-top:8px">
+      <div class="section-label">Position</div>
+      <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
+      <div class="court-summary-card" onclick="openModal()" style="cursor:pointer">
+        <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">243 cm</span></div>
+        <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">18.0 m × 9.0 m</span></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Set Slots</div>
+      <div class="slots-with-playback">
+        <div class="save-slots slots-narrow">${slotsHTML(true)}</div>
+        ${renderPlaybackControls(true)}
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Launch</div>
+      <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
     </div>`
     };
 
@@ -979,7 +1001,8 @@
 
     function setMode(mode) {
       const previousMode = window._activeMode || 'configure';
-      if (previousMode === 'launch' && mode !== 'launch' && isRunning) {
+      const leavingRunnableMode = (previousMode === 'launch' || previousMode === 'single_shot');
+      if (leavingRunnableMode && mode !== previousMode && isRunning) {
         stopRunSequence();
       }
       if (previousMode === 'advanced' && mode !== 'advanced') {
@@ -990,6 +1013,7 @@
         appEl.classList.toggle('mode-launch', mode === 'launch');
         appEl.classList.toggle('mode-advanced', mode === 'advanced');
         appEl.classList.toggle('mode-configure', mode === 'configure');
+        appEl.classList.toggle('mode-single_shot', mode === 'single_shot');
       }
 
       document.querySelectorAll('.modetab-header').forEach(t => t.classList.remove('active'));
@@ -1000,7 +1024,7 @@
         emitMachine('advanced-enter');
         startTelemetry();
       }
-      if (mode === 'launch') {
+      if (mode === 'launch' || mode === 'single_shot') {
         syncLaunchSummary();
       }
       window._activeMode = mode;

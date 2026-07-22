@@ -60,13 +60,22 @@ body {
   position: relative;
 }
 
-/* added: distinct background for Launch mode */
+/* Distinct background colours for different modes */
 .app.mode-launch {
   --bg-primary: #eef5f0;
 }
 @media (prefers-color-scheme: dark) {
   .app.mode-launch {
     --bg-primary: #17231c;
+  }
+}
+
+.app.mode-single_shot {
+  --bg-primary: #f0eef7;
+}
+@media (prefers-color-scheme: dark) {
+  .app.mode-single_shot {
+    --bg-primary: #1e1c26;
   }
 }
 
