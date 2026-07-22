@@ -25,9 +25,9 @@
       <div class="topbar-left" id="topbar-left">
         <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
           <button class="modetab-header active" role="tab" data-mode="configure">Configure</button>
-          <button class="modetab-header" role="tab" data-mode="launch">Sequence</button>
           <button class="modetab-header" role="tab" data-mode="single_shot">Single Shot</button>
-          <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
+          <button class="modetab-header" role="tab" data-mode="launch">Sequence</button>
+          <button class="modetab-header" role="tab" data-mode="advanced">Advanced</button>
         </div>
       </div>
       <button class="power-btn" onclick="powerOff()" aria-label="Power off">
@@ -128,6 +128,7 @@
       C: { 1: false, 2: false, 3: false, 4: false },
       R: { 1: false, 2: false, 3: false, 4: false },
     };
+    const singleShotSelected = { L: null, C: null, R: null }; // selected slot number per machine, or null
 
     const repeatLabels = ['Repeat', 'Repeat'];
     const repeatIcons = ['ti-repeat', 'ti-repeat'];
@@ -519,7 +520,7 @@
       </button>
     </div>
     <div class="section" style="margin-top:8px">
-      <button class="op-btn continue-style" onclick="goToLaunch()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue to Launch</button>
+      <button class="op-btn continue-style" onclick="goToSingleShot()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue to Launch</button>
     </div>`,
 
       advanced: () => `
@@ -602,10 +603,7 @@
     </div>
     <div class="section">
       <div class="section-label">Set Slots</div>
-      <div class="slots-with-playback">
-        <div class="save-slots slots-narrow">${slotsHTML(true)}</div>
-        ${renderPlaybackControls(true)}
-      </div>
+      <div class="save-slots">${slotsHTML(true, 'single_shot')}</div>
     </div>
     <div class="section">
       <div class="section-label">Launch</div>
@@ -693,7 +691,10 @@
         return;
       }
       const launchWrap = document.querySelector('#main-content .save-slots');
-      if (launchWrap) launchWrap.innerHTML = slotsHTML(true);
+      if (launchWrap) {
+        const variant = window._activeMode === 'single_shot' ? 'single_shot' : 'sequence';
+        launchWrap.innerHTML = slotsHTML(true, variant);
+      }
     }
 
     function refreshLaunchView() {
@@ -717,20 +718,26 @@
     let currentRunSlot = null; // { machine, n } currently firing, for the "now playing" highlight
     const SET_RUN_DURATION_MS = 6000; // assumed dwell time per set before advancing
 
-    function slotsHTML(readonly = false) {
+    function slotsHTML(readonly = false, variant = 'sequence') {
       const machineKey = selectedMachine || 'L';
       const machineSlots = slots[machineKey];
       const machineEnabled = slotEnabled[machineKey];
       const readyToSave = !readonly && selectedMachine && selectedTarget && tempoSelected && !slotSaved;
+      const isSingleShot = readonly && variant === 'single_shot';
+
       return [1, 2, 3, 4].map(n => {
         const s = machineSlots[n];
-        const enabled = readonly && !!s && !!machineEnabled[n];
+        const enabled = isSingleShot
+          ? (!!s && singleShotSelected[machineKey] === n)
+          : (readonly && !!s && !!machineEnabled[n]);
         const isPlaying = readonly && !!currentRunSlot && currentRunSlot.machine === machineKey && currentRunSlot.n === n;
         const isEmptyReadonly = readonly && !s;
 
         let clickAttr;
         if (readonly) {
-          clickAttr = isEmptyReadonly ? '' : `onclick="clickSlot(${n})"`;
+          if (isEmptyReadonly) clickAttr = '';
+          else if (isSingleShot) clickAttr = `onclick="selectSingleShotSlot(${n})"`;
+          else clickAttr = `onclick="clickSlot(${n})"`;
         } else {
           clickAttr = `onclick="saveNewSlot(${n})"`;
         }
@@ -745,12 +752,12 @@
           : '';
 
         return `<div class="slot${stateClass}${flashClass}" ${clickAttr}>
-      <div class="slot-body">
-        <div class="slot-num">Slot ${n}${enabled ? ' <span class="slot-enabled-badge">●</span>' : ''}</div>
-        <div class="slot-name${nameClass}">${name}</div>
-      </div>
-      ${deleteBtn}
-    </div>`;
+          <div class="slot-body">
+            <div class="slot-num">Slot ${n}${enabled ? ' <span class="slot-enabled-badge">●</span>' : ''}</div>
+            <div class="slot-name${nameClass}">${name}</div>
+          </div>
+          ${deleteBtn}
+        </div>`;
       }).join('');
     }
 
@@ -760,6 +767,13 @@
       const machineKey = selectedMachine || 'L';
       if (!slots[machineKey][n]) return; // nothing saved in this slot, nothing to toggle
       slotEnabled[machineKey][n] = !slotEnabled[machineKey][n];
+      refreshSlots();
+    }
+
+    function selectSingleShotSlot(n) {
+      const machineKey = selectedMachine || 'L';
+      if (!slots[machineKey][n]) return;
+      singleShotSelected[machineKey] = (singleShotSelected[machineKey] === n) ? null : n;
       refreshSlots();
     }
 
@@ -801,6 +815,10 @@
 
     function buildRunQueue() {
       const machineKey = selectedMachine || 'L';
+      if (window._activeMode === 'single_shot') {
+        const n = singleShotSelected[machineKey];
+        return (n && slots[machineKey][n]) ? [{ machine: machineKey, n }] : [];
+      }
       let ns = [1, 2, 3, 4].filter(n => slots[machineKey][n] && slotEnabled[machineKey][n]);
       if (randomOn) ns = shuffleArray(ns);
       return ns.map(n => ({ machine: machineKey, n }));
@@ -835,8 +853,7 @@
 
         runIndex++;
         if (runIndex >= runQueue.length) {
-          if (repeatState === 1) {
-            // Repeat on: start the queue over, reshuffling if random is on
+          if (window._activeMode === 'launch' && repeatState === 1) {
             runQueue = buildRunQueue();
             runIndex = 0;
             if (runQueue.length === 0) { stopRunSequence(); return; }
@@ -934,6 +951,7 @@
     function deleteSlot(machineKey, n) {
       slots[machineKey][n] = null;
       slotEnabled[machineKey][n] = false;
+      if (singleShotSelected[machineKey] === n) singleShotSelected[machineKey] = null; // add this line
 
       if (machineKey === selectedMachine) {
         const stillHasSlots = [1, 2, 3, 4].some(i => !!slots[machineKey][i]);
@@ -948,7 +966,7 @@
     }
 
     function toggleLaunch(btn) {
-      if (window._activeMode === 'launch') {
+      if (window._activeMode === 'launch' || window._activeMode === 'single_shot') {
         if (isRunning) {
           stopRunSequence();
         } else {
@@ -977,9 +995,9 @@
       }
     }
 
-    function goToLaunch() {
+    function goToSingleShot() {
       clearInterval(window._telem);
-      setMode('launch');
+      setMode('single_shot');
     }
 
     function attachModeTabListeners() {
