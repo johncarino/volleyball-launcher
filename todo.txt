@@ -43,3 +43,10 @@ Make three menus:
 
 Court calibration just make it its own tab and more obvious (4th menu)
 Add shot variance variable
+
+Option 1:
+Configure, Court, Single Shot, Sequence, Manual
+
+Option 2:
+Configure, Court
+Single Shot, Sequence, Manual
