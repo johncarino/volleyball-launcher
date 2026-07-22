@@ -27,7 +27,7 @@
           <button class="modetab-header active" role="tab" data-mode="configure">Configure</button>
           <button class="modetab-header" role="tab" data-mode="single_shot">Single Shot</button>
           <button class="modetab-header" role="tab" data-mode="launch">Sequence</button>
-          <button class="modetab-header" role="tab" data-mode="advanced">Advanced</button>
+          <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
         </div>
       </div>
       <button class="power-btn" onclick="powerOff()" aria-label="Power off">
@@ -767,6 +767,7 @@
       const machineKey = selectedMachine || 'L';
       if (!slots[machineKey][n]) return; // nothing saved in this slot, nothing to toggle
       slotEnabled[machineKey][n] = !slotEnabled[machineKey][n];
+      activateSlot(machineKey, n); 
       refreshSlots();
     }
 
@@ -774,6 +775,7 @@
       const machineKey = selectedMachine || 'L';
       if (!slots[machineKey][n]) return;
       singleShotSelected[machineKey] = (singleShotSelected[machineKey] === n) ? null : n;
+      activateSlot(machineKey, n);
       refreshSlots();
     }
 
