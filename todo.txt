@@ -7,6 +7,7 @@ SECONDARY
 FUNCTIONAL
 - Make launch menu set selection more intuitive
 - Power off button backend
+- Shot variance variable
 
 CONSIDERATION
 - Change to 5 set locations
@@ -23,7 +24,6 @@ AESTHETIC
 - Change set slot text
 
 CLEANUP
-- Remove old-old-index.html, old stylesheets
 - Remove any unused code
 
 beaglebone/mnt/remote/jp/volleyball_launcher/server/
@@ -35,14 +35,13 @@ npm run build
 
 tb6600_test reverse
 
-Feedback:
+Daniel feedback:
 Make three menus:
 - Single shot
 - Sequence
 - Manual
 
 Court calibration just make it its own tab and more obvious (4th menu)
-Add shot variance variable
 
 Option 1:
 Configure, Court, Single Shot, Sequence, Manual
