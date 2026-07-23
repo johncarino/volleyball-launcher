@@ -12,7 +12,6 @@ FUNCTIONAL
 - Shot variance variable
 
 CONSIDERATION
-- Change to 5 set locations
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Remove court dimensions from launch screen
 - Move JS to separate file
