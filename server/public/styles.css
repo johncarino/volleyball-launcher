@@ -327,7 +327,7 @@ input[type=range] { accent-color: var(--blue); }
 
 .summary-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 0; border-bottom: 0.5px solid var(--border);
+  padding: 10px 0;
 }
 .summary-row:last-child { border-bottom: none; }
 .summary-key { font-size: 13px; color: var(--text-secondary); }
@@ -350,9 +350,32 @@ input[type=range] { accent-color: var(--blue); }
   border-radius: 0 0 var(--radius-md) var(--radius-md);
   padding: 4px 12px 2px;
   margin-top: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .court-summary-card .summary-row {
   padding: 8px 0;
+}
+.court-summary-rows {
+  flex: 1;
+  min-width: 0;
+}
+.edit-affordance {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  cursor: pointer;
+  pointer-events: none;
 }
 
 .modal-overlay {
