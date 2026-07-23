@@ -19,6 +19,7 @@ var dgram    = require('dgram');
 var path     = require('path');
 var fs       = require('fs');
 var spawn    = require('child_process').spawn;
+var execSync = require('child_process').execSync;
 
 // ---- Configuration (override via environment variables) -------------------
 var UDP_PORT  = parseInt(process.env.GESTURE_UDP_PORT, 10) || 12345;
@@ -32,11 +33,31 @@ var M2DEMO_BIN    = process.env.M2DEMO_BIN || 'm2demo';
 var GRAPH_CONFIG  = process.env.GESTURE_GRAPH ||
         path.join(__dirname, '..', '..', 'mediapipe_files', 'hand_tracking_custom.pbtxt');
 var CAMERA_INDEX  = process.env.GESTURE_CAMERA || '0';
-// Camera kind: 'csi' (BeagleY-AI IMX219 raw-Bayer path, default) or 'usb' (UVC
-// webcam like the Logitech C920, which has its own ISP so no software
-// debayer/WB/AE is needed). USB also drops the 180 flip (mount it upright).
-var CAMERA_KIND   = (process.env.GESTURE_CAMERA_KIND || 'csi').toLowerCase();
+// Stable USB camera selection. /dev/videoN numbers get reshuffled across reboots
+// (e.g. a platform JPEG encoder can take video0), so we prefer the persistent
+// /dev/v4l/by-id symlink keyed by the camera's USB id. GESTURE_CAMERA_DEVICE
+// pins an explicit path; GESTURE_CAMERA_NAME filters by-id entries (e.g. 'C920').
+var CAMERA_DEVICE = process.env.GESTURE_CAMERA_DEVICE || '';
+var CAMERA_NAME   = process.env.GESTURE_CAMERA_NAME || '';
+// Camera kind: 'usb' (UVC webcam like the Logitech HD Pro Webcam C920, which
+// has its own ISP so no software debayer/WB/AE is needed; default) or 'csi'
+// (BeagleY-AI IMX219 raw-Bayer path). USB also drops the 180 flip (mount it
+// upright). Override with GESTURE_CAMERA_KIND=csi to use the IMX219.
+var CAMERA_KIND   = (process.env.GESTURE_CAMERA_KIND || 'usb').toLowerCase();
 var USB_FOCUS     = process.env.GESTURE_USB_FOCUS || '-1';
+// Which hand signs sets; the other hand starts/stops the feed. Toggleable live
+// from the web UI (also corrects MediaPipe handedness if it labels your hands
+// the opposite way). 'right' (default) or 'left'.
+var SET_HAND      = (process.env.GESTURE_SET_HAND || 'right').toLowerCase();
+if (SET_HAND !== 'left') SET_HAND = 'right';
+// Live preview: m2demo JPEG-encodes throttled frames and sends them to this
+// local UDP port; we relay each frame to the browser over socket.io. Disabled
+// when GESTURE_PREVIEW=0 or the port is 0. Kept modest (fps/quality) so it
+// barely touches the recogniser's budget.
+var PREVIEW_ENABLED = process.env.GESTURE_PREVIEW !== '0';
+var PREVIEW_PORT    = parseInt(process.env.GESTURE_PREVIEW_PORT || '12346', 10);
+var PREVIEW_FPS     = process.env.GESTURE_PREVIEW_FPS || '12';
+var PREVIEW_QUALITY = process.env.GESTURE_PREVIEW_QUALITY || '45';
 
 // Bazel-built binaries resolve MediaPipe resource paths (e.g.
 // "mediapipe/modules/palm_detection/palm_detection_full.tflite") relative to
@@ -117,6 +138,7 @@ exports.listen = function(server) {
 	io.set('log level', 1);
 
 	startUdpReceiver();
+	startPreviewReceiver();
 
 	io.sockets.on('connection', function(socket) {
 		handleCommand(socket);
@@ -216,9 +238,7 @@ function handleCommand(socket) {
 			if (!Number.isNaN(mp)) gestureControl.machinePosition = mp;
 		}
 		// Reset debounce state whenever the mode or position changes.
-		gestureControl.lastName = null;
-		gestureControl.holdSince = 0;
-		gestureControl.firedName = null;
+		resetGestureHolds();
 		console.log('[gesture] control ' + (gestureControl.enabled ? 'ENABLED' : 'disabled') +
 				' (machinePosition=' + gestureControl.machinePosition + ')');
 		socket.emit('gesture-control-state', {
@@ -227,6 +247,19 @@ function handleCommand(socket) {
 			feasible: FEASIBILITY[gestureControl.machinePosition] || []
 		});
 	});
+
+	// Choose which hand signs sets ('right'/'left'); the other hand starts/stops.
+	// Applied live (no recogniser restart) and echoed back so every browser stays
+	// in sync.
+	socket.on('gesture-set-hand', function(payload) {
+		SET_HAND = (payload && payload.hand === 'left') ? 'left' : 'right';
+		resetGestureHolds();
+		console.log('[gesture] set-sign hand = ' + SET_HAND);
+		if (io) io.sockets.emit('gesture-set-hand-state', { hand: SET_HAND });
+	});
+
+	// Tell the newly-connected browser the current signing-hand choice.
+	socket.emit('gesture-set-hand-state', { hand: SET_HAND });
 
 	// Software interrupt (emergency abort): asks any in-progress blocking
 	// operation (tilt/speed feedback loops, hopper stepping, etc.) to abort
@@ -470,6 +503,65 @@ function handleCommand(socket) {
 	socket.emit('state-reply', recognizer ? 'RUNNING' : 'IDLE');
 }
 
+// Resolve a stable USB camera device node. /dev/videoN can be reassigned on
+// reboot, and a UVC camera like the C920 exposes two nodes (capture + metadata),
+// so we prefer the persistent /dev/v4l/by-id symlink and pick the capture node
+// (…-video-index0). Precedence: explicit GESTURE_CAMERA_DEVICE override, then a
+// by-id match, then a v4l2-ctl name lookup, else null (caller falls back to the
+// numeric --camera_index). All lookups are (optionally) filtered by
+// GESTURE_CAMERA_NAME (e.g. 'C920').
+function resolveUsbCameraPath() {
+	if (CAMERA_DEVICE) return CAMERA_DEVICE;
+	return findByIdCapture() || findByV4l2List() || null;
+}
+
+// Persistent /dev/v4l/by-id capture symlink (…-video-index0). Best option: the
+// path itself never changes across reboots.
+function findByIdCapture() {
+	var dir = '/dev/v4l/by-id';
+	try {
+		var entries = fs.readdirSync(dir).filter(function(n) {
+			return /-video-index0$/.test(n) &&
+				(!CAMERA_NAME || n.toLowerCase().indexOf(CAMERA_NAME.toLowerCase()) !== -1);
+		});
+		if (entries.length > 0) {
+			entries.sort();
+			return dir + '/' + entries[0];
+		}
+	} catch (e) {
+		// by-id directory missing (no udev symlinks); fall through.
+	}
+	return null;
+}
+
+// Fallback: parse `v4l2-ctl --list-devices` and take the first video node of the
+// USB camera group (that first node is the capture node; later ones are
+// metadata). Re-resolved on every start, so it tracks renumbering even without
+// by-id symlinks.
+function findByV4l2List() {
+	var out;
+	try {
+		out = execSync('v4l2-ctl --list-devices 2>/dev/null', { encoding: 'utf8' });
+	} catch (e) {
+		return null;
+	}
+	var want = (CAMERA_NAME || '').toLowerCase();
+	var groups = out.split(/\n(?=\S)/);  // each group header starts at column 0
+	for (var i = 0; i < groups.length; i++) {
+		var lines = groups[i].split('\n');
+		var header = (lines[0] || '').toLowerCase();
+		var node = null;
+		for (var j = 1; j < lines.length; j++) {
+			var m = lines[j].match(/\/dev\/video\d+/);
+			if (m) { node = m[0]; break; }
+		}
+		if (!node) continue;
+		var matches = want ? header.indexOf(want) !== -1 : header.indexOf('usb') !== -1;
+		if (matches) return node;
+	}
+	return null;
+}
+
 function startRecognizer(socket) {
 	if (recognizer) {
 		socket.emit('start-reply', 'ALREADY_RUNNING');
@@ -490,6 +582,27 @@ function startRecognizer(socket) {
 		args.push('--rotate180=false');
 		args.push('--usb_disable_autofocus=true');
 		args.push('--usb_focus=' + USB_FOCUS);
+		// Mirror the (non-selfie) webcam so MediaPipe handedness matches the real
+		// hand and the preview reads like a mirror. Override with GESTURE_MIRROR=0.
+		args.push('--mirror=' + (process.env.GESTURE_MIRROR === '0' ? 'false' : 'true'));
+		// Prefer a stable device path so a reboot renumbering /dev/videoN (or the
+		// C920's second, metadata-only node) doesn't break capture.
+		var camPath = resolveUsbCameraPath();
+		if (camPath) {
+			args.push('--camera_path=' + camPath);
+			console.log('[gesture] USB camera device: ' + camPath);
+		} else {
+			console.log('[gesture] No stable by-id camera node found; falling back to ' +
+					'/dev/video' + CAMERA_INDEX + '. Set GESTURE_CAMERA_DEVICE to pin it.');
+		}
+	}
+
+	if (PREVIEW_ENABLED && PREVIEW_PORT > 0) {
+		// Push throttled JPEG frames to our local preview receiver for the web UI.
+		args.push('--preview_udp_host=' + UDP_HOST);
+		args.push('--preview_udp_port=' + PREVIEW_PORT);
+		args.push('--preview_fps=' + PREVIEW_FPS);
+		args.push('--preview_quality=' + PREVIEW_QUALITY);
 	}
 
 	var spawnOptions = {
@@ -549,11 +662,13 @@ function startUdpReceiver() {
 	var receiver = dgram.createSocket('udp4');
 
 	receiver.on('message', function(msg) {
-		var data = parseGestureLine(msg.toString('utf8').trim());
-		if (data && io) {
-			io.sockets.emit('gesture-update', data);
-			handleGestureFrame(data);
-		}
+		var hands = parseHandsLine(msg.toString('utf8').trim());
+		if (!hands || !io) return;
+		var roles = assignHandRoles(hands);
+		var signData = roles.sign || NONE_HAND;
+		io.sockets.emit('gesture-update', signData);
+		handleSignFrame(signData);
+		handleControlFrame(roles.control || NONE_HAND);
 	});
 
 	receiver.on('error', function(err) {
@@ -568,23 +683,82 @@ function startUdpReceiver() {
 	receiver.bind(UDP_PORT, UDP_HOST);
 }
 
-// "gesture <count> <t> <i> <m> <r> <p> <NAME>" -> structured object, or null.
-function parseGestureLine(line) {
+// ---- UDP preview receiver (JPEG frames pushed by m2demo) ------------------
+// Each datagram is one whole JPEG frame (kept under the loopback MTU by the
+// recogniser). We relay it to the browser as binary; socket.io drops it
+// cheaply when nobody is connected, and m2demo only sends while running.
+function startPreviewReceiver() {
+	if (!PREVIEW_ENABLED || !(PREVIEW_PORT > 0)) return;
+	var receiver = dgram.createSocket('udp4');
+
+	receiver.on('message', function(msg) {
+		if (io) io.sockets.emit('gesture-frame', msg);
+	});
+
+	receiver.on('error', function(err) {
+		console.log("Preview UDP receiver error: " + err.message);
+	});
+
+	receiver.on('listening', function() {
+		var a = receiver.address();
+		console.log("Gesture preview UDP receiver listening on " + a.address + ":" + a.port);
+	});
+
+	receiver.bind(PREVIEW_PORT, UDP_HOST);
+}
+
+// A "no hand in this role" placeholder matching the gesture-update shape.
+var NONE_HAND = {
+	count: 0,
+	fingers: { thumb: false, index: false, middle: false, ring: false, pinky: false },
+	name: 'NONE',
+	hand: 'none'
+};
+
+// "hands <n> [<label> <count> <t> <i> <m> <r> <p> <NAME>]..." -> array of hand
+// objects, or null. <label> is R/L/U (right/left/unknown).
+function parseHandsLine(line) {
 	var parts = line.split(/\s+/);
-	if (parts[0] !== 'gesture' || parts.length < 8) {
-		return null;
+	if (parts[0] !== 'hands') return null;
+	var n = parseInt(parts[1], 10);
+	if (Number.isNaN(n)) return null;
+	var hands = [];
+	var idx = 2;
+	for (var k = 0; k < n; k++) {
+		if (idx + 8 > parts.length) break;  // malformed / truncated
+		var label = parts[idx];
+		hands.push({
+			hand: label === 'R' ? 'right' : (label === 'L' ? 'left' : 'unknown'),
+			count: parseInt(parts[idx + 1], 10) || 0,
+			fingers: {
+				thumb:  parts[idx + 2] === '1',
+				index:  parts[idx + 3] === '1',
+				middle: parts[idx + 4] === '1',
+				ring:   parts[idx + 5] === '1',
+				pinky:  parts[idx + 6] === '1'
+			},
+			name: parts[idx + 7]
+		});
+		idx += 8;
 	}
-	return {
-		count: parseInt(parts[1], 10) || 0,
-		fingers: {
-			thumb:  parts[2] === '1',
-			index:  parts[3] === '1',
-			middle: parts[4] === '1',
-			ring:   parts[5] === '1',
-			pinky:  parts[6] === '1'
-		},
-		name: parts[7]
-	};
+	return hands;
+}
+
+// Split the visible hands into the set-signing hand and the start/stop control
+// hand according to the SET_HAND preference. Falls back to treating a lone
+// unlabelled hand as the signing hand so single-hand use still works.
+function assignHandRoles(hands) {
+	var signWant = SET_HAND;
+	var ctrlWant = (SET_HAND === 'right') ? 'left' : 'right';
+	var sign = null, control = null;
+	for (var i = 0; i < hands.length; i++) {
+		if (hands[i].hand === signWant && !sign) sign = hands[i];
+		else if (hands[i].hand === ctrlWant && !control) control = hands[i];
+	}
+	if (!sign && hands.length === 1 && hands[0].hand === 'unknown') {
+		sign = hands[0];
+	}
+	return { sign: sign, control: control };
 }
 
 // ---- Gesture -> launcher intent mapping (gesture-control mode) -------------
@@ -615,57 +789,46 @@ var FEASIBILITY = {
 var GESTURE_HOLD_MS   = 700;   // hold a signal this long to confirm a set
 var OPEN_PALM_STOP_MS = 1500;  // continuous OPEN_PALM this long = STOP
 
-// Gesture-control runtime state (opt-in via 'gesture-control-enable').
+// Gesture-control runtime state (opt-in via 'gesture-control-enable'). The
+// signing hand and the control hand are tracked independently so a set sign on
+// one hand and a start/stop gesture on the other don't clobber each other.
 var gestureControl = {
 	enabled: false,
 	machinePosition: 1,  // default Center
-	lastName: null,      // gesture name currently being held
-	holdSince: 0,        // timestamp the current name first appeared
-	firedName: null      // last name already acted on (edge trigger)
+	sign:    { lastName: null, holdSince: 0, firedName: null },
+	control: { lastName: null, holdSince: 0, firedName: null }
 };
 
-// Apply gesture-control logic to one parsed gesture frame. Only acts when the
-// browser has enabled gesture control; otherwise gestures are display-only.
-function handleGestureFrame(data) {
+function resetGestureHolds() {
+	gestureControl.sign =    { lastName: null, holdSince: 0, firedName: null };
+	gestureControl.control = { lastName: null, holdSince: 0, firedName: null };
+}
+
+// Apply set-selection logic to the signing hand. Only acts when the browser has
+// enabled gesture control; otherwise gestures are display-only. Start/stop is
+// handled separately by the control hand (see handleControlFrame).
+function handleSignFrame(data) {
 	if (!gestureControl.enabled) return;
 
+	var st = gestureControl.sign;
 	var name = (data && data.name) ? data.name : 'NONE';
 	var now = Date.now();
 
-	// Track how long the current gesture has been held (edge-triggered actions).
-	if (name !== gestureControl.lastName) {
-		gestureControl.lastName = name;
-		gestureControl.holdSince = now;
-		gestureControl.firedName = null;
+	if (name !== st.lastName) {
+		st.lastName = name;
+		st.holdSince = now;
+		st.firedName = null;
 	}
-	var heldMs = now - gestureControl.holdSince;
+	var heldMs = now - st.holdSince;
 
 	if (name === 'NONE' || name === 'UNKNOWN') return;
-
-	// OPEN_PALM long continuous hold escalates to STOP (checked before the
-	// once-per-hold guard so a held palm can go 5 -> STOP).
-	if (name === 'OPEN_PALM' && heldMs >= OPEN_PALM_STOP_MS) {
-		if (gestureControl.firedName !== 'STOP') {
-			gestureControl.firedName = 'STOP';
-			triggerControl('stop');
-		}
-		return;
-	}
-
 	if (heldMs < GESTURE_HOLD_MS) return;          // not held long enough yet
-	if (gestureControl.firedName === name) return; // already acted on this hold
-
-	// THUMBS_UP is the start control gesture.
-	if (name === 'THUMBS_UP') {
-		gestureControl.firedName = name;
-		triggerControl('start');
-		return;
-	}
+	if (st.firedName === name) return;             // already acted on this hold
 
 	var set = GESTURE_SET_MAP[name];
 	if (!set) return;  // not a mapped set gesture
 
-	gestureControl.firedName = name;
+	st.firedName = name;
 	var allowed = FEASIBILITY[gestureControl.machinePosition] || [];
 	var feasible = allowed.indexOf(set) !== -1;
 	if (io) io.sockets.emit('gesture-set', { name: name, set: set, feasible: feasible });
@@ -673,6 +836,44 @@ function handleGestureFrame(data) {
 			' mp=' + gestureControl.machinePosition);
 	// NOTE: motor set-actuation (operation.setMachine) is intentionally NOT wired
 	// yet -- the RPM/angle mapping is not implemented. Display only for now.
+}
+
+// Apply start/stop logic to the control hand (the one not signing sets):
+// THUMBS_UP = start the feed, a long OPEN_PALM hold = stop.
+function handleControlFrame(data) {
+	if (!gestureControl.enabled) return;
+
+	var st = gestureControl.control;
+	var name = (data && data.name) ? data.name : 'NONE';
+	var now = Date.now();
+
+	if (name !== st.lastName) {
+		st.lastName = name;
+		st.holdSince = now;
+		st.firedName = null;
+	}
+	var heldMs = now - st.holdSince;
+
+	if (name === 'NONE' || name === 'UNKNOWN') return;
+
+	// OPEN_PALM long continuous hold escalates to STOP (checked before the
+	// once-per-hold guard).
+	if (name === 'OPEN_PALM' && heldMs >= OPEN_PALM_STOP_MS) {
+		if (st.firedName !== 'STOP') {
+			st.firedName = 'STOP';
+			triggerControl('stop');
+		}
+		return;
+	}
+
+	if (heldMs < GESTURE_HOLD_MS) return;          // not held long enough yet
+	if (st.firedName === name) return;             // already acted on this hold
+
+	// THUMBS_UP is the start control gesture.
+	if (name === 'THUMBS_UP') {
+		st.firedName = name;
+		triggerControl('start');
+	}
 }
 
 // Start/stop the ball feed from a control gesture. Wired to the existing hopper

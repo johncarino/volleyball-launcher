@@ -137,8 +137,10 @@ if (machineSocket) {
 
   // ---- Gesture recogniser (m2demo) ----------------------------------------
   machineSocket.on('gesture-update', (data) => { renderGesture(data); });
+  machineSocket.on('gesture-frame', (data) => { renderPreviewFrame(data); });
   machineSocket.on('gesture-set', (data) => { onGestureSet(data); });
   machineSocket.on('gesture-control-state', (state) => { applyFeasibility(state && state.feasible); });
+  machineSocket.on('gesture-set-hand-state', (data) => { applySetHand(data && data.hand); });
   machineSocket.on('state-reply', (state) => { setGestureRunning(state === 'RUNNING'); });
   machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); renderGesture(null); });
   machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); });
@@ -217,6 +219,51 @@ function setGestureRunning(running) {
   if (pill) pill.textContent = running ? 'Running' : 'Idle';
   if (startBtn) startBtn.disabled = running;
   if (stopBtn) stopBtn.disabled = !running;
+  const previewSection = document.getElementById('gesture-preview-section');
+  if (previewSection) previewSection.style.display = running ? '' : 'none';
+  if (!running) {
+    const img = document.getElementById('gesture-preview');
+    if (img) img.removeAttribute('src');
+  }
+}
+
+// Render one live-preview frame. socket.io delivers binary as an ArrayBuffer;
+// we wrap it in a Blob URL for the <img> and revoke the previous one so the
+// object URLs don't pile up.
+let _previewUrl = null;
+function renderPreviewFrame(data) {
+  const img = document.getElementById('gesture-preview');
+  if (!img) return;
+  let bytes = null;
+  if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+  else if (data && data.buffer) bytes = new Uint8Array(data.buffer);
+  else if (data instanceof Blob) { setPreviewSrc(img, URL.createObjectURL(data)); return; }
+  if (!bytes) return;
+  setPreviewSrc(img, URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' })));
+}
+
+function setPreviewSrc(img, url) {
+  img.src = url;
+  if (_previewUrl) URL.revokeObjectURL(_previewUrl);
+  _previewUrl = url;
+}
+
+// Which hand signs sets ('right'/'left'); the other hand starts/stops the feed.
+let _setHand = 'right';
+function toggleSetHand() {
+  _setHand = (_setHand === 'right') ? 'left' : 'right';
+  emitMachine('gesture-set-hand', { hand: _setHand });
+}
+
+function applySetHand(hand) {
+  _setHand = (hand === 'left') ? 'left' : 'right';
+  const btn = document.getElementById('set-hand-toggle');
+  if (btn) btn.textContent = (_setHand === 'right') ? 'Right' : 'Left';
+  const hint = document.getElementById('gesture-control-hint');
+  if (hint) {
+    const other = (_setHand === 'right') ? 'Left' : 'Right';
+    hint.innerHTML = other + ' hand: thumbs up = start feed &middot; hold open palm = stop';
+  }
 }
 
 function renderGesture(data) {
@@ -605,6 +652,13 @@ const screens = {
         <button class="op-btn stop" id="gestureStopBtn" onclick="stopGesture()" disabled><i class="ti ti-player-stop" aria-hidden="true"></i> Stop</button>
       </div>
     </div>
+    <div class="section" id="gesture-preview-section" style="display:none">
+      <div class="section-label">Live preview</div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <img id="gesture-preview" alt="Live camera preview"
+             style="display:block;width:100%;height:auto;background:#000" />
+      </div>
+    </div>
     <div class="section">
       <div class="section-label">Live gesture</div>
       <div class="card gesture-readout">
@@ -627,6 +681,10 @@ const screens = {
           <button class="gc-toggle-btn" id="gesture-control-toggle" onclick="toggleGestureControl()">Off</button>
         </div>
         <div class="field-row">
+          <span class="field-label"><i class="ti ti-hand-three-fingers" aria-hidden="true"></i> Set-sign hand</span>
+          <button class="gc-toggle-btn" id="set-hand-toggle" onclick="toggleSetHand()">Right</button>
+        </div>
+        <div class="field-row">
           <span class="field-label">Machine position</span>
           <span class="field-value" id="gesture-mp-label">-</span>
         </div>
@@ -634,7 +692,7 @@ const screens = {
           <span class="field-label">Recognised set</span>
           <span class="field-value" id="gesture-set-label">-</span>
         </div>
-        <div class="gesture-control-hint">Thumbs up = start feed &middot; Hold open palm = stop</div>
+        <div class="gesture-control-hint" id="gesture-control-hint">Left hand: thumbs up = start feed &middot; hold open palm = stop</div>
       </div>
     </div>
     <div class="section">

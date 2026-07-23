@@ -58,7 +58,12 @@
         "..",
         "../hal/include"
       ],
-      "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
+      "defines": [
+        "NAPI_DISABLE_CPP_EXCEPTIONS",
+        "TACH_GPIOCHIP=0",
+        "TACH_LINE=0",
+        "TACH_GATE_LINE=9"
+      ],
       "cflags_cc!": [ "-fno-exceptions" ],
       "libraries": [
         "-lm",
