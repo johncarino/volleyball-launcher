@@ -3,7 +3,7 @@
 // Global variable definitions
 int machine_position = 0;
 float machine_x[NUM_MACHINE_POSITIONS];
-const float machine_y = 1.80;
+const float machine_y = 1.50;
 
 int target_position = 0;
 float target_x[NUM_TARGETS];
@@ -53,11 +53,28 @@ void arc_calc_params(float net_height, float court_width, float court_length) {
 //xf = target_x
 //xi = machine_x
 
+// Total offset of the ball exit point relative to machine_x/machine_y (the
+// machine reference point), as a function of tilt angle. This combines:
+//   1) the fixed reference-point -> pivot offset (PIVOT_OFFSET_X/Y), and
+//   2) the tilt-angle-dependent pivot -> exit-point offset, fit from measured
+//      calibration data (see arc_calc.h for the raw points).
+// Clamp theta to the calibrated range [0, 90] deg since the quadratic fit for
+// part 2 is not valid for extrapolation outside it.
+void exit_point_offset(float theta_deg, float *dx_off, float *dy_off) {
+    float t = theta_deg;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 90.0f) t = 90.0f;
+
+    *dx_off = PIVOT_OFFSET_X + (ARM_DX_C2*t*t + ARM_DX_C1*t + ARM_DX_C0);
+    *dy_off = PIVOT_OFFSET_Y + (ARM_DY_C2*t*t + ARM_DY_C1*t + ARM_DY_C0);
+}
+
 void calculation() {
     //replace with calculation logic
 
-    //x displacement
-    float dx;
+    //x displacement (machine reference point to target), and the offset-
+    //corrected version
+    float dx_ref, dx, dy_off;
     //launch velocity
     float vy0, vx0, v0;
     //time to peak, time from peak to target, total time of flight
@@ -67,34 +84,48 @@ void calculation() {
 
     for (int i = 0; i < NUM_MACHINE_POSITIONS; i++) {
         for (int j = 0; j < NUM_TARGETS; j++) {
-            dx = fabs(target_x[j] - machine_x[i]);
+            dx_ref = fabs(target_x[j] - machine_x[i]);
 
             for (int k = 0; k < NUM_TEMPOS; k++) {
-                //vertical launch velocity calculation
-                vy0 = sqrt(2*GRAVITY*(peak_height[k] - machine_y));
+                //initial guess ignoring the exit-point offset
+                theta = 45.0;
 
-                //time to peak calculation
-                t_up = vy0 / GRAVITY;
+                //fixed-point iteration: the exit point (and therefore dx and
+                //the effective launch height) depends on theta, which is what
+                //we're solving for. A handful of passes converges since the
+                //offset is small relative to the target distance.
+                for (int iter = 0; iter < ARM_OFFSET_ITERATIONS; iter++) {
+                    exit_point_offset(theta, &dx, &dy_off);
 
-                //time from peak to target calculation
-                t_down = sqrt(2*(peak_height[k] - target_y) / GRAVITY);
+                    //effective horizontal distance from the actual exit
+                    //point to the target
+                    dx = dx_ref - dx;
 
-                //total time of flight calculation
-                t_total = t_up + t_down;
+                    //vertical launch velocity calculation, using the actual
+                    //(tilt-dependent) exit height
+                    vy0 = sqrt(2*GRAVITY*(peak_height[k] - (machine_y + dy_off)));
 
-                //horizontal launch velocity calculation
-                vx0 = dx / t_total;
+                    //time to peak calculation
+                    t_up = vy0 / GRAVITY;
 
-                //total launch speed calculation
-                v0 = sqrt(vx0*vx0 + vy0*vy0);
+                    //time from peak to target calculation
+                    t_down = sqrt(2*(peak_height[k] - target_y) / GRAVITY);
 
-                //launch angle calculation
-                //printf("vy0: %.2f, vx0: %.2f\n", vy0, vx0); // Debugging output
-                
-                theta = atan(vy0 / vx0);
+                    //total time of flight calculation
+                    t_total = t_up + t_down;
 
-                //convert to degrees
-                theta = theta * 180 / M_PI;
+                    //horizontal launch velocity calculation
+                    vx0 = dx / t_total;
+
+                    //total launch speed calculation
+                    v0 = sqrt(vx0*vx0 + vy0*vy0);
+
+                    //launch angle calculation
+                    theta = atan2(vy0, vx0);
+
+                    //convert to degrees
+                    theta = theta * 180 / M_PI;
+                }
 
                 rpm = (v0 / (2*M_PI*WHEEL_R)) * 60 / EFF_K;
 
@@ -107,10 +138,24 @@ void calculation() {
     }
 }
 
-float landing_position(float xi, float yi, float theta, float rpm, float yf) {
+float landing_position(float xi, float yi, float theta, float rpm, float yf, float facing_dir) {
     
     float v0, theta_rad, vx, vy;
     float a, b, c, discriminant, t1, t2, t_flight, xf;
+    float dx_off, dy_off;
+
+    //dx_off/vx are both defined in the machine's forward-facing frame
+    //(positive = toward whichever target it's yawed to face). Since xi/xf
+    //are world x-coordinates, that frame must be rotated into world
+    //coordinates using facing_dir before combining with xi: +1.0 if the
+    //machine is yawed to face +x (target at higher x than xi), -1.0 if it's
+    //facing -x (target at lower x than xi). Without this, the offset and
+    //velocity get applied backwards whenever the machine faces -x, since the
+    //raw values from exit_point_offset()/cos(theta) assume a positive-x
+    //forward direction.
+    exit_point_offset(theta, &dx_off, &dy_off);
+    xi = xi + dx_off * facing_dir;
+    yi = yi + dy_off;
 
     //convert rpm to launch speed
     v0 = 2*M_PI*WHEEL_R*(rpm * EFF_K / 60);
@@ -118,8 +163,8 @@ float landing_position(float xi, float yi, float theta, float rpm, float yf) {
     //convert angle to radians
     theta_rad = theta * M_PI / 180;
 
-    //velocity components
-    vx = v0 * cos(theta_rad);
+    //velocity components (vx rotated into world coordinates the same way)
+    vx = v0 * cos(theta_rad) * facing_dir;
     vy = v0 * sin(theta_rad);
 
     //quadratic formula for time
