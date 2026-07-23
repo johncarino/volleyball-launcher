@@ -32,6 +32,11 @@ var M2DEMO_BIN    = process.env.M2DEMO_BIN || 'm2demo';
 var GRAPH_CONFIG  = process.env.GESTURE_GRAPH ||
         path.join(__dirname, '..', '..', 'mediapipe_files', 'hand_tracking_custom.pbtxt');
 var CAMERA_INDEX  = process.env.GESTURE_CAMERA || '0';
+// Camera kind: 'csi' (BeagleY-AI IMX219 raw-Bayer path, default) or 'usb' (UVC
+// webcam like the Logitech C920, which has its own ISP so no software
+// debayer/WB/AE is needed). USB also drops the 180 flip (mount it upright).
+var CAMERA_KIND   = (process.env.GESTURE_CAMERA_KIND || 'csi').toLowerCase();
+var USB_FOCUS     = process.env.GESTURE_USB_FOCUS || '-1';
 
 // Bazel-built binaries resolve MediaPipe resource paths (e.g.
 // "mediapipe/modules/palm_detection/palm_detection_full.tflite") relative to
@@ -200,6 +205,42 @@ function handleCommand(socket) {
 	socket.on('stop', function() {
 		console.log("Got stop command.");
 		stopRecognizer(socket);
+	});
+
+	// Opt-in gesture-control mode: while enabled, recognised gestures drive the
+	// launcher (set selection + start/stop) instead of only updating the display.
+	socket.on('gesture-control-enable', function(payload) {
+		gestureControl.enabled = !!(payload && payload.enabled);
+		if (payload && payload.machinePosition != null) {
+			var mp = parseInt(payload.machinePosition, 10);
+			if (!Number.isNaN(mp)) gestureControl.machinePosition = mp;
+		}
+		// Reset debounce state whenever the mode or position changes.
+		gestureControl.lastName = null;
+		gestureControl.holdSince = 0;
+		gestureControl.firedName = null;
+		console.log('[gesture] control ' + (gestureControl.enabled ? 'ENABLED' : 'disabled') +
+				' (machinePosition=' + gestureControl.machinePosition + ')');
+		socket.emit('gesture-control-state', {
+			enabled: gestureControl.enabled,
+			machinePosition: gestureControl.machinePosition,
+			feasible: FEASIBILITY[gestureControl.machinePosition] || []
+		});
+	});
+
+	// Software interrupt (emergency abort): asks any in-progress blocking
+	// operation (tilt/speed feedback loops, hopper stepping, etc.) to abort
+	// and leave the motors stopped. Wired to the UI's poweroff/quit button so
+	// the hardware is halted before the server process exits.
+	socket.on('requestInterrupt', function() {
+		console.log("Got requestInterrupt command (emergency abort).");
+		try {
+			if (typeof operation.requestInterrupt === 'function') {
+				operation.requestInterrupt();
+			}
+		} catch (e) {
+			console.log('[operation] requestInterrupt failed: ' + e.message);
+		}
 	});
 
 	// Allow the web UI to cleanly terminate the whole server process (in place
@@ -442,6 +483,15 @@ function startRecognizer(socket) {
 		'--udp_port=' + UDP_PORT
 	];
 
+	if (CAMERA_KIND === 'usb') {
+		// UVC webcam (e.g. Logitech C920): skip the CSI raw-Bayer/GStreamer path
+		// and the 180 flip, and lock autofocus so it doesn't hunt on a moving hand.
+		args.push('--use_gstreamer=false');
+		args.push('--rotate180=false');
+		args.push('--usb_disable_autofocus=true');
+		args.push('--usb_focus=' + USB_FOCUS);
+	}
+
 	var spawnOptions = {
 		env: Object.assign({}, process.env, { GLOG_logtostderr: '1' })
 	};
@@ -502,6 +552,7 @@ function startUdpReceiver() {
 		var data = parseGestureLine(msg.toString('utf8').trim());
 		if (data && io) {
 			io.sockets.emit('gesture-update', data);
+			handleGestureFrame(data);
 		}
 	});
 
@@ -534,6 +585,111 @@ function parseGestureLine(line) {
 		},
 		name: parts[7]
 	};
+}
+
+// ---- Gesture -> launcher intent mapping (gesture-control mode) -------------
+// The detector emits generic hand-shape names; here we translate the ones we
+// care about into volleyball set labels. THUMBS_UP is a control gesture, and
+// OPEN_PALM is dual-purpose (brief hold = the "5" set, long hold = STOP).
+var GESTURE_SET_MAP = {
+	POINT:     '1',
+	PEACE:     '2',
+	FOUR:      '4',
+	OPEN_PALM: '5',
+	FIST:      'Red',
+	CALL_ME:   'Slide',
+	GUN:       '3/Shoot'
+};
+
+// Which sets are reachable from each machine position (0=Left,1=Center,2=Right).
+// PLACEHOLDER: until the RPM/angle model exists these are best-guess
+// reachability lists; edit freely. A set not listed is shown greyed-out and its
+// gesture is ignored.
+var FEASIBILITY = {
+	0: ['1', '2', '4', 'Slide', '3/Shoot'],              // Left
+	1: ['1', '2', '4', '5', 'Red', 'Slide', '3/Shoot'], // Center
+	2: ['1', '2', '5', 'Red', 'Slide']                  // Right
+};
+
+// Debounce / hold thresholds (ms).
+var GESTURE_HOLD_MS   = 700;   // hold a signal this long to confirm a set
+var OPEN_PALM_STOP_MS = 1500;  // continuous OPEN_PALM this long = STOP
+
+// Gesture-control runtime state (opt-in via 'gesture-control-enable').
+var gestureControl = {
+	enabled: false,
+	machinePosition: 1,  // default Center
+	lastName: null,      // gesture name currently being held
+	holdSince: 0,        // timestamp the current name first appeared
+	firedName: null      // last name already acted on (edge trigger)
+};
+
+// Apply gesture-control logic to one parsed gesture frame. Only acts when the
+// browser has enabled gesture control; otherwise gestures are display-only.
+function handleGestureFrame(data) {
+	if (!gestureControl.enabled) return;
+
+	var name = (data && data.name) ? data.name : 'NONE';
+	var now = Date.now();
+
+	// Track how long the current gesture has been held (edge-triggered actions).
+	if (name !== gestureControl.lastName) {
+		gestureControl.lastName = name;
+		gestureControl.holdSince = now;
+		gestureControl.firedName = null;
+	}
+	var heldMs = now - gestureControl.holdSince;
+
+	if (name === 'NONE' || name === 'UNKNOWN') return;
+
+	// OPEN_PALM long continuous hold escalates to STOP (checked before the
+	// once-per-hold guard so a held palm can go 5 -> STOP).
+	if (name === 'OPEN_PALM' && heldMs >= OPEN_PALM_STOP_MS) {
+		if (gestureControl.firedName !== 'STOP') {
+			gestureControl.firedName = 'STOP';
+			triggerControl('stop');
+		}
+		return;
+	}
+
+	if (heldMs < GESTURE_HOLD_MS) return;          // not held long enough yet
+	if (gestureControl.firedName === name) return; // already acted on this hold
+
+	// THUMBS_UP is the start control gesture.
+	if (name === 'THUMBS_UP') {
+		gestureControl.firedName = name;
+		triggerControl('start');
+		return;
+	}
+
+	var set = GESTURE_SET_MAP[name];
+	if (!set) return;  // not a mapped set gesture
+
+	gestureControl.firedName = name;
+	var allowed = FEASIBILITY[gestureControl.machinePosition] || [];
+	var feasible = allowed.indexOf(set) !== -1;
+	if (io) io.sockets.emit('gesture-set', { name: name, set: set, feasible: feasible });
+	console.log('[gesture] set ' + set + ' (' + name + ') feasible=' + feasible +
+			' mp=' + gestureControl.machinePosition);
+	// NOTE: motor set-actuation (operation.setMachine) is intentionally NOT wired
+	// yet -- the RPM/angle mapping is not implemented. Display only for now.
+}
+
+// Start/stop the ball feed from a control gesture. Wired to the existing hopper
+// controls; guarded so it no-ops if operation mode can't initialise.
+function triggerControl(action) {
+	try {
+		if (action === 'start') {
+			if (!ensureOperationReady(null, 'gesture-start')) return;
+			operation.hopperStart();
+		} else {
+			operation.hopperStop();
+		}
+		if (io) io.sockets.emit('gesture-control-action', { action: action });
+		console.log('[gesture] control action: ' + action);
+	} catch (e) {
+		console.log('[gesture] control action failed: ' + e.message);
+	}
 }
 
 // ---- Clean up the child process when the server stops ----------------------

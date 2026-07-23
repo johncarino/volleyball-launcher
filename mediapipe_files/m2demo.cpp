@@ -77,6 +77,15 @@ ABSL_FLAG(bool, white_balance, true,
 ABSL_FLAG(int, camera_index, 0,
           "OpenCV camera index, i.e. N for /dev/videoN. Used only when "
           "--use_gstreamer=false (USB camera).");
+ABSL_FLAG(bool, usb_disable_autofocus, true,
+          "For USB cameras (--use_gstreamer=false): disable continuous "
+          "autofocus so it doesn't 'hunt' on a moving hand. No effect on CSI.");
+ABSL_FLAG(int, usb_focus, -1,
+          "For USB cameras: fixed focus_absolute to set after disabling "
+          "autofocus (-1 = leave the camera's current focus untouched).");
+ABSL_FLAG(bool, usb_lock_exposure, false,
+          "For USB cameras: switch to manual exposure for flicker-free frames "
+          "(default keeps the camera's own auto-exposure).");
 ABSL_FLAG(int, capture_width, 640, "Output (downscaled) frame width.");
 ABSL_FLAG(int, capture_height, 480, "Output (downscaled) frame height.");
 ABSL_FLAG(std::string, udp_host, "127.0.0.1",
@@ -189,6 +198,26 @@ void SetCtrl(const std::string& subdev, const std::string& name, int value) {
                           std::to_string(value) + " >/dev/null 2>&1";
   const int rc = std::system(cmd.c_str());
   (void)rc;  // best-effort; QueryCtrl read-backs will reveal ignored writes
+}
+
+// Lock down a USB (UVC) camera's autofocus/exposure via v4l2-ctl. A C920 and
+// most webcams have an onboard ISP, so we don't need the software AE/WB the CSI
+// sensor requires; we just stop autofocus from "hunting" on a moving hand (and
+// optionally lock exposure) for stable frames. Best-effort: controls the camera
+// does not expose are simply ignored. Both the modern and legacy UVC control
+// names are written so it works across kernel versions.
+void ConfigureUsbCamera(int camera_index, bool disable_autofocus, int focus,
+                        bool lock_exposure) {
+  const std::string dev = "/dev/video" + std::to_string(camera_index);
+  if (disable_autofocus) {
+    SetCtrl(dev, "focus_automatic_continuous", 0);  // modern kernels
+    SetCtrl(dev, "focus_auto", 0);                  // legacy name
+    if (focus >= 0) SetCtrl(dev, "focus_absolute", focus);
+  }
+  if (lock_exposure) {
+    SetCtrl(dev, "auto_exposure", 1);   // 1 = manual (modern kernels)
+    SetCtrl(dev, "exposure_auto", 1);   // legacy name
+  }
 }
 
 // Auto-detect the sub-device that exposes an `exposure` control (the sensor).
@@ -376,11 +405,17 @@ absl::Status RunMPPGraph() {
         absl::GetFlag(FLAGS_capture_width), absl::GetFlag(FLAGS_capture_height));
     capture.open(pipeline, cv::CAP_GSTREAMER);
   } else {
-    // USB camera fallback via the plain V4L2 backend.
+    // USB camera (e.g. Logitech C920) via the plain V4L2 backend. These have an
+    // onboard ISP (AWB/AE), so no software debayer/WB/AE is needed; we just lock
+    // focus/exposure for stable frames.
     capture.open(absl::GetFlag(FLAGS_camera_index));
     capture.set(cv::CAP_PROP_FRAME_WIDTH, absl::GetFlag(FLAGS_capture_width));
     capture.set(cv::CAP_PROP_FRAME_HEIGHT, absl::GetFlag(FLAGS_capture_height));
     capture.set(cv::CAP_PROP_FPS, 30);
+    ConfigureUsbCamera(absl::GetFlag(FLAGS_camera_index),
+                       absl::GetFlag(FLAGS_usb_disable_autofocus),
+                       absl::GetFlag(FLAGS_usb_focus),
+                       absl::GetFlag(FLAGS_usb_lock_exposure));
   }
   RET_CHECK(capture.isOpened()) << "Could not open camera/video source.";
 
@@ -443,7 +478,10 @@ absl::Status RunMPPGraph() {
 
   // 6. Capture loop.
   const bool rotate180 = absl::GetFlag(FLAGS_rotate180);
-  const bool white_balance = absl::GetFlag(FLAGS_white_balance);
+  // Gray-world WB only helps the ISP-less CSI Bayer path; a USB webcam (C920)
+  // already does AWB in hardware, so skip it there to save CPU.
+  const bool white_balance =
+      absl::GetFlag(FLAGS_white_balance) && absl::GetFlag(FLAGS_use_gstreamer);
   bool grab_frames = true;
   while (grab_frames) {
     cv::Mat camera_frame_raw;

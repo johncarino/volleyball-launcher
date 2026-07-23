@@ -35,6 +35,7 @@ static const Gesture kGestures[] = {
     {4, {0, 1, 1, 1, 1}, "FOUR"},
     {5, {1, 1, 1, 1, 1}, "OPEN_PALM"},
     {2, {1, 0, 0, 0, 1}, "CALL_ME"},
+    {2, {1, 1, 0, 0, 0}, "GUN"},
     {0, {0, 0, 0, 0, 0}, "NONE"},
 };
 static const int kNumGestures = (int)(sizeof(kGestures) / sizeof(kGestures[0]));

@@ -64,6 +64,7 @@ HandSummary AnalyzeHand(const mediapipe::NormalizedLandmarkList& lm) {
     if (up) s.count++;
   }
 
+  // t = thumb, i = index, m = middle, r = ring, p = pinky
   const bool t = s.fingers_up[0];
   const bool i = s.fingers_up[1];
   const bool m = s.fingers_up[2];
@@ -84,12 +85,8 @@ HandSummary AnalyzeHand(const mediapipe::NormalizedLandmarkList& lm) {
     s.name = "CALL_ME";
   } else if (!t && i && m && r && p) {
     s.name = "FOUR";
-  } else if (t && i && !m && !r && p) {
-    s.name = "ROCK";
   } else if (t && i && !m && !r && !p) {
     s.name = "GUN";
-  } else if (!t && i && !m && !r && p) {
-    s.name = "HORNS";
   } else {
     s.name = "UNKNOWN";
   }

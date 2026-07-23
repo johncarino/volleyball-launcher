@@ -137,6 +137,8 @@ if (machineSocket) {
 
   // ---- Gesture recogniser (m2demo) ----------------------------------------
   machineSocket.on('gesture-update', (data) => { renderGesture(data); });
+  machineSocket.on('gesture-set', (data) => { onGestureSet(data); });
+  machineSocket.on('gesture-control-state', (state) => { applyFeasibility(state && state.feasible); });
   machineSocket.on('state-reply', (state) => { setGestureRunning(state === 'RUNNING'); });
   machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); renderGesture(null); });
   machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); });
@@ -252,6 +254,89 @@ function showGestureError(message) {
   box.style.display = 'block';
   clearTimeout(window._gestureErrTimer);
   window._gestureErrTimer = setTimeout(() => { box.style.display = 'none'; }, 5000);
+}
+
+// ---- Gesture-control mode --------------------------------------------------
+const MACHINE_INDEX = { L: 0, C: 1, R: 2 };
+const MACHINE_LABEL = { L: 'Left', C: 'Center', R: 'Right' };
+let gestureControlOn = false;
+
+// The volleyball sets we recognise, each with its detector gesture + a hint.
+const GESTURE_LEGEND = [
+  { set: '1',       gesture: 'POINT',     hint: 'Index up' },
+  { set: '2',       gesture: 'PEACE',     hint: 'Index + middle' },
+  { set: '3/Shoot', gesture: 'GUN',       hint: 'Thumb + index' },
+  { set: '4',       gesture: 'FOUR',      hint: 'Four fingers' },
+  { set: '5',       gesture: 'OPEN_PALM', hint: 'Open hand' },
+  { set: 'Red',     gesture: 'FIST',      hint: 'Closed fist' },
+  { set: 'Slide',   gesture: 'CALL_ME',   hint: 'Shaka' }
+];
+
+function setSlug(s) { return s.replace(/[^a-z0-9]+/gi, '').toLowerCase(); }
+
+function gestureLegendHTML() {
+  return GESTURE_LEGEND.map(e =>
+    `<div class="set-legend-item" id="setleg-${setSlug(e.set)}" data-set="${e.set}">
+       <span class="set-legend-name">${e.set}</span>
+       <span class="set-legend-gesture">${e.gesture}</span>
+       <span class="set-legend-hint">${e.hint}</span>
+     </div>`).join('');
+}
+
+function currentMachineIndex() {
+  const key = selectedMachine || 'C';
+  return MACHINE_INDEX[key] != null ? MACHINE_INDEX[key] : 1;
+}
+
+function toggleGestureControl() {
+  gestureControlOn = !gestureControlOn;
+  const btn = document.getElementById('gesture-control-toggle');
+  if (btn) { btn.classList.toggle('active', gestureControlOn); btn.textContent = gestureControlOn ? 'On' : 'Off'; }
+  const mpLabel = document.getElementById('gesture-mp-label');
+  if (mpLabel) mpLabel.textContent = MACHINE_LABEL[selectedMachine || 'C'] || 'Center';
+  if (!gestureControlOn) highlightRecognisedSet(null);
+  emitMachine('gesture-control-enable', {
+    enabled: gestureControlOn,
+    machinePosition: currentMachineIndex()
+  });
+}
+
+function applyFeasibility(feasibleSets) {
+  const allowed = feasibleSets || [];
+  GESTURE_LEGEND.forEach(e => {
+    const el = document.getElementById('setleg-' + setSlug(e.set));
+    if (el) el.classList.toggle('infeasible', allowed.indexOf(e.set) === -1);
+  });
+}
+
+function highlightRecognisedSet(set) {
+  document.querySelectorAll('.set-legend-item.recognised')
+    .forEach(el => el.classList.remove('recognised'));
+  if (!set) return;
+  const el = document.getElementById('setleg-' + setSlug(set));
+  if (el) {
+    el.classList.add('recognised');
+    clearTimeout(window._setHighlightTimer);
+    window._setHighlightTimer = setTimeout(() => el.classList.remove('recognised'), 2500);
+  }
+}
+
+function onGestureSet(data) {
+  if (!data) return;
+  const label = document.getElementById('gesture-set-label');
+  if (label) label.textContent = data.set + (data.feasible ? '' : ' (unavailable)');
+  highlightRecognisedSet(data.feasible ? data.set : null);
+}
+
+// Sync the gesture-control widgets after the Gesture screen is (re)rendered.
+function syncGestureControlUI() {
+  const btn = document.getElementById('gesture-control-toggle');
+  if (btn) { btn.classList.toggle('active', gestureControlOn); btn.textContent = gestureControlOn ? 'On' : 'Off'; }
+  const mpLabel = document.getElementById('gesture-mp-label');
+  if (mpLabel) mpLabel.textContent = MACHINE_LABEL[selectedMachine || 'C'] || 'Center';
+  if (gestureControlOn) {
+    emitMachine('gesture-control-enable', { enabled: true, machinePosition: currentMachineIndex() });
+  }
 }
 
 // ---- Server shutdown --------------------------------------------------------
@@ -533,6 +618,28 @@ const screens = {
           <div class="finger-chip down" id="finger-pinky"><span>Pinky</span><span class="finger-state">down</span></div>
         </div>
       </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Gesture control</div>
+      <div class="card">
+        <div class="field-row">
+          <span class="field-label"><i class="ti ti-hand-finger" aria-hidden="true"></i> Control mode</span>
+          <button class="gc-toggle-btn" id="gesture-control-toggle" onclick="toggleGestureControl()">Off</button>
+        </div>
+        <div class="field-row">
+          <span class="field-label">Machine position</span>
+          <span class="field-value" id="gesture-mp-label">-</span>
+        </div>
+        <div class="field-row">
+          <span class="field-label">Recognised set</span>
+          <span class="field-value" id="gesture-set-label">-</span>
+        </div>
+        <div class="gesture-control-hint">Thumbs up = start feed &middot; Hold open palm = stop</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Sets &middot; grey = not reachable here</div>
+      <div class="set-legend" id="set-legend">${gestureLegendHTML()}</div>
     </div>
     <div class="section" id="gesture-error-box" style="display:none">
       <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
@@ -820,6 +927,9 @@ function setMode(mode) {
   if (mode === 'advanced') {
     emitMachine('advanced-enter');
     startTelemetry();
+  }
+  if (mode === 'gesture') {
+    syncGestureControlUI();
   }
   window._activeMode = mode;
 }
