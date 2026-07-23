@@ -33,10 +33,12 @@ cc_binary(
     ],
     deps = [
         "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/formats:classification_cc_proto",
         "//mediapipe/framework/formats:image_frame",
         "//mediapipe/framework/formats:image_frame_opencv",
         "//mediapipe/framework/formats:landmark_cc_proto",
         "//mediapipe/framework/port:file_helpers",
+        "//mediapipe/framework/port:opencv_imgcodecs",
         "//mediapipe/framework/port:opencv_imgproc",
         "//mediapipe/framework/port:opencv_video",
         "//mediapipe/framework/port:parse_text_proto",

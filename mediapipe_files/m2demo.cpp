@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -36,10 +37,12 @@
 #include "absl/flags/parse.h"
 #include "absl/log/absl_log.h"
 #include "mediapipe/framework/calculator_framework.h"
+#include "mediapipe/framework/formats/classification.pb.h"
 #include "mediapipe/framework/formats/image_frame.h"
 #include "mediapipe/framework/formats/image_frame_opencv.h"
 #include "mediapipe/framework/formats/landmark.pb.h"
 #include "mediapipe/framework/port/file_helpers.h"
+#include "mediapipe/framework/port/opencv_imgcodecs_inc.h"
 #include "mediapipe/framework/port/opencv_imgproc_inc.h"
 #include "mediapipe/framework/port/opencv_video_inc.h"
 #include "mediapipe/framework/port/parse_text_proto.h"
@@ -51,6 +54,7 @@ namespace {
 constexpr char kInputStream[] = "input_video";
 constexpr char kOutputStream[] = "output_video";
 constexpr char kLandmarksStream[] = "landmarks";
+constexpr char kHandednessStream[] = "handedness";
 }  // namespace
 
 ABSL_FLAG(std::string, calculator_graph_config_file, "",
@@ -71,12 +75,30 @@ ABSL_FLAG(int, sensor_height, 1080, "Native sensor capture height (Bayer).");
 ABSL_FLAG(bool, rotate180, true,
           "Rotate frames 180° (the camera is mounted upside-down). Required for "
           "the upright-hand assumption in the gesture logic.");
+ABSL_FLAG(bool, mirror, false,
+          "Flip frames horizontally before the graph. MediaPipe's handedness "
+          "assumes a mirrored/selfie image, so a normal forward-facing webcam "
+          "needs this for Left/Right to match the real hand. Also makes the "
+          "preview feel like a mirror.");
 ABSL_FLAG(bool, white_balance, true,
           "Apply gray-world white balance to counter the green cast of software "
           "debayering. On by default so colours match a normal camera.");
 ABSL_FLAG(int, camera_index, 0,
           "OpenCV camera index, i.e. N for /dev/videoN. Used only when "
-          "--use_gstreamer=false (USB camera).");
+          "--use_gstreamer=false (USB camera) and --camera_path is empty.");
+ABSL_FLAG(std::string, camera_path, "",
+          "USB camera device node/path to open directly (V4L2), e.g. a stable "
+          "/dev/v4l/by-id/... symlink. Takes precedence over --camera_index so "
+          "the camera survives /dev/videoN renumbering across reboots.");
+ABSL_FLAG(bool, usb_disable_autofocus, true,
+          "For USB cameras (--use_gstreamer=false): disable continuous "
+          "autofocus so it doesn't 'hunt' on a moving hand. No effect on CSI.");
+ABSL_FLAG(int, usb_focus, -1,
+          "For USB cameras: fixed focus_absolute to set after disabling "
+          "autofocus (-1 = leave the camera's current focus untouched).");
+ABSL_FLAG(bool, usb_lock_exposure, false,
+          "For USB cameras: switch to manual exposure for flicker-free frames "
+          "(default keeps the camera's own auto-exposure).");
 ABSL_FLAG(int, capture_width, 640, "Output (downscaled) frame width.");
 ABSL_FLAG(int, capture_height, 480, "Output (downscaled) frame height.");
 ABSL_FLAG(std::string, udp_host, "127.0.0.1",
@@ -90,6 +112,19 @@ ABSL_FLAG(std::string, stream_host, "",
           "disables streaming so the board pays no extra cost.");
 ABSL_FLAG(int, stream_port, 5000,
           "UDP port for the --stream_host live preview stream.");
+ABSL_FLAG(std::string, preview_udp_host, "127.0.0.1",
+          "Host for the web-UI JPEG preview: whole-frame JPEGs sent over UDP to "
+          "the Node backend, which relays them to the browser over socket.io. "
+          "Loopback by default.");
+ABSL_FLAG(int, preview_udp_port, 0,
+          "UDP port for the web-UI JPEG preview. 0 (default) disables it so the "
+          "board pays no encode cost unless the backend asks for a preview.");
+ABSL_FLAG(int, preview_fps, 12,
+          "Max frames/second for the web-UI JPEG preview (throttle, independent "
+          "of capture rate). Lower = less CPU/bandwidth.");
+ABSL_FLAG(int, preview_quality, 45,
+          "JPEG quality (1..95) for the web-UI preview. Lower = smaller frames "
+          "and a cheaper encode.");
 
 ABSL_FLAG(bool, auto_exposure, true,
           "Run the software auto-exposure loop for the ISP-less CSI IMX219 (no "
@@ -189,6 +224,25 @@ void SetCtrl(const std::string& subdev, const std::string& name, int value) {
                           std::to_string(value) + " >/dev/null 2>&1";
   const int rc = std::system(cmd.c_str());
   (void)rc;  // best-effort; QueryCtrl read-backs will reveal ignored writes
+}
+
+// Lock down a USB (UVC) camera's autofocus/exposure via v4l2-ctl. A C920 and
+// most webcams have an onboard ISP, so we don't need the software AE/WB the CSI
+// sensor requires; we just stop autofocus from "hunting" on a moving hand (and
+// optionally lock exposure) for stable frames. Best-effort: controls the camera
+// does not expose are simply ignored. Both the modern and legacy UVC control
+// names are written so it works across kernel versions.
+void ConfigureUsbCamera(const std::string& dev, bool disable_autofocus,
+                        int focus, bool lock_exposure) {
+  if (disable_autofocus) {
+    SetCtrl(dev, "focus_automatic_continuous", 0);  // modern kernels
+    SetCtrl(dev, "focus_auto", 0);                  // legacy name
+    if (focus >= 0) SetCtrl(dev, "focus_absolute", focus);
+  }
+  if (lock_exposure) {
+    SetCtrl(dev, "auto_exposure", 1);   // 1 = manual (modern kernels)
+    SetCtrl(dev, "exposure_auto", 1);   // legacy name
+  }
 }
 
 // Auto-detect the sub-device that exposes an `exposure` control (the sensor).
@@ -295,6 +349,12 @@ class UdpSender {
            reinterpret_cast<const struct sockaddr*>(&dest_), sizeof(dest_));
   }
 
+  void SendBytes(const void* data, size_t len) {
+    if (sock_ < 0) return;
+    sendto(sock_, data, len, 0,
+           reinterpret_cast<const struct sockaddr*>(&dest_), sizeof(dest_));
+  }
+
   ~UdpSender() {
     if (sock_ >= 0) close(sock_);
   }
@@ -305,6 +365,26 @@ class UdpSender {
 };
 
 using Clock = std::chrono::steady_clock;
+
+// Build the UDP wire line describing every visible hand for one frame:
+//   "hands <n>" then, per hand, " <label> <count> <t> <i> <m> <r> <p> <NAME>"
+// where <label> is R (right), L (left) or U (unknown). The Node backend decides
+// which hand signs sets and which starts/stops, so the recogniser stays a dumb
+// sensor and the choice can be toggled live without restarting it.
+std::string BuildHandsLine(
+    const std::vector<mediapipe::NormalizedLandmarkList>& hands,
+    const std::vector<std::string>& labels) {
+  std::ostringstream os;
+  os << "hands " << hands.size();
+  for (size_t k = 0; k < hands.size(); ++k) {
+    const gesture::HandSummary s = gesture::AnalyzeHand(hands[k]);
+    os << ' ' << (k < labels.size() ? labels[k] : std::string("U")) << ' '
+       << s.count;
+    for (bool up : s.fingers_up) os << ' ' << (up ? '1' : '0');
+    os << ' ' << s.name;
+  }
+  return os.str();
+}
 
 }  // namespace
 
@@ -326,35 +406,96 @@ absl::Status RunMPPGraph() {
   MP_RETURN_IF_ERROR(
       udp.Open(absl::GetFlag(FLAGS_udp_host), absl::GetFlag(FLAGS_udp_port)));
 
-  // Shared throttle state (observer runs on a graph thread).
+  // Shared throttle state (observers run on graph threads).
   auto last_send = Clock::now() - std::chrono::hours(1);
   auto last_hand = Clock::now() - std::chrono::hours(1);
   const auto interval =
       std::chrono::milliseconds(absl::GetFlag(FLAGS_send_interval_ms));
 
   // Latest gesture summary, shared with the capture loop for the preview
-  // overlay (the observer runs on a separate graph thread).
+  // overlay (the observers run on separate graph threads).
   std::mutex summary_mutex;
   gesture::HandSummary latest_summary;
 
-  // 3. Observe the landmarks stream. It only emits when hands are present, so a
-  //    "no hand" timeout is handled in the capture loop below.
+  // 3. Observe the landmarks + handedness streams. MediaPipe emits both at the
+  //    same timestamp (one entry per detected hand, index-aligned), but on
+  //    separate streams and possibly separate threads, so we rendez-vous them
+  //    by timestamp before sending a combined per-frame line. Both streams only
+  //    fire when a hand is present, so a "no hand" timeout lives in the capture
+  //    loop below.
+  struct Pending {
+    bool have_lm = false;
+    bool have_hd = false;
+    std::vector<mediapipe::NormalizedLandmarkList> hands;
+    std::vector<std::string> labels;
+  };
+  std::mutex pending_mutex;
+  std::map<int64_t, Pending> pending;
+
+  // Emit one completed frame (called with pending_mutex held). Throttled to
+  // --send_interval_ms.
+  auto emit_frame = [&](const Pending& p) {
+    const auto now = Clock::now();
+    if (!p.hands.empty()) last_hand = now;
+    if (now - last_send < interval) return;
+    last_send = now;
+    {
+      std::lock_guard<std::mutex> lock(summary_mutex);
+      latest_summary =
+          p.hands.empty() ? gesture::NoHand() : gesture::AnalyzeHand(p.hands.front());
+    }
+    udp.Send(BuildHandsLine(p.hands, p.labels));
+  };
+
+  // Merge one stream's contribution for a timestamp; when both parts have
+  // arrived, emit and drop the entry. Also prune stale half-pairs so a rare
+  // dropped packet can't grow the map without bound.
+  auto rendezvous = [&](int64_t ts, bool is_lm,
+                        std::vector<mediapipe::NormalizedLandmarkList>&& hands,
+                        std::vector<std::string>&& labels) {
+    std::lock_guard<std::mutex> lock(pending_mutex);
+    Pending& p = pending[ts];
+    if (is_lm) {
+      p.hands = std::move(hands);
+      p.have_lm = true;
+    } else {
+      p.labels = std::move(labels);
+      p.have_hd = true;
+    }
+    if (p.have_lm && p.have_hd) {
+      emit_frame(p);
+      pending.erase(ts);
+    }
+    for (auto it = pending.begin(); it != pending.end();) {
+      if (ts - it->first > 500000) it = pending.erase(it);
+      else ++it;
+    }
+  };
+
   MP_RETURN_IF_ERROR(graph.ObserveOutputStream(
       kLandmarksStream, [&](const mediapipe::Packet& packet) -> absl::Status {
-        const auto& hands =
-            packet.Get<std::vector<mediapipe::NormalizedLandmarkList>>();
-        if (hands.empty()) return absl::OkStatus();
+        auto hands = packet.Get<std::vector<mediapipe::NormalizedLandmarkList>>();
+        rendezvous(packet.Timestamp().Value(), /*is_lm=*/true, std::move(hands),
+                   {});
+        return absl::OkStatus();
+      }));
 
-        last_hand = Clock::now();
-        if (last_hand - last_send < interval) return absl::OkStatus();
-        last_send = last_hand;
-
-        const gesture::HandSummary summary = gesture::AnalyzeHand(hands.front());
-        {
-          std::lock_guard<std::mutex> lock(summary_mutex);
-          latest_summary = summary;
+  MP_RETURN_IF_ERROR(graph.ObserveOutputStream(
+      kHandednessStream, [&](const mediapipe::Packet& packet) -> absl::Status {
+        const auto& hd =
+            packet.Get<std::vector<mediapipe::ClassificationList>>();
+        std::vector<std::string> labels;
+        labels.reserve(hd.size());
+        for (const auto& cl : hd) {
+          std::string label = "U";
+          if (cl.classification_size() > 0) {
+            const std::string& l = cl.classification(0).label();
+            if (!l.empty()) label = (l[0] == 'R' || l[0] == 'r') ? "R" : "L";
+          }
+          labels.push_back(std::move(label));
         }
-        udp.Send(gesture::FormatSummary(summary));
+        rendezvous(packet.Timestamp().Value(), /*is_lm=*/false, {},
+                   std::move(labels));
         return absl::OkStatus();
       }));
 
@@ -376,11 +517,26 @@ absl::Status RunMPPGraph() {
         absl::GetFlag(FLAGS_capture_width), absl::GetFlag(FLAGS_capture_height));
     capture.open(pipeline, cv::CAP_GSTREAMER);
   } else {
-    // USB camera fallback via the plain V4L2 backend.
-    capture.open(absl::GetFlag(FLAGS_camera_index));
+    // USB camera (e.g. Logitech C920) via the plain V4L2 backend. These have an
+    // onboard ISP (AWB/AE), so no software debayer/WB/AE is needed; we just lock
+    // focus/exposure for stable frames. Prefer an explicit device path (a stable
+    // /dev/v4l/by-id symlink) so we don't grab the wrong /dev/videoN after a
+    // reboot renumbers them; fall back to the numeric index.
+    const std::string cam_path = absl::GetFlag(FLAGS_camera_path);
+    const std::string dev = cam_path.empty()
+        ? "/dev/video" + std::to_string(absl::GetFlag(FLAGS_camera_index))
+        : cam_path;
+    if (cam_path.empty()) {
+      capture.open(absl::GetFlag(FLAGS_camera_index), cv::CAP_V4L2);
+    } else {
+      capture.open(cam_path, cv::CAP_V4L2);
+    }
     capture.set(cv::CAP_PROP_FRAME_WIDTH, absl::GetFlag(FLAGS_capture_width));
     capture.set(cv::CAP_PROP_FRAME_HEIGHT, absl::GetFlag(FLAGS_capture_height));
     capture.set(cv::CAP_PROP_FPS, 30);
+    ConfigureUsbCamera(dev, absl::GetFlag(FLAGS_usb_disable_autofocus),
+                       absl::GetFlag(FLAGS_usb_focus),
+                       absl::GetFlag(FLAGS_usb_lock_exposure));
   }
   RET_CHECK(capture.isOpened()) << "Could not open camera/video source.";
 
@@ -441,9 +597,37 @@ absl::Status RunMPPGraph() {
     }
   }
 
+  // 5c. Optional JPEG-over-UDP preview for the web UI. Unlike --stream_host
+  //     (RTP to a remote viewer), this pushes whole JPEG frames to the local
+  //     Node backend, which relays them to the browser over socket.io. It is
+  //     throttled to --preview_fps and uses a modest JPEG quality, so the encode
+  //     is cheap and frames only cost anything while the UI is watching. Each
+  //     frame is one datagram (small enough for the loopback MTU).
+  UdpSender preview_udp;
+  const bool preview_enabled = absl::GetFlag(FLAGS_preview_udp_port) > 0;
+  if (preview_enabled) {
+    MP_RETURN_IF_ERROR(preview_udp.Open(absl::GetFlag(FLAGS_preview_udp_host),
+                                        absl::GetFlag(FLAGS_preview_udp_port)));
+    ABSL_LOG(INFO) << "Web-UI JPEG preview -> "
+                   << absl::GetFlag(FLAGS_preview_udp_host) << ":"
+                   << absl::GetFlag(FLAGS_preview_udp_port) << " at ~"
+                   << absl::GetFlag(FLAGS_preview_fps) << " fps.";
+  }
+  const auto preview_interval = std::chrono::milliseconds(
+      1000 / std::max(1, absl::GetFlag(FLAGS_preview_fps)));
+  auto last_preview = Clock::now() - std::chrono::hours(1);
+  const std::vector<int> preview_jpeg_params = {
+      cv::IMWRITE_JPEG_QUALITY,
+      std::max(1, std::min(95, absl::GetFlag(FLAGS_preview_quality)))};
+  std::vector<uchar> preview_jpeg;
+
   // 6. Capture loop.
   const bool rotate180 = absl::GetFlag(FLAGS_rotate180);
-  const bool white_balance = absl::GetFlag(FLAGS_white_balance);
+  const bool mirror = absl::GetFlag(FLAGS_mirror);
+  // Gray-world WB only helps the ISP-less CSI Bayer path; a USB webcam (C920)
+  // already does AWB in hardware, so skip it there to save CPU.
+  const bool white_balance =
+      absl::GetFlag(FLAGS_white_balance) && absl::GetFlag(FLAGS_use_gstreamer);
   bool grab_frames = true;
   while (grab_frames) {
     cv::Mat camera_frame_raw;
@@ -458,6 +642,7 @@ absl::Status RunMPPGraph() {
 
     // Correct orientation/colour before handing the frame to the graph.
     if (rotate180) cv::rotate(camera_frame_raw, camera_frame_raw, cv::ROTATE_180);
+    if (mirror) cv::flip(camera_frame_raw, camera_frame_raw, /*flipCode=*/1);
     if (white_balance) ApplyGrayWorld(camera_frame_raw);
 
     cv::Mat camera_frame;
@@ -480,14 +665,23 @@ absl::Status RunMPPGraph() {
     // simply discarded as before.
     mediapipe::Packet output_packet;
     if (!poller.Next(&output_packet)) break;
-    if (streamer.isOpened()) {
+
+    // Decide whether this frame feeds a preview sink. The RTP stream (if on)
+    // takes every frame; the web-UI JPEG preview is throttled to --preview_fps.
+    const auto now_preview = Clock::now();
+    bool send_web_preview = false;
+    if (preview_enabled && now_preview - last_preview >= preview_interval) {
+      send_web_preview = true;
+      last_preview = now_preview;
+    }
+    if (streamer.isOpened() || send_web_preview) {
       const auto& output_frame = output_packet.Get<mediapipe::ImageFrame>();
       const cv::Mat output_mat = mediapipe::formats::MatView(&output_frame);
       cv::Mat preview;
       cv::cvtColor(output_mat, preview, cv::COLOR_RGB2BGR);
 
       // Overlay the recognised gesture name + finger count so it shows on the
-      // remote preview (drawn twice: black outline then green fill for legibility).
+      // preview (drawn twice: black outline then green fill for legibility).
       gesture::HandSummary snap;
       {
         std::lock_guard<std::mutex> lock(summary_mutex);
@@ -500,19 +694,30 @@ absl::Status RunMPPGraph() {
                   1.0, cv::Scalar(0, 0, 0), 4, cv::LINE_AA);
       cv::putText(preview, label, cv::Point(12, 34), cv::FONT_HERSHEY_SIMPLEX,
                   1.0, cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
-      streamer.write(preview);
+      if (streamer.isOpened()) streamer.write(preview);
+      // JPEG-encode and push to the web UI. Skip the rare oversized frame
+      // rather than fragment it across datagrams.
+      if (send_web_preview &&
+          cv::imencode(".jpg", preview, preview_jpeg, preview_jpeg_params) &&
+          preview_jpeg.size() <= 60000) {
+        preview_udp.SendBytes(preview_jpeg.data(), preview_jpeg.size());
+      }
     }
 
-    // No-hand timeout: if no landmarks for a while, emit a NONE summary.
-    const auto now = Clock::now();
-    if (now - last_hand > std::chrono::milliseconds(300) &&
-        now - last_send >= interval) {
-      last_send = now;
-      {
-        std::lock_guard<std::mutex> lock(summary_mutex);
-        latest_summary = gesture::NoHand();
+    // No-hand timeout: if neither hand has been seen for a while, emit an empty
+    // frame so the backend clears the display and control state.
+    {
+      std::lock_guard<std::mutex> lock(pending_mutex);
+      const auto now = Clock::now();
+      if (now - last_hand > std::chrono::milliseconds(300) &&
+          now - last_send >= interval) {
+        last_send = now;
+        {
+          std::lock_guard<std::mutex> slock(summary_mutex);
+          latest_summary = gesture::NoHand();
+        }
+        udp.Send("hands 0");
       }
-      udp.Send(gesture::FormatSummary(gesture::NoHand()));
     }
   }
 

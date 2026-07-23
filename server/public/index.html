@@ -136,7 +136,11 @@ if (machineSocket) {
   });
 
   // ---- Gesture recogniser (m2demo) ----------------------------------------
-  machineSocket.on('gesture-update', (data) => { renderGesture(data); });
+  machineSocket.on('gesture-update', (data) => { renderGesture(data); handleLaunchStartGesture(data); });
+  machineSocket.on('gesture-frame', (data) => { renderPreviewFrame(data); });
+  machineSocket.on('gesture-set', (data) => { onGestureSet(data); });
+  machineSocket.on('gesture-control-state', (state) => { applyFeasibility(state && state.feasible); });
+  machineSocket.on('gesture-set-hand-state', (data) => { applySetHand(data && data.hand); });
   machineSocket.on('state-reply', (state) => { setGestureRunning(state === 'RUNNING'); });
   machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); renderGesture(null); });
   machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); });
@@ -209,12 +213,112 @@ function stopGesture() {
 }
 
 function setGestureRunning(running) {
+  window._recognizerRunning = running;
   const pill = document.getElementById('gesture-state-pill');
   const startBtn = document.getElementById('gestureStartBtn');
   const stopBtn = document.getElementById('gestureStopBtn');
   if (pill) pill.textContent = running ? 'Running' : 'Idle';
   if (startBtn) startBtn.disabled = running;
   if (stopBtn) stopBtn.disabled = !running;
+  const previewSection = document.getElementById('gesture-preview-section');
+  if (previewSection) previewSection.style.display = running ? '' : 'none';
+  if (!running) {
+    const img = document.getElementById('gesture-preview');
+    if (img) img.removeAttribute('src');
+  }
+}
+
+// ---- Start the setting sequence with an open-palm (5 finger) gesture -------
+// Armed once the user has saved their sets and pressed Continue (the Launch
+// screen). Requires the OPEN_PALM gesture to be held briefly to avoid firing
+// on a momentary/false detection, mirroring the hold-to-confirm behaviour used
+// by the server's own gesture-control mode.
+const LAUNCH_GESTURE_HOLD_MS = 600;
+
+function armLaunchGesture() {
+  window._launchGestureArmed = true;
+  window._launchGestureHoldName = null;
+  window._launchGestureHoldSince = 0;
+  window._launchGestureFiredName = null;
+  window._launchGestureAutoStarted = false;
+  // The recogniser only runs once something asks it to start (e.g. the
+  // Gesture tab). If it isn't already running, start it here so the gesture
+  // works without requiring a detour through that tab, and stop it again when
+  // leaving the Launch screen if we were the ones who started it.
+  if (!window._recognizerRunning) {
+    window._launchGestureAutoStarted = true;
+    emitMachine('start');
+  }
+}
+
+function disarmLaunchGesture() {
+  window._launchGestureArmed = false;
+  if (window._launchGestureAutoStarted) {
+    emitMachine('stop');
+    window._launchGestureAutoStarted = false;
+  }
+}
+
+function handleLaunchStartGesture(data) {
+  if (!window._launchGestureArmed) return;
+
+  const name = (data && data.name) || 'NONE';
+  const now = Date.now();
+
+  if (name !== window._launchGestureHoldName) {
+    window._launchGestureHoldName = name;
+    window._launchGestureHoldSince = now;
+    window._launchGestureFiredName = null;
+  }
+
+  if (name !== 'OPEN_PALM') return;
+  if (now - window._launchGestureHoldSince < LAUNCH_GESTURE_HOLD_MS) return;
+  if (window._launchGestureFiredName === 'OPEN_PALM') return; // already fired this hold
+
+  window._launchGestureFiredName = 'OPEN_PALM';
+  const btn = document.getElementById('launch-main-btn');
+  if (!btn || btn.classList.contains('stop')) return; // not on launch screen, or already running
+  console.log('[gesture] OPEN_PALM held — starting the setting sequence');
+  toggleLaunch(btn);
+}
+
+// Render one live-preview frame. socket.io delivers binary as an ArrayBuffer;
+// we wrap it in a Blob URL for the <img> and revoke the previous one so the
+// object URLs don't pile up.
+let _previewUrl = null;
+function renderPreviewFrame(data) {
+  const img = document.getElementById('gesture-preview');
+  if (!img) return;
+  let bytes = null;
+  if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+  else if (data && data.buffer) bytes = new Uint8Array(data.buffer);
+  else if (data instanceof Blob) { setPreviewSrc(img, URL.createObjectURL(data)); return; }
+  if (!bytes) return;
+  setPreviewSrc(img, URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' })));
+}
+
+function setPreviewSrc(img, url) {
+  img.src = url;
+  if (_previewUrl) URL.revokeObjectURL(_previewUrl);
+  _previewUrl = url;
+}
+
+// Which hand signs sets ('right'/'left'); the other hand starts/stops the feed.
+let _setHand = 'right';
+function toggleSetHand() {
+  _setHand = (_setHand === 'right') ? 'left' : 'right';
+  emitMachine('gesture-set-hand', { hand: _setHand });
+}
+
+function applySetHand(hand) {
+  _setHand = (hand === 'left') ? 'left' : 'right';
+  const btn = document.getElementById('set-hand-toggle');
+  if (btn) btn.textContent = (_setHand === 'right') ? 'Right' : 'Left';
+  const hint = document.getElementById('gesture-control-hint');
+  if (hint) {
+    const other = (_setHand === 'right') ? 'Left' : 'Right';
+    hint.innerHTML = other + ' hand: thumbs up = start feed &middot; hold open palm = stop';
+  }
 }
 
 function renderGesture(data) {
@@ -252,6 +356,89 @@ function showGestureError(message) {
   box.style.display = 'block';
   clearTimeout(window._gestureErrTimer);
   window._gestureErrTimer = setTimeout(() => { box.style.display = 'none'; }, 5000);
+}
+
+// ---- Gesture-control mode --------------------------------------------------
+const MACHINE_INDEX = { L: 0, C: 1, R: 2 };
+const MACHINE_LABEL = { L: 'Left', C: 'Center', R: 'Right' };
+let gestureControlOn = false;
+
+// The volleyball sets we recognise, each with its detector gesture + a hint.
+const GESTURE_LEGEND = [
+  { set: '1',       gesture: 'POINT',     hint: 'Index up' },
+  { set: '2',       gesture: 'PEACE',     hint: 'Index + middle' },
+  { set: '3/Shoot', gesture: 'GUN',       hint: 'Thumb + index' },
+  { set: '4',       gesture: 'FOUR',      hint: 'Four fingers' },
+  { set: '5',       gesture: 'OPEN_PALM', hint: 'Open hand' },
+  { set: 'Red',     gesture: 'FIST',      hint: 'Closed fist' },
+  { set: 'Slide',   gesture: 'CALL_ME',   hint: 'Shaka' }
+];
+
+function setSlug(s) { return s.replace(/[^a-z0-9]+/gi, '').toLowerCase(); }
+
+function gestureLegendHTML() {
+  return GESTURE_LEGEND.map(e =>
+    `<div class="set-legend-item" id="setleg-${setSlug(e.set)}" data-set="${e.set}">
+       <span class="set-legend-name">${e.set}</span>
+       <span class="set-legend-gesture">${e.gesture}</span>
+       <span class="set-legend-hint">${e.hint}</span>
+     </div>`).join('');
+}
+
+function currentMachineIndex() {
+  const key = selectedMachine || 'C';
+  return MACHINE_INDEX[key] != null ? MACHINE_INDEX[key] : 1;
+}
+
+function toggleGestureControl() {
+  gestureControlOn = !gestureControlOn;
+  const btn = document.getElementById('gesture-control-toggle');
+  if (btn) { btn.classList.toggle('active', gestureControlOn); btn.textContent = gestureControlOn ? 'On' : 'Off'; }
+  const mpLabel = document.getElementById('gesture-mp-label');
+  if (mpLabel) mpLabel.textContent = MACHINE_LABEL[selectedMachine || 'C'] || 'Center';
+  if (!gestureControlOn) highlightRecognisedSet(null);
+  emitMachine('gesture-control-enable', {
+    enabled: gestureControlOn,
+    machinePosition: currentMachineIndex()
+  });
+}
+
+function applyFeasibility(feasibleSets) {
+  const allowed = feasibleSets || [];
+  GESTURE_LEGEND.forEach(e => {
+    const el = document.getElementById('setleg-' + setSlug(e.set));
+    if (el) el.classList.toggle('infeasible', allowed.indexOf(e.set) === -1);
+  });
+}
+
+function highlightRecognisedSet(set) {
+  document.querySelectorAll('.set-legend-item.recognised')
+    .forEach(el => el.classList.remove('recognised'));
+  if (!set) return;
+  const el = document.getElementById('setleg-' + setSlug(set));
+  if (el) {
+    el.classList.add('recognised');
+    clearTimeout(window._setHighlightTimer);
+    window._setHighlightTimer = setTimeout(() => el.classList.remove('recognised'), 2500);
+  }
+}
+
+function onGestureSet(data) {
+  if (!data) return;
+  const label = document.getElementById('gesture-set-label');
+  if (label) label.textContent = data.set + (data.feasible ? '' : ' (unavailable)');
+  highlightRecognisedSet(data.feasible ? data.set : null);
+}
+
+// Sync the gesture-control widgets after the Gesture screen is (re)rendered.
+function syncGestureControlUI() {
+  const btn = document.getElementById('gesture-control-toggle');
+  if (btn) { btn.classList.toggle('active', gestureControlOn); btn.textContent = gestureControlOn ? 'On' : 'Off'; }
+  const mpLabel = document.getElementById('gesture-mp-label');
+  if (mpLabel) mpLabel.textContent = MACHINE_LABEL[selectedMachine || 'C'] || 'Center';
+  if (gestureControlOn) {
+    emitMachine('gesture-control-enable', { enabled: true, machinePosition: currentMachineIndex() });
+  }
 }
 
 // ---- Server shutdown --------------------------------------------------------
@@ -523,6 +710,13 @@ const screens = {
         <button class="op-btn stop" id="gestureStopBtn" onclick="stopGesture()" disabled><i class="ti ti-player-stop" aria-hidden="true"></i> Stop</button>
       </div>
     </div>
+    <div class="section" id="gesture-preview-section" style="display:none">
+      <div class="section-label">Live preview</div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <img id="gesture-preview" alt="Live camera preview"
+             style="display:block;width:100%;height:auto;background:#000" />
+      </div>
+    </div>
     <div class="section">
       <div class="section-label">Live gesture</div>
       <div class="card gesture-readout">
@@ -536,6 +730,32 @@ const screens = {
           <div class="finger-chip down" id="finger-pinky"><span>Pinky</span><span class="finger-state">down</span></div>
         </div>
       </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Gesture control</div>
+      <div class="card">
+        <div class="field-row">
+          <span class="field-label"><i class="ti ti-hand-finger" aria-hidden="true"></i> Control mode</span>
+          <button class="gc-toggle-btn" id="gesture-control-toggle" onclick="toggleGestureControl()">Off</button>
+        </div>
+        <div class="field-row">
+          <span class="field-label"><i class="ti ti-hand-three-fingers" aria-hidden="true"></i> Set-sign hand</span>
+          <button class="gc-toggle-btn" id="set-hand-toggle" onclick="toggleSetHand()">Right</button>
+        </div>
+        <div class="field-row">
+          <span class="field-label">Machine position</span>
+          <span class="field-value" id="gesture-mp-label">-</span>
+        </div>
+        <div class="field-row">
+          <span class="field-label">Recognised set</span>
+          <span class="field-value" id="gesture-set-label">-</span>
+        </div>
+        <div class="gesture-control-hint" id="gesture-control-hint">Left hand: thumbs up = start feed &middot; hold open palm = stop</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Sets &middot; grey = not reachable here</div>
+      <div class="set-legend" id="set-legend">${gestureLegendHTML()}</div>
     </div>
     <div class="section" id="gesture-error-box" style="display:none">
       <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
@@ -798,10 +1018,12 @@ function goToLaunch() {
   const widVal = document.getElementById('wid-val');
   if (netVal) document.getElementById('sum-net').textContent = netVal.textContent;
   if (lenVal && widVal) document.getElementById('sum-court').textContent = `${lenVal.textContent} × ${widVal.textContent}`;
+  armLaunchGesture();
 }
 
 function goBack() {
   clearInterval(window._telem);
+  disarmLaunchGesture();
   document.getElementById('modenav').style.display = 'flex';
   const topbar = document.getElementById('topbar');
   topbar.innerHTML = `<h1 id="page-title">Configure</h1>`;
@@ -823,6 +1045,9 @@ function setMode(mode) {
   if (mode === 'advanced') {
     emitMachine('advanced-enter');
     startTelemetry();
+  }
+  if (mode === 'gesture') {
+    syncGestureControlUI();
   }
   window._activeMode = mode;
 }

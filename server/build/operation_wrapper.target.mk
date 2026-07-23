@@ -12,6 +12,9 @@ DEFS_Debug := \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-D__STDC_FORMAT_MACROS' \
 	'-DNAPI_DISABLE_CPP_EXCEPTIONS' \
+	'-DTACH_GPIOCHIP=0' \
+	'-DTACH_LINE=0' \
+	'-DTACH_GATE_LINE=9' \
 	'-DBUILDING_NODE_EXTENSION' \
 	'-DDEBUG' \
 	'-D_DEBUG'
@@ -44,7 +47,7 @@ INCS_Debug := \
 	-I/usr/include/nodejs/deps/uv/include \
 	-I/usr/include/nodejs/deps/zlib \
 	-I/usr/include/nodejs/deps/v8/include \
-	-I/home/john/Desktop/capstone/JP/volleyball-launcher/server/node_modules/node-addon-api \
+	-I/home/john/Downloads/volleyball-launcher/server/node_modules/node-addon-api \
 	-I$(srcdir)/.. \
 	-I$(srcdir)/../app/src/include \
 	-I$(srcdir)/../hal/include
@@ -59,6 +62,9 @@ DEFS_Release := \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-D__STDC_FORMAT_MACROS' \
 	'-DNAPI_DISABLE_CPP_EXCEPTIONS' \
+	'-DTACH_GPIOCHIP=0' \
+	'-DTACH_LINE=0' \
+	'-DTACH_GATE_LINE=9' \
 	'-DBUILDING_NODE_EXTENSION'
 
 # Flags passed to all source files.
@@ -89,7 +95,7 @@ INCS_Release := \
 	-I/usr/include/nodejs/deps/uv/include \
 	-I/usr/include/nodejs/deps/zlib \
 	-I/usr/include/nodejs/deps/v8/include \
-	-I/home/john/Desktop/capstone/JP/volleyball-launcher/server/node_modules/node-addon-api \
+	-I/home/john/Downloads/volleyball-launcher/server/node_modules/node-addon-api \
 	-I$(srcdir)/.. \
 	-I$(srcdir)/../app/src/include \
 	-I$(srcdir)/../hal/include

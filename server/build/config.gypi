@@ -421,7 +421,7 @@
     "standalone_static_library": 1,
     "user_agent": "npm/9.2.0 node/v20.19.2 linux x64 workspaces/false",
     "userconfig": "/home/john/.npmrc",
-    "local_prefix": "/home/john/Desktop/capstone/JP/volleyball-launcher/server",
+    "local_prefix": "/home/john/Downloads/volleyball-launcher/server",
     "metrics_registry": "https://registry.npmjs.org/",
     "prefix": "/usr/local",
     "cache": "/home/john/.npm",

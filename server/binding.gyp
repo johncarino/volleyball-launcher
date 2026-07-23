@@ -58,7 +58,6 @@
         "..",
         "../hal/include"
       ],
-      "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
       "defines": [
         "NAPI_DISABLE_CPP_EXCEPTIONS",
         "TACH_GPIOCHIP=0",
