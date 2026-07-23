@@ -117,6 +117,7 @@
     let tempoSelected = false; // Track if tempo has been selected
     let slotSaved = false; // whether the current machine/target/tempo combo has been saved to a slot
     let lockedSide = null; // 'left' | 'right' |
+    const alignShown = { L: false, C: false, R: false }; // whether the alignment modal has ever been shown for this machine
     const machineSocket = (typeof io !== 'undefined') ? io() : null;
     const slots = {
       L: { 1: null, 2: null, 3: null, 4: null },
@@ -280,22 +281,24 @@
 
       const targetImgSize = 48; // width/height of the volleyball icon in SVG units
       const tCircles = targetSpots.map(s => {
-        const active = tSel === s.id;
-        const zSide = zoneSide(s.id);
-        const sideLocked = mSel === 'C' && !!lockedSide && !active && zSide !== 'center' && zSide !== lockedSide;
-        const clickable = isMachineSelected && !readonly && !sideLocked;
-        const ringStroke = active ? '#1a7a3a' : (clickable ? '#1a7a3a' : 'transparent');
-        const opacity = active ? 1 : (sideLocked ? 0 : (clickable ? 0.75 : 0));
-        const lineOpacity = active ? 0.6 : (sideLocked ? 0 : (clickable ? 0.35 : 0));
-        const flashClass = (clickable && !tSel) ? 'selectable-flash' : '';
-        const onclick = clickable ? `onclick="selectTarget('${s.id}')"` : '';
-        const cursor = clickable ? 'pointer' : 'default';
-        const half = targetImgSize / 2;
+        const active        = tSel === s.id;
+        const zSide         = zoneSide(s.id);
+        const centerDisabled = mSel === 'C' && s.id === '3'; // Center machine can never target zone 3
+        const sideLocked     = mSel === 'C' && !!lockedSide && !active && zSide !== 'center' && zSide !== lockedSide;
+        const disabled       = centerDisabled || sideLocked;
+        const clickable      = isMachineSelected && !readonly && !disabled;
+        const ringStroke     = active ? '#1a7a3a' : (clickable ? '#1a7a3a' : 'transparent');
+        const opacity        = active ? 1 : (disabled ? 0 : (clickable ? 0.75 : 0));
+        const lineOpacity    = active ? 0.6 : (disabled ? 0 : (clickable ? 0.35 : 0));
+        const flashClass     = (clickable && !tSel) ? 'selectable-flash' : '';
+        const onclick        = clickable ? `onclick="selectTarget('${s.id}')"` : '';
+        const cursor          = clickable ? 'pointer' : 'default';
+        const half            = targetImgSize / 2;
         return `<g ${onclick} style="cursor:${cursor}">
-      <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="${46 + baseOffset}" stroke="#1a7a3a" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
-      <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
-      <image href="images/volleyball.png" x="${s.cx - half}" y="${s.cy - half}" width="${targetImgSize}" height="${targetImgSize}" opacity="${opacity}" class="${flashClass}"/>
-    </g>`;
+          <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="${46 + baseOffset}" stroke="#1a7a3a" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
+          <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
+          <image href="images/volleyball.png" x="${s.cx - half}" y="${s.cy - half}" width="${targetImgSize}" height="${targetImgSize}" opacity="${opacity}" class="${flashClass}"/>
+        </g>`;
       }).join('');
 
       let tempoArcs = '';
@@ -413,11 +416,17 @@
     }
 
     function selectMachine(id) {
+      const reselectingSame = (id === selectedMachine);
       selectedMachine = id;
-      openAlignModal(id);
+
+      if (reselectingSame || !alignShown[id]) {
+        openAlignModal(id);
+        alignShown[id] = true;
+      }
+
       const savedSlot = [1, 2, 3, 4]
         .map(n => slots[id][n])
-        .find(s => !!s); // grab the first saved slot for this machine, if any
+        .find(s => !!s);
 
       if (savedSlot) {
         selectedTarget = savedSlot.target;
@@ -502,30 +511,22 @@
 
     const screens = {
       configure: () => `
-    <div class="section" style="margin-top:8px">
-      <div class="section-label">Position</div>
-      <div id="court-picker-wrap">${courtPickerHTML()}</div>
-      <div class="tempo-attached" id="tempo-wrap">${tempoPillsHTML()}</div>
-    </div>
-    <div class="section">
-      <div class="section-label">Save Set Slots</div>
-      <div class="save-slots" id="slots-wrap">${slotsHTML()}</div>
-    </div>
-    <div class="section" style="margin-top:8px">
-      <button class="court-btn" onclick="openModal()">
-        <div class="court-btn-left">
-          <i class="ti ti-ruler-measure" style="font-size:18px;color:var(--text-tertiary)" aria-hidden="true"></i>
-          <div>
-            <div class="court-btn-label">Court settings</div>
-            <div class="court-btn-sub" id="court-btn-sub">${getCourtSummary()}</div>
+        <div class="section" style="margin-top:8px">
+          <div class="section-label">Position</div>
+          <div id="court-picker-wrap">${courtPickerHTML()}</div>
+          <div class="tempo-attached" id="tempo-wrap">${tempoPillsHTML()}</div>
+          <div class="court-summary-card" onclick="openModal()" style="cursor:pointer">
+            <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="net-summary-val">243 cm</span></div>
+            <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="court-summary-val">18.0 m × 9.0 m</span></div>
           </div>
         </div>
-        <i class="ti ti-chevron-right court-btn-chevron" aria-hidden="true"></i>
-      </button>
-    </div>
-    <div class="section" style="margin-top:8px">
-      <button class="op-btn continue-style" onclick="goToSingleShot()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue to Launch</button>
-    </div>`,
+        <div class="section">
+          <div class="section-label">Save Set Slots</div>
+          <div class="save-slots" id="slots-wrap">${slotsHTML()}</div>
+        </div>
+        <div class="section" style="margin-top:8px">
+          <button class="op-btn continue-style" onclick="goToSingleShot()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue to Single Shot</button>
+        </div>`,
 
       advanced: () => `
     <div class="section" style="margin-top:8px">
@@ -623,8 +624,19 @@
       const net = document.getElementById('net-val');
       const len = document.getElementById('len-val');
       const wid = document.getElementById('wid-val');
-      const sub = document.getElementById('court-btn-sub');
-      if (net && len && wid && sub) sub.textContent = `Net ${net.textContent} · ${len.textContent} × ${wid.textContent}`;
+      if (!net || !len || !wid) return;
+      const netTxt = net.textContent;
+      const courtTxt = `${len.textContent} × ${wid.textContent}`;
+
+      const netConfig = document.getElementById('net-summary-val');
+      const courtConfig = document.getElementById('court-summary-val');
+      if (netConfig) netConfig.textContent = netTxt;
+      if (courtConfig) courtConfig.textContent = courtTxt;
+
+      const netLaunch = document.getElementById('sum-net');
+      const courtLaunch = document.getElementById('sum-court');
+      if (netLaunch) netLaunch.textContent = netTxt;
+      if (courtLaunch) courtLaunch.textContent = courtTxt;
     }
 
     function getCourtSummary() {
