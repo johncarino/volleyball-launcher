@@ -136,7 +136,7 @@ if (machineSocket) {
   });
 
   // ---- Gesture recogniser (m2demo) ----------------------------------------
-  machineSocket.on('gesture-update', (data) => { renderGesture(data); });
+  machineSocket.on('gesture-update', (data) => { renderGesture(data); handleLaunchStartGesture(data); });
   machineSocket.on('gesture-frame', (data) => { renderPreviewFrame(data); });
   machineSocket.on('gesture-set', (data) => { onGestureSet(data); });
   machineSocket.on('gesture-control-state', (state) => { applyFeasibility(state && state.feasible); });
@@ -213,6 +213,7 @@ function stopGesture() {
 }
 
 function setGestureRunning(running) {
+  window._recognizerRunning = running;
   const pill = document.getElementById('gesture-state-pill');
   const startBtn = document.getElementById('gestureStartBtn');
   const stopBtn = document.getElementById('gestureStopBtn');
@@ -225,6 +226,60 @@ function setGestureRunning(running) {
     const img = document.getElementById('gesture-preview');
     if (img) img.removeAttribute('src');
   }
+}
+
+// ---- Start the setting sequence with an open-palm (5 finger) gesture -------
+// Armed once the user has saved their sets and pressed Continue (the Launch
+// screen). Requires the OPEN_PALM gesture to be held briefly to avoid firing
+// on a momentary/false detection, mirroring the hold-to-confirm behaviour used
+// by the server's own gesture-control mode.
+const LAUNCH_GESTURE_HOLD_MS = 600;
+
+function armLaunchGesture() {
+  window._launchGestureArmed = true;
+  window._launchGestureHoldName = null;
+  window._launchGestureHoldSince = 0;
+  window._launchGestureFiredName = null;
+  window._launchGestureAutoStarted = false;
+  // The recogniser only runs once something asks it to start (e.g. the
+  // Gesture tab). If it isn't already running, start it here so the gesture
+  // works without requiring a detour through that tab, and stop it again when
+  // leaving the Launch screen if we were the ones who started it.
+  if (!window._recognizerRunning) {
+    window._launchGestureAutoStarted = true;
+    emitMachine('start');
+  }
+}
+
+function disarmLaunchGesture() {
+  window._launchGestureArmed = false;
+  if (window._launchGestureAutoStarted) {
+    emitMachine('stop');
+    window._launchGestureAutoStarted = false;
+  }
+}
+
+function handleLaunchStartGesture(data) {
+  if (!window._launchGestureArmed) return;
+
+  const name = (data && data.name) || 'NONE';
+  const now = Date.now();
+
+  if (name !== window._launchGestureHoldName) {
+    window._launchGestureHoldName = name;
+    window._launchGestureHoldSince = now;
+    window._launchGestureFiredName = null;
+  }
+
+  if (name !== 'OPEN_PALM') return;
+  if (now - window._launchGestureHoldSince < LAUNCH_GESTURE_HOLD_MS) return;
+  if (window._launchGestureFiredName === 'OPEN_PALM') return; // already fired this hold
+
+  window._launchGestureFiredName = 'OPEN_PALM';
+  const btn = document.getElementById('launch-main-btn');
+  if (!btn || btn.classList.contains('stop')) return; // not on launch screen, or already running
+  console.log('[gesture] OPEN_PALM held — starting the setting sequence');
+  toggleLaunch(btn);
 }
 
 // Render one live-preview frame. socket.io delivers binary as an ArrayBuffer;
@@ -960,10 +1015,12 @@ function goToLaunch() {
   const widVal = document.getElementById('wid-val');
   if (netVal) document.getElementById('sum-net').textContent = netVal.textContent;
   if (lenVal && widVal) document.getElementById('sum-court').textContent = `${lenVal.textContent} × ${widVal.textContent}`;
+  armLaunchGesture();
 }
 
 function goBack() {
   clearInterval(window._telem);
+  disarmLaunchGesture();
   document.getElementById('modenav').style.display = 'flex';
   const topbar = document.getElementById('topbar');
   topbar.innerHTML = `<h1 id="page-title">Configure</h1>`;
