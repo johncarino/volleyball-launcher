@@ -134,7 +134,7 @@
     const repeatIcons = ['ti-repeat', 'ti-repeat'];
 
     const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
-    const targetNames = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4' };
+    const targetNames = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4', T5: 'Zone 5' };
 
     const alignImages = { L: 'images/left.jpg', C: 'images/front.jpg', R: 'images/right.jpg' };
     const alignInstructions = {
@@ -162,7 +162,9 @@
     }
 
     function zoneSide(zoneId) {
-      return (zoneId === '1' || zoneId === '2') ? 'left' : 'right';
+      if (zoneId === '1' || zoneId === '2') return 'left';
+      if (zoneId === '4' || zoneId === '5') return 'right';
+      return 'center'; // zone 3
     }
 
     function emitMachine(eventName, value) {
@@ -243,10 +245,11 @@
         { id: 'R', cx: 302, cy: 133 + baseOffset },
       ];
       const targetSpots = [
-        { id: '1', cx: 70, cy: 20 + baseOffset },
-        { id: '2', cx: 130, cy: 20 + baseOffset },
-        { id: '3', cx: 190, cy: 20 + baseOffset },
-        { id: '4', cx: 250, cy: 20 + baseOffset },
+        { id: '1', cx: 64, cy: 20 + baseOffset },
+        { id: '2', cx: 112, cy: 20 + baseOffset },
+        { id: '3', cx: 160, cy: 20 + baseOffset },
+        { id: '4', cx: 208, cy: 20 + baseOffset },
+        { id: '5', cx: 256, cy: 20 + baseOffset },
       ];
 
       // Images for the machine - IMAGES ARE A PLACEHOLDER
@@ -278,7 +281,8 @@
       const targetImgSize = 48; // width/height of the volleyball icon in SVG units
       const tCircles = targetSpots.map(s => {
         const active = tSel === s.id;
-        const sideLocked = mSel === 'C' && !!lockedSide && !active && zoneSide(s.id) !== lockedSide;
+        const zSide = zoneSide(s.id);
+        const sideLocked = mSel === 'C' && !!lockedSide && !active && zSide !== 'center' && zSide !== lockedSide;
         const clickable = isMachineSelected && !readonly && !sideLocked;
         const ringStroke = active ? '#1a7a3a' : (clickable ? '#1a7a3a' : 'transparent');
         const opacity = active ? 1 : (sideLocked ? 0 : (clickable ? 0.75 : 0));
@@ -592,7 +596,7 @@
       <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
     </div>`,
 
-    single_shot: () => `
+      single_shot: () => `
     <div class="section" style="margin-top:8px">
       <div class="section-label">Position</div>
       <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
@@ -767,7 +771,7 @@
       const machineKey = selectedMachine || 'L';
       if (!slots[machineKey][n]) return; // nothing saved in this slot, nothing to toggle
       slotEnabled[machineKey][n] = !slotEnabled[machineKey][n];
-      activateSlot(machineKey, n); 
+      activateSlot(machineKey, n);
       refreshSlots();
     }
 
