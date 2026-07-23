@@ -45,7 +45,7 @@ Value tiltSignal(const CallbackInfo& info) {
         TypeError::New(env, "tiltSignal expects a number").ThrowAsJavaScriptException();
         return env.Null();
     }
-    tilt_with_feedback(info[0].As<Number>().FloatValue());
+    tilt_signal(info[0].As<Number>().FloatValue());
     std::cout << "[operation] tilt signal sent: " << info[0].As<Number>().FloatValue() << std::endl;
     return env.Undefined();
 }
