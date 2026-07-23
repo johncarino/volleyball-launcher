@@ -1,6 +1,4 @@
 PRIORITY
-- Finalize menu layouts
-- Where to put power button
 - Direct connection to beaglebone
 
 SECONDARY
