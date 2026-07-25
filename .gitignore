@@ -1,0 +1,6 @@
+# External upstream MediaPipe checkout — cloned/pulled separately (already
+# present on the BeagleY-AI). Not tracked in this repo. See README.
+mediapipe/
+
+# Compiled hardware-free gesture source (build artifact)
+server/fake_gesture_udp

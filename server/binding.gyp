@@ -23,6 +23,7 @@
       "sources": [
         "../app/wrappers/set_wrapper.cpp",
         "../app/src/set.c",
+        "../app/src/calibration.c",
         "../app/src/arc_calc.c"
       ],
       "include_dirs": [
@@ -47,7 +48,8 @@
         "../hal/src/mcp4725.c",
         "../hal/src/mpu6050.c",
         "../hal/src/tb6600.c",
-        "../hal/src/pwm.c"
+        "../hal/src/pwm.c",
+        "../hal/src/tachometer.c"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
@@ -56,11 +58,17 @@
         "..",
         "../hal/include"
       ],
-      "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ],
+      "defines": [
+        "NAPI_DISABLE_CPP_EXCEPTIONS",
+        "TACH_GPIOCHIP=0",
+        "TACH_LINE=0",
+        "TACH_GATE_LINE=9"
+      ],
       "cflags_cc!": [ "-fno-exceptions" ],
       "libraries": [
         "-lm",
-        "-lgpiod"
+        "-lgpiod",
+        "-lpthread"
       ]
     }
   ]

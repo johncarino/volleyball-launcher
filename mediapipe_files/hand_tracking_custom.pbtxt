@@ -4,7 +4,8 @@
 # This is a near-copy of MediaPipe's shipped
 #   mediapipe/graphs/hand_tracking/hand_tracking_desktop_live.pbtxt
 # with two changes:
-#   1. num_hands defaults to 1 (lower CPU cost on the BeagleY-AI).
+#   1. num_hands defaults to 2 so the recogniser can distinguish the set-signing
+#      hand from the start/stop control hand by handedness.
 #   2. The "landmarks" output stream is consumed by m2demo.cpp; the rendered
 #      "output_video" stream is still produced so the FlowLimiterCalculator has
 #      a FINISHED back-edge (and so a frame can optionally be saved for debug).
@@ -12,10 +13,12 @@
 # Input:  input_video   (BGR/RGB camera frames as ImageFrame)
 # Output: output_video  (rendered ImageFrame, not displayed when headless)
 #         landmarks     (std::vector<NormalizedLandmarkList>, 21 pts per hand)
+#         handedness    (std::vector<ClassificationList>, "Left"/"Right" per hand)
 
 input_stream: "input_video"
 output_stream: "output_video"
 output_stream: "landmarks"
+output_stream: "handedness"
 
 # Throttle the camera frames so the graph never queues more work than it can
 # finish. FINISHED is fed by output_video as a back-edge.
@@ -30,14 +33,16 @@ node {
   output_stream: "throttled_input_video"
 }
 
-# Number of hands to detect/track. Default 1 for the BeagleY-AI; override by
-# editing the int_value below (e.g. 2 for two-handed gestures).
+# Number of hands to detect/track. Two hands so the recogniser can tell the
+# set-signing hand from the start/stop control hand by handedness. (Costs a bit
+# more CPU than 1 when both hands are visible; drop back to 1 if you only ever
+# use a single hand and don't need the control hand.)
 node {
   calculator: "ConstantSidePacketCalculator"
   output_side_packet: "PACKET:num_hands"
   node_options: {
     [type.googleapis.com/mediapipe.ConstantSidePacketCalculatorOptions]: {
-      packet { int_value: 1 }
+      packet { int_value: 2 }
     }
   }
 }

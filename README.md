@@ -1,152 +1,148 @@
-# BeagleY-AI Gesture Control
+# Gesture Control (webapp3-based)
 
-A barebones, portable hand-gesture-recognition project for the **BeagleY-AI**,
-built to be dropped into a larger capstone codebase.
+This repository contains the current, working gesture-control implementation for
+the BeagleY-AI stack.
 
-It has two halves:
+It has two runtime subsystems:
 
-1. **Recogniser (`mediapipe_files/`)** — a small C++ program (`m2demo`) built on
-   top of Google **MediaPipe** hand tracking. It reads the camera, classifies
-   which fingers are up + a named gesture, and **pushes** a one-line summary over
-   UDP to `127.0.0.1:12345`.
-2. **Web app (`server/`)** — a Node.js (`socket.io`) server that lets a browser
-   **Start/Stop** the recogniser and shows the live gesture readout. It binds the
-   UDP port, relays each summary to the browser, and spawns/kills `m2demo`.
+1. Recogniser (`mediapipe_files/` -> `m2demo`)
+   - C++ MediaPipe binary built by Bazel.
+   - Reads camera frames and sends gesture summaries to UDP `127.0.0.1:12345`.
+2. Web app + machine control (`server/` + `app/` + `hal/`)
+   - Node server/UI (`server/`).
+   - Hardware control via native addons (`node-gyp`) built from this repo's
+     C sources in `app/` and `hal/`.
 
-```
-Camera ──OpenCV──► m2demo ──UDP 12345──► Node (gesture_server.js) ──socket.io──► Browser
-                     ▲                          │
-                     └───── spawn / kill ◄───────┘  (Start / Stop buttons)
-```
+## Important Repo Facts
 
-The recogniser and the web app are decoupled by the UDP protocol, so you can test
-the entire web stack **without a camera** using the included fake source.
+- `mediapipe/` is external and git-ignored in this repo.
+- Build and run natively on the board for real hardware testing.
+- The old standalone `volleyball-launcher` daemon path is separate; this repo
+  uses in-process native addons for machine control.
 
----
+## Repository Layout
 
-## Repository layout
+- `server/`:
+  - `server.js` starts the web app.
+  - `lib/gesture_server.js` handles socket.io, spawns/stops `m2demo`, receives
+    UDP gestures, and calls native addon APIs for launcher control.
+  - `binding.gyp` builds `operation_wrapper`, `set_wrapper`, and
+    `calibration_wrapper` from `app/` and `hal/`.
+- `app/` and `hal/`:
+  - C implementation used by native addons (machine control + calibration + set
+    operations).
+- `mediapipe_files/`:
+  - Canonical MediaPipe-side sources (`m2demo.cpp`, `BUILD`, graph, etc.) synced
+    into `mediapipe/mediapipe/mediapipe_files/` before Bazel build.
 
-```
-mediapipe_files/                 # Copy into a cloned MediaPipe repo to build
-  BUILD                          #   Bazel target //mediapipe/mediapipe_files:m2demo
-  hand_tracking_custom.pbtxt     #   MediaPipe graph (num_hands=1, CPU)
-  hand_recognition.h / .cpp      #   21 landmarks -> fingers-up + named gesture
-  m2demo.cpp                     #   Camera -> graph -> UDP push (headless)
-server/
-  server.js                      # HTTP static server (port 8088)
-  lib/gesture_server.js          # socket.io + UDP receiver + spawn/kill m2demo
-  public/index.html              # Live gesture UI
-  public/javascripts/gesture_ui.js
-  fake_gesture_udp.c             # Hardware-free fake gesture source (pushes UDP)
-documents/                       # (old project diagrams/poster — safe to delete)
-```
+## Adding a new HAL module
 
-## UDP wire protocol
+`server/binding.gyp` does **not** glob `hal/src/*.c` — each addon target lists its
+`.c`/`.cpp` sources explicitly. Adding a new HAL module (e.g. a new sensor driver
+under `hal/src/`) requires **two steps**:
 
-One ASCII line per datagram, sent to `127.0.0.1:12345`:
+1. Add the new `.c` file to the `sources` array of the relevant target in
+   [server/binding.gyp](server/binding.gyp) (usually `operation_wrapper`, since
+   that's the target linking the HAL). Add any new `libraries` flag too if the
+   module needs one (e.g. a new `-l...`).
+2. Run `make server` to rebuild the native addons (`npm run build` ->
+   `node-gyp rebuild`).
 
-```
-gesture <count> <thumb> <index> <middle> <ring> <pinky> <NAME>
-e.g.    gesture 2 0 1 1 0 0 PEACE
-```
+Running `make server` alone, **without** editing `binding.gyp` first, will not
+pick up the new file — node-gyp only compiles what's listed.
 
-Each finger is `1` (up) or `0` (down). `NAME` is one of
-`FIST, OPEN_PALM, POINT, PEACE, THUMBS_UP, CALL_ME, FOUR, ROCK, GUN, HORNS,
-UNKNOWN, NONE`.
+## Local Make Targets (from this folder)
 
----
+This repo now includes [Makefile](Makefile) at its root (`gesture-control/`):
 
-## Quick start (no hardware needed)
+- `make` or `make all`
+  - Runs `make server` then `make m2demo`.
+- `make server`
+  - `npm install` in `server/`
+  - `npm run build` (node-gyp native addons)
+- `make m2demo`
+  - Syncs `mediapipe_files/*` into external MediaPipe tree
+  - Runs Bazel build for `//mediapipe/mediapipe_files:m2demo`
+- `make run`
+  - Starts `node server.js` with `M2DEMO_BIN` pointed at Bazel output
+- `make camera-test`
+  - Builds and runs `mediapipe_files/camera_test.cpp`
+- `make clean`
+  - Removes camera test binary and runs `bazel clean`
 
-```bash
-cd server
-npm install                 # installs socket.io + mime
-node server.js              # serves http://<board-ip>:8088
+## Prerequisites
 
-# in a second terminal, fake a camera:
-gcc -O2 -Wall -Wextra -o fake_gesture_udp fake_gesture_udp.c
-./fake_gesture_udp 500      # push a new gesture every 500 ms
-```
+### Web app + native addons
 
-Open `http://<board-ip>:8088` and watch the live readout cycle through gestures.
-(The fake source pushes directly, so you do not even need to press **Start** to
-see data; Start/Stop control the real `m2demo` binary.)
+- Node.js + npm
+- Build toolchain for node-gyp (`python3`, `make`, `g++`)
+- `libgpiod` development package for addon link step
 
----
+### Recogniser (Bazel + MediaPipe)
 
-## Building the real recogniser (`m2demo`)
+- Bazel/Bazelisk
+- C++ toolchain + JDK
+- OpenCV development headers
+- External `mediapipe/` checkout present at repo root
 
-> Phase 0 is board-specific and is the highest-risk step. The camera
-> (Freenove FNK0056 = IMX219, RPi Cam v2 clone) attaches to the **CSI** port and
-> needs a working device-tree overlay so it enumerates as `/dev/videoN`. A USB
-> webcam works too and is the easiest fallback while bringing up CSI.
+## Syncing to the Board
 
-1. **Camera bring-up.** Confirm the camera works first:
-   ```bash
-   v4l2-ctl --list-devices
-   # quick capture sanity check:
-   ffmpeg -f v4l2 -i /dev/video0 -frames 1 test.jpg
-   ```
-   For the CSI IMX219 you may need a board overlay and a `media-ctl` pipeline
-   setup; a USB webcam usually appears as `/dev/video0` with no extra config.
+The board (BeagleY-AI, `john@192.168.7.2`) has its own clone of this repo,
+currently checked out at `~/Downloads/volleyball-system/gesture-control`. Two
+ways to get local changes onto it:
 
-2. **Get MediaPipe and drop in these files.**
-   ```bash
-   git clone https://github.com/google-ai-edge/mediapipe.git
-   cp -r mediapipe_files mediapipe/mediapipe/mediapipe_files
-   ```
+- **`git pull`** (preferred once changes are committed/pushed) — run on the
+  board inside that directory, on the `gesture-wip` branch.
+- **`rsync`** (for iterating before a commit, or copying uncommitted changes):
 
-3. **Build (CPU only).** Native build on the board, or cross-compile for aarch64:
-   ```bash
-   cd mediapipe
-   bazel build -c opt \
-     --define MEDIAPIPE_DISABLE_GPU=1 \
-     //mediapipe/mediapipe_files:m2demo
-   # cross-compile: add your aarch64 toolchain, e.g. --config=elinux_aarch64
-   ```
-   The resulting binary is `bazel-bin/mediapipe/mediapipe_files/m2demo`.
+  ```bash
+  rsync -avz --delete \
+      --exclude '.git' \
+      --exclude 'mediapipe/' \
+      /home/john/Downloads/volleyball-launcher/ \
+      john@192.168.7.2:/home/john/Downloads/volleyball-system/gesture-control/
+  ```
 
-4. **Run it manually (optional):**
-   ```bash
-   ./bazel-bin/mediapipe/mediapipe_files/m2demo \
-     --calculator_graph_config_file=mediapipe/mediapipe_files/hand_tracking_custom.pbtxt \
-     --camera_index=0 --udp_port=12345
-   ```
+  `--exclude 'mediapipe/'` is required — the board's external MediaPipe
+  checkout lives at that path and must never be deleted/overwritten by
+  `--delete`. Drop `--delete` if you'd rather leave stale files on the board
+  in place.
 
-## Wiring m2demo to the web app
+  To copy a single changed file instead:
 
-`gesture_server.js` spawns `m2demo` when you press **Start**. Tell it where the
-binary and graph live via environment variables before launching Node:
+  ```bash
+  scp server/lib/gesture_server.js \
+      john@192.168.7.2:/home/john/Downloads/volleyball-system/gesture-control/server/lib/gesture_server.js
+  ```
 
-```bash
-export M2DEMO_BIN=/path/to/mediapipe/bazel-bin/mediapipe/mediapipe_files/m2demo
-export GESTURE_GRAPH=/path/to/mediapipe/mediapipe/mediapipe_files/hand_tracking_custom.pbtxt
-export GESTURE_CAMERA=0            # /dev/videoN index
-node server.js
-```
+## Typical Board Workflow
 
-| Variable          | Default                                   | Meaning                         |
-|-------------------|-------------------------------------------|---------------------------------|
-| `M2DEMO_BIN`      | `m2demo` (on PATH)                         | Recogniser binary               |
-| `GESTURE_GRAPH`   | `../../mediapipe_files/hand_tracking_custom.pbtxt` | Graph config path      |
-| `GESTURE_CAMERA`  | `0`                                       | OpenCV camera index             |
-| `GESTURE_UDP_PORT`| `12345`                                   | UDP port (must match m2demo)    |
-| `GESTURE_UDP_HOST`| `127.0.0.1`                               | UDP host                        |
+1. Update repo on board (`git pull` on `gesture-wip`) or copy changed files
+   (see [Syncing to the Board](#syncing-to-the-board)).
+2. From repo root (`gesture-control/`):
+   - `make server`
+   - `make m2demo` (when recogniser sources changed)
+   - `make run`
 
-## Importing into your capstone
+## Gesture Data Path
 
-- Reuse the **UDP protocol** as the integration boundary: anything that can parse
-  the `gesture ...` line can consume gestures, web app or not.
-- `hand_recognition.{h,cpp}` is self-contained — lift it into another MediaPipe
-  binary to get fingers-up + gesture names elsewhere.
-- The web layer (`server/`) is independent of the recogniser and can be embedded
-  as-is or replaced.
+`m2demo` emits lines like:
 
-## Notes / tuning
+`gesture <count> <thumb> <index> <middle> <ring> <pinky> <NAME>`
 
-- `num_hands` defaults to **1** in `hand_tracking_custom.pbtxt` for lower CPU on
-  the BeagleY-AI; bump it to 2 for two-handed gestures.
-- Sends are throttled to ~10 Hz (`--send_interval_ms`, default 100). MediaPipe
-  inference dominates CPU; the UDP/websocket transport cost is negligible.
-- Finger detection assumes a roughly upright hand and is intentionally simple —
-  a solid base to extend in `hand_recognition.cpp`.
+`server/lib/gesture_server.js` parses these and emits `gesture-update` events to
+the browser clients.
+
+## Known Gotcha: `m2demo` Resource Loading
+
+Bazel-built binaries resolve MediaPipe resource paths (e.g.
+`mediapipe/modules/palm_detection/palm_detection_full.tflite`) relative to the
+process's working directory, assuming they're launched the way `bazel run`
+launches them — from inside the target's generated runfiles tree. Since
+`gesture_server.js` spawns `m2demo` directly, it sets the child process's
+`cwd` to `<M2DEMO_BIN>.runfiles/_main` (the runfiles workspace directory name
+under Bazel's bzlmod, confirmed via `ls .runfiles/`) so those relative lookups
+succeed. If model loading fails with `Can't find file: mediapipe/modules/...`,
+check that this runfiles directory exists next to the built binary, or
+override the path with the `M2DEMO_RUNFILES_DIR` environment variable if your
+Bazel setup names it differently.

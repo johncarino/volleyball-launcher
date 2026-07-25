@@ -44,7 +44,7 @@ INCS_Debug := \
 	-I/usr/include/nodejs/deps/uv/include \
 	-I/usr/include/nodejs/deps/zlib \
 	-I/usr/include/nodejs/deps/v8/include \
-	-I/home/john/Desktop/capstone/JP/volleyball-launcher/server/node_modules/node-addon-api \
+	-I/home/john/Downloads/volleyball-launcher/server/node_modules/node-addon-api \
 	-I$(srcdir)/.. \
 	-I$(srcdir)/../app/src/include
 
@@ -88,13 +88,14 @@ INCS_Release := \
 	-I/usr/include/nodejs/deps/uv/include \
 	-I/usr/include/nodejs/deps/zlib \
 	-I/usr/include/nodejs/deps/v8/include \
-	-I/home/john/Desktop/capstone/JP/volleyball-launcher/server/node_modules/node-addon-api \
+	-I/home/john/Downloads/volleyball-launcher/server/node_modules/node-addon-api \
 	-I$(srcdir)/.. \
 	-I$(srcdir)/../app/src/include
 
 OBJS := \
 	$(obj).target/$(TARGET)/../app/wrappers/set_wrapper.o \
 	$(obj).target/$(TARGET)/../app/src/set.o \
+	$(obj).target/$(TARGET)/../app/src/calibration.o \
 	$(obj).target/$(TARGET)/../app/src/arc_calc.o
 
 # Add to the list of files we specially track dependencies for.

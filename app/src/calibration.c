@@ -82,8 +82,11 @@ void calibrate_user_input(char input, float value) {
 }
 
 void default_calibration() {
-    set_net_height(STANDARD_NET_HEIGHT);
-    set_court_dimensions(STANDARD_COURT_LENGTH, STANDARD_COURT_WIDTH);
+    //set_net_height(STANDARD_NET_HEIGHT);
+    //set_court_dimensions(STANDARD_COURT_LENGTH, STANDARD_COURT_WIDTH);
+    net_height = STANDARD_NET_HEIGHT;
+    court_length = STANDARD_COURT_LENGTH;
+    court_width = STANDARD_COURT_WIDTH;
 
     arc_calc_params(net_height, court_length, court_width);
 

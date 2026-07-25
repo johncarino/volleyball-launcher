@@ -223,7 +223,7 @@ int mpu6050_read(mpu6050_data_t *data)
         sqrt((data->ay_g * data->ay_g) + (data->az_g * data->az_g))
     ) * 180.0 / M_PI;
 
-    data->roll_deg = atan2(
+    data->roll_deg = atan2f(
         data->ay_g,
         sqrt((data->ax_g * data->ax_g) + (data->az_g * data->az_g))
     ) * 180.0 / M_PI;

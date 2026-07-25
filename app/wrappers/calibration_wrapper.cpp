@@ -57,12 +57,19 @@ Value setCourtWidth(const CallbackInfo& info) {
     return env.Undefined();
 }
 
+Value defaultCalibration(const CallbackInfo& info) {
+    Env env = info.Env();
+    default_calibration();
+    return env.Undefined();
+}
+
 // --- Module Init ---
 Object Init(Env env, Object exports) {
     exports.Set("setNetHeight", Function::New(env, setNetHeight));
     exports.Set("setCourtDimensions", Function::New(env, setCourtDimensions));
     exports.Set("setCourtLength", Function::New(env, setCourtLength));
     exports.Set("setCourtWidth", Function::New(env, setCourtWidth));
+    exports.Set("defaultCalibration", Function::New(env, defaultCalibration));
     return exports;
 }
 

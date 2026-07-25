@@ -132,8 +132,14 @@ void tb6600_step_accel(tb6600_t *motor, int steps, int start_delay_us,
         accel_steps = steps / 2;
     }
 
-    printf("TB6600: stepping %d steps (accel %d→%d us over %d steps)\n",
-           steps, start_delay_us, end_delay_us, accel_steps);
+    // Deceleration is 1.5x slower than acceleration
+    int decel_steps = (accel_steps * 3) / 2;
+    if (accel_steps + decel_steps > steps) {
+        decel_steps = steps - accel_steps;
+    }
+
+    printf("TB6600: stepping %d steps (accel %d→%d us over %d steps, decel over %d steps)\n",
+           steps, start_delay_us, end_delay_us, accel_steps, decel_steps);
 
     for (int i = 0; i < steps; i++) {
         // Compute current delay: ramp down during accel, ramp up during decel
@@ -141,10 +147,10 @@ void tb6600_step_accel(tb6600_t *motor, int steps, int start_delay_us,
         if (i < accel_steps) {
             // Accelerating: linearly decrease delay from start to end
             delay = start_delay_us - (start_delay_us - end_delay_us) * i / accel_steps;
-        } else if (i >= steps - accel_steps) {
-            // Decelerating: linearly increase delay from end back to start
+        } else if (i >= steps - decel_steps) {
+            // Decelerating: linearly increase delay from end back to start (slower ramp)
             int remaining = steps - 1 - i;
-            delay = start_delay_us - (start_delay_us - end_delay_us) * remaining / accel_steps;
+            delay = start_delay_us - (start_delay_us - end_delay_us) * remaining / decel_steps;
         } else {
             // Cruising at target speed
             delay = end_delay_us;
@@ -164,6 +170,32 @@ void tb6600_step_accel(tb6600_t *motor, int steps, int start_delay_us,
     }
 
     printf("TB6600: stepping complete (%d steps done)\n", steps);
+}
+
+void tb6600_step_continuous(tb6600_t *motor, int delay_us, volatile int *run_flag)
+{
+    if (!run_flag) {
+        perror("run_flag is NULL");
+        return;
+    }
+
+    printf("TB6600: continuous stepping with %d us delay per half-cycle\n", delay_us);
+
+    while (*run_flag) {
+        if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_ACTIVE) < 0) {
+            perror("step high failed");
+            return;
+        }
+        usleep(delay_us);
+
+        if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_INACTIVE) < 0) {
+            perror("step low failed");
+            return;
+        }
+        usleep(delay_us);
+    }
+
+    printf("TB6600: continuous stepping stopped\n");
 }
 
 void tb6600_close(tb6600_t *motor)
