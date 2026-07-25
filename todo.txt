@@ -1,7 +1,5 @@
 PRIORITY
-- Single Shot and Sequence in own menu
 - Merge gesture into UI
-- Fix court size text
 
 SECONDARY
 - Fill in alignment modal
