@@ -26,7 +26,7 @@
 #define WHEEL_R 0.075
 #define EFF_K 0.8
 
-#define NUM_TARGETS 4
+#define NUM_TARGETS 5
 #define NUM_TEMPOS 5
 #define NUM_MACHINE_POSITIONS 3
 

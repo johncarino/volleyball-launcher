@@ -471,17 +471,29 @@ void percentage_to_mv(float percentage) {
 }
 
 void set_machine(int machine_position, int set_index) {
-    mcp4725_set_raw(&dac1, 0);
+    if (machine_position < 0 || machine_position >= NUM_MACHINE_POSITIONS) {
+        fprintf(stderr, "Invalid machine position: %d\n", machine_position);
+        return;
+    }
 
-    printf("Setting machine for set %d\n", set_index);
-    printf("Tilt angle: %f, Yaw angle: %f, Speed: %f\n",
-            set_seq[set_index]->tilt_angle,
-            set_seq[set_index]->yaw_angle,
-            set_seq[set_index]->rpm_output);
-    
-    //tilt_signal(set_seq[set_index]->tilt_angle);
-    //yaw_signal(set_seq[set_index]->yaw_angle);
-    //speed_signal(set_seq[set_index]->rpm_output);
+    if (set_index < 0 || set_index >= NUM_SETS) {
+        fprintf(stderr, "Invalid set index: %d\n", set_index);
+        return;
+    }
+
+    set_specs_t *spec = &set_seq[machine_position][set_index];
+
+    printf("Setting machine %d for set %d\n", machine_position, set_index);
+    printf("Tilt angle: %f, Speed (RPM): %f\n",
+            spec->tilt_angle, spec->rpm_output);
+
+    // Configure the launch speed target first so that once tilt_signal()
+    // reaches the target angle it resumes the flywheel (if already running)
+    // at the correct value for this set rather than the previous one.
+    //set_speed(spec->rpm_output);
+
+    // Blocking feedback-controlled tilt move to this set's angle.
+    //tilt_signal(spec->tilt_angle);
 }
 
 void tilt_with_feedback(float angle) {

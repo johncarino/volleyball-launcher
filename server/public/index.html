@@ -69,6 +69,7 @@
         R: { 1: false, 2: false, 3: false, 4: false },
       };
       const singleShotSelected = { L: null, C: null, R: null }; // selected slot number per machine, or null
+      let pendingSlotSave = null; // { machineKey, n, previousSlot, previousEnabled } awaiting backend confirmation
 
       const repeatLabels = ['Repeat', 'Repeat'];
       const repeatIcons = ['ti-repeat', 'ti-repeat'];
@@ -137,6 +138,10 @@
         machineSocket.on('state-reply', (state) => { setGestureRunning(state === 'RUNNING'); });
         machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); renderGesture(null); });
         machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); });
+
+        // ---- Set-slot save confirmation from the backend ----
+        machineSocket.on('set-save-state', (state) => { onSetSaveState(state); });
+        machineSocket.on('machine-error', (message) => { onMachineError(message); });
 
         // ---- Live telemetry (real tachometer RPM) ----
         machineSocket.on('telemetry', (data) => { renderTelemetry(data); });
@@ -1171,31 +1176,26 @@
         refreshSlots();
       }
 
+      // Actually apply the selected set slot to the machine and start feeding
+      // balls for it. setMachine syncs the saved set data natively and drives
+      // the tilt/speed actuators (see gesture_server.js's 'setMachine' handler
+      // and operation.c's set_machine()); resumeMotors spins the flywheel up
+      // to the newly-configured speed, and hopper-on starts continuously
+      // feeding balls through it. Used by both the Single Shot and Sequence
+      // (Launch) run modes whenever a set slot is selected/enabled and run.
       function fireSet(machine, n, slotData) {
-        fetch('/api/slot-click', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ machine, slot: n, data: slotData })
-        })
-          .then(res => {
-            if (!res.ok) throw new Error('Server responded with ' + res.status);
-            return res.json().catch(() => ({}));
-          })
-          .then(json => console.log('Server ack:', json))
-          .catch(err => console.error('Failed to send slot fire to server:', err));
+        const machineIndex = MACHINE_INDEX[machine];
+        if (machineIndex === undefined) {
+          console.error('Unknown machine key, cannot fire set:', machine);
+          return;
+        }
+        emitMachine('setMachine', { machinePosition: machineIndex, setIndex: n - 1 });
+        emitMachine('resumeMotors');
+        emitMachine('hopper-on');
       }
 
       function stopFiring(machine, n) {
-        fetch('/api/slot-click', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ machine, slot: n, action: 'stop' })
-        })
-          .then(res => {
-            if (!res.ok) throw new Error('Server responded with ' + res.status);
-            return res.json().catch(() => ({}));
-          })
-          .catch(err => console.error('Failed to send slot stop to server:', err));
+        emitMachine('hopper-off');
       }
 
       function shuffleArray(arr) {
@@ -1230,7 +1230,6 @@
         }
         runIndex = 0;
         isRunning = true;
-        emitMachine('resumeMotors');
         runNextInQueue();
       }
 
@@ -1350,6 +1349,10 @@
         const zonePart = selectedTarget ? `Zone ${selectedTarget}` : null;
         const tempoPart = `Tempo ${selectedTempo}`;
         const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
+
+        const previousSlot = slots[selectedMachine][n];
+        const previousEnabled = slotEnabled[selectedMachine][n];
+
         slots[selectedMachine][n] = {
           name,
           machine: selectedMachine,
@@ -1361,8 +1364,55 @@
         if (selectedMachine === 'C') {
           lockedSide = zoneSide(selectedTarget);
         }
+
+        const machineIndex = MACHINE_INDEX[selectedMachine];
+        const targetLocation = parseInt(selectedTarget, 10);
+        const tempo = parseInt(selectedTempo, 10);
+
+        if (machineIndex === undefined || Number.isNaN(targetLocation) || Number.isNaN(tempo)) {
+          console.warn('Invalid slot data, skipping backend save');
+        } else {
+          // Persist the slot to the backend so it survives past this session
+          // and can be recalled by setMachine. The UI update above is optimistic;
+          // if the backend rejects the save (see onMachineError) we roll it back.
+          pendingSlotSave = { machineKey: selectedMachine, n, previousSlot, previousEnabled };
+          emitMachine('saveSet', {
+            setIndex: n - 1,
+            machinePosition: machineIndex,
+            targetLocation,
+            tempo,
+          });
+        }
+
         refreshSlots();
         refreshCourtPicker();
+      }
+
+      // Backend confirmed the slot was persisted (set_seq updated natively).
+      function onSetSaveState(state) {
+        if (state === 'SAVED') {
+          pendingSlotSave = null;
+        }
+      }
+
+      // Backend rejected the save (e.g. native addon unavailable or validation
+      // failed) — roll back the optimistic slot update so the UI doesn't claim
+      // a slot is saved when it isn't.
+      function onMachineError(message) {
+        console.warn('[machine-error]', message);
+        if (pendingSlotSave) {
+          const { machineKey, n, previousSlot, previousEnabled } = pendingSlotSave;
+          slots[machineKey][n] = previousSlot;
+          slotEnabled[machineKey][n] = previousEnabled;
+          if (machineKey === selectedMachine) {
+            const stillHasSlots = [1, 2, 3, 4].some(i => !!slots[machineKey][i]);
+            slotSaved = stillHasSlots ? slotSaved : false;
+          }
+          pendingSlotSave = null;
+          refreshSlots();
+          refreshCourtPicker();
+        }
+        showGestureError(typeof message === 'string' ? message : 'Machine error');
       }
 
       function deleteSlot(machineKey, n) {
