@@ -84,7 +84,7 @@ body {
 }
 @media (prefers-color-scheme: dark) {
   .app.mode-advanced {
-    --bg-primary: #241f16;
+    --bg-primary: #1a0d0d;
   }
 }
 
