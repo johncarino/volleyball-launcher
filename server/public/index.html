@@ -25,8 +25,6 @@
       <div class="topbar-left" id="topbar-left">
         <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
           <button class="modetab-header active" role="tab" data-mode="configure">Configure</button>
-          <button class="modetab-header" role="tab" data-mode="single_shot">Single Shot</button>
-          <button class="modetab-header" role="tab" data-mode="launch">Sequence</button>
           <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
         </div>
       </div>
@@ -530,7 +528,7 @@
           <div class="save-slots" id="slots-wrap">${slotsHTML()}</div>
         </div>
         <div class="section" style="margin-top:8px">
-          <button class="op-btn continue-style" onclick="goToSingleShot()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue to Single Shot</button>
+          <button class="op-btn continue-style" onclick="goToSingleShot()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue to Launch</button>
         </div>`,
 
       advanced: () => `
@@ -1020,7 +1018,26 @@
 
     function goToSingleShot() {
       clearInterval(window._telem);
+      const topbarLeft = document.getElementById('topbar-left');
+      topbarLeft.innerHTML = `<button class="back-btn" onclick="goBackToConfigure()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+        <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
+          <button class="modetab-header" role="tab" data-mode="single_shot">Single Shot</button>
+          <button class="modetab-header" role="tab" data-mode="launch">Sequence</button>
+        </div>`;
+      attachModeTabListeners();
       setMode('single_shot');
+    }
+
+    function goBackToConfigure() {
+      clearInterval(window._telem);
+      if (isRunning) stopRunSequence();
+      const topbarLeft = document.getElementById('topbar-left');
+      topbarLeft.innerHTML = `<div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
+          <button class="modetab-header" role="tab" data-mode="configure">Configure</button>
+          <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
+        </div>`;
+      attachModeTabListeners();
+      setMode('configure');
     }
 
     function attachModeTabListeners() {
