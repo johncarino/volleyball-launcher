@@ -1,6 +1,5 @@
 PRIORITY
 - Merge gesture into UI
-- Change court settings to be "Mens" "Womens" "Junior" etc
 
 SECONDARY
 - Fill in alignment modal
