@@ -84,6 +84,15 @@
         R: 'Placeholder instructions for aligning the machine at the RIGHT position.',
       };
 
+      const courtPresets = {
+        mens: { net: 243, len: 18, wid: 9, label: "Men's" },
+        womens: { net: 224, len: 18, wid: 9, label: "Women's" },
+        junior: { net: 220, len: 16, wid: 8, label: 'Junior' },
+        beach: { net: 243, len: 16, wid: 8, label: 'Beach' },
+        grass: { net: 243, len: 18, wid: 9, label: 'Grass' },
+      };
+      let courtSettings = { net: 243, len: 18, wid: 9, preset: 'custom' };
+
       function openAlignModal(id) {
         const img = document.getElementById('align-modal-img');
         const text = document.getElementById('align-modal-text');
@@ -451,152 +460,161 @@
 
       const screens = {
         configure: () => `
-        <div class="section" style="margin-top:8px">
-          <div class="section-label">Position</div>
-          <div id="court-picker-wrap">${courtPickerHTML()}</div>
-          <div class="tempo-attached" id="tempo-wrap">${tempoPillsHTML()}</div>
-          <div class="court-summary-card">
-            <div class="court-summary-rows">
-              <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="net-summary-val">243 cm</span></div>
-              <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="court-summary-val">18.0 m × 9.0 m</span></div>
+          <div class="section" style="margin-top:8px">
+            <div class="section-label">Position</div>
+            <div id="court-picker-wrap">${courtPickerHTML()}</div>
+            <div class="tempo-attached" id="tempo-wrap">${tempoPillsHTML()}</div>
+            <div class="court-summary-card">
+              <div class="court-summary-rows">
+                <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="net-summary-val">${courtSettings.net} cm</span></div>
+                <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="court-summary-val">${courtSettings.len.toFixed(1)} m × ${courtSettings.wid.toFixed(1)} m</span></div>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="section">
-          <div class="section-label">Save Set Slots</div>
-          <div class="save-slots" id="slots-wrap">${slotsHTML()}</div>
-        </div>
-        <div class="section" style="margin-top:8px">
-          <button class="op-btn continue-style" onclick="goToSingleShot()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue to Launch</button>
-        </div>`,
+          <div class="section">
+            <div class="section-label">Save Set Slots</div>
+            <div class="save-slots" id="slots-wrap">${slotsHTML()}</div>
+          </div>
+          <div class="section" style="margin-top:8px">
+            <button class="op-btn continue-style" onclick="goToSingleShot()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue to Launch</button>
+          </div>`,
 
         court_settings: () => `
-    <div class="section" style="margin-top:8px">
-      <div class="section-label">Net height</div>
-      <div class="card" style="margin-bottom:0">
-        <div style="margin-bottom:6px">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-            <span style="font-size:13px;color:var(--text-secondary)">Height</span>
-            <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="net-val">243 cm</strong>
+          <div class="section" style="margin-top:8px">
+            <div class="section-label">Preset</div>
+            <div class="card" style="margin-bottom:0">
+              <select id="court-preset-select" class="preset-select" onchange="applyCourtPreset(this.value)">
+                <option value="custom" ${courtSettings.preset === 'custom' ? 'selected' : ''}>Custom</option>
+                ${Object.entries(courtPresets).map(([key, p]) => `<option value="${key}" ${courtSettings.preset === key ? 'selected' : ''}>${p.label}</option>`).join('')}
+              </select>
+            </div>
           </div>
-          <input type="range" min="220" max="260" value="243" step="1" style="width:100%"
-            oninput="document.getElementById('net-val').textContent=this.value+' cm'; updateCourtBtn()">
-        </div>
-        <div style="margin-top:4px;font-size:11px;color:var(--text-tertiary)">Standard men's: 243 cm · Women's: 224 cm</div>
-      </div>
-    </div>
-    <div class="section" style="margin-bottom:0">
-      <div class="section-label">Court dimensions</div>
-      <div class="card" style="margin-bottom:0">
-        <div style="margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-            <span style="font-size:13px;color:var(--text-secondary)">Length</span>
-            <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="len-val">18.0 m</strong>
+          <div class="section" style="margin-bottom:16px">
+            <div class="section-label">Net height</div>
+            <div class="card" style="margin-bottom:0">
+              <div style="margin-bottom:6px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                  <span style="font-size:13px;color:var(--text-secondary)">Height</span>
+                  <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="net-val">${courtSettings.net} cm</strong>
+                </div>
+                <input type="range" min="220" max="260" value="${courtSettings.net}" step="1" style="width:100%"
+                  oninput="document.getElementById('net-val').textContent=this.value+' cm'; updateCourtBtn(); markCourtCustom(); saveCourtSettings()">
+              </div>
+              <div style="margin-top:4px;font-size:11px;color:var(--text-tertiary)">Standard men's: 243 cm · Women's: 224 cm</div>
+            </div>
           </div>
-          <input type="range" min="10" max="22" value="18" step="0.5" style="width:100%"
-            oninput="document.getElementById('len-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()">
-        </div>
-        <div>
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-            <span style="font-size:13px;color:var(--text-secondary)">Width</span>
-            <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="wid-val">9.0 m</strong>
-          </div>
-          <input type="range" min="5" max="12" value="9" step="0.5" style="width:100%"
-            oninput="document.getElementById('wid-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn()">
-        </div>
-      </div>
-    </div>`,
+          <div class="section" style="margin-bottom:0">
+            <div class="section-label">Court dimensions</div>
+            <div class="card" style="margin-bottom:0">
+              <div style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                  <span style="font-size:13px;color:var(--text-secondary)">Length</span>
+                  <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="len-val">${courtSettings.len.toFixed(1)} m</strong>
+                </div>
+                <input type="range" min="10" max="22" value="${courtSettings.len}" step="0.5" style="width:100%"
+                  oninput="document.getElementById('len-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn(); markCourtCustom(); saveCourtSettings()">
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+                  <span style="font-size:13px;color:var(--text-secondary)">Width</span>
+                  <strong style="font-size:14px;font-weight:500;color:var(--text-primary)" id="wid-val">${courtSettings.wid.toFixed(1)} m</strong>
+                </div>
+                <input type="range" min="5" max="12" value="${courtSettings.wid}" step="0.5" style="width:100%"
+                  oninput="document.getElementById('wid-val').textContent=parseFloat(this.value).toFixed(1)+' m'; updateCourtBtn(); markCourtCustom(); saveCourtSettings()">
+              </div>
+            </div>
+          </div>`,
 
         advanced: () => `
-    <div class="section" style="margin-top:8px">
-      <div class="section-label">Manual control</div>
-      <div class="card">
-        <div class="vert-sliders">
-          <div class="vert-slider-col">
-            <span class="vert-slider-label">Angle</span>
-            <span class="vert-slider-val" id="dev-ang-val">5°</span>
-            <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
-            <div class="vert-slider-track">
-              <input type="range" id="dev-ang-range" class="vertical" min="5" max="85" value="5" step="1"
-                oninput="onAdvancedAngleInput(this.value)" onchange="onAdvancedAngleChange(this.value)">
+          <div class="section" style="margin-top:8px">
+            <div class="section-label">Manual control</div>
+            <div class="card">
+              <div class="vert-sliders">
+                <div class="vert-slider-col">
+                  <span class="vert-slider-label">Angle</span>
+                  <span class="vert-slider-val" id="dev-ang-val">5°</span>
+                  <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
+                  <div class="vert-slider-track">
+                    <input type="range" id="dev-ang-range" class="vertical" min="5" max="85" value="5" step="1"
+                      oninput="onAdvancedAngleInput(this.value)" onchange="onAdvancedAngleChange(this.value)">
+                  </div>
+                  <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
+                  <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
+                </div>
+                <div class="vert-slider-col">
+                  <span class="vert-slider-label">Speed</span>
+                  <span class="vert-slider-val" id="dev-spd-val">0 %</span>
+                  <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
+                  <div class="vert-slider-track">
+                    <input type="range" id="dev-spd-range" class="vertical" min="0" max="100" value="0" step="1"
+                      oninput="onAdvancedSpeedInput(this.value)" onchange="onAdvancedSpeedChange(this.value)">
+                  </div>
+                  <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
+                  <span style="font-size:11px;color:var(--text-tertiary)">0 – 100%</span>
+                </div>
+              </div>
             </div>
-            <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
-            <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
           </div>
-          <div class="vert-slider-col">
-            <span class="vert-slider-label">Speed</span>
-            <span class="vert-slider-val" id="dev-spd-val">0 %</span>
-            <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
-            <div class="vert-slider-track">
-              <input type="range" id="dev-spd-range" class="vertical" min="0" max="100" value="0" step="1"
-                oninput="onAdvancedSpeedInput(this.value)" onchange="onAdvancedSpeedChange(this.value)">
+          <div class="section">
+            <div class="section-label">Hopper</div>
+            <div class="hopper-controls">
+              <button class="hopper-btn" id="hopper-toggle-btn" onclick="toggleHopper()">Hopper Off</button>
+              <button class="hopper-btn" id="hopper-pulse-btn" onclick="pulseHopper(this)">Hopper Pulse</button>
             </div>
-            <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
-            <span style="font-size:11px;color:var(--text-tertiary)">0 – 100%</span>
           </div>
-        </div>
-      </div>
-    </div>
-    <div class="section">
-      <div class="section-label">Hopper</div>
-      <div class="hopper-controls">
-        <button class="hopper-btn" id="hopper-toggle-btn" onclick="toggleHopper()">Hopper Off</button>
-        <button class="hopper-btn" id="hopper-pulse-btn" onclick="pulseHopper(this)">Hopper Pulse</button>
-      </div>
-    </div>
-    <div class="section">
-      <div class="section-label">Live telemetry</div>
-      <div class="card">
-        <div class="dev-row"><span class="dev-label">Flywheel</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-l" style="width:74%"></div></div><span class="dev-val" id="fw-l-v">3700 rpm</span></div>
-      </div>
-    </div>
-    <div class="section">
-      <div class="section-label">Launch</div>
-      <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
-    </div>`,
+          <div class="section">
+            <div class="section-label">Live telemetry</div>
+            <div class="card">
+              <div class="dev-row"><span class="dev-label">Flywheel</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-l" style="width:74%"></div></div><span class="dev-val" id="fw-l-v">3700 rpm</span></div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-label">Launch</div>
+            <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+          </div>`,
 
         launch: () => `
-    <div class="section" style="margin-top:8px">
-      <div class="section-label">Position</div>
-      <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
-      <div class="court-summary-card">
-        <div class="court-summary-rows">
-          <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">243 cm</span></div>
-          <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">18.0 m × 9.0 m</span></div>
-        </div>
-      </div>
-    </div>
-    <div class="section">
-      <div class="section-label">Set Slots</div>
-      <div class="slots-with-playback">
-        <div class="save-slots slots-narrow">${slotsHTML(true)}</div>
-        ${renderPlaybackControls(true)}
-      </div>
-    </div>
-    <div class="section">
-      <div class="section-label">Launch</div>
-      <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
-    </div>`,
+          <div class="section" style="margin-top:8px">
+            <div class="section-label">Position</div>
+            <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
+            <div class="court-summary-card">
+              <div class="court-summary-rows">
+                <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">${courtSettings.net} cm</span></div>
+                <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">${courtSettings.len.toFixed(1)} m × ${courtSettings.wid.toFixed(1)} m</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-label">Set Slots</div>
+            <div class="slots-with-playback">
+              <div class="save-slots slots-narrow">${slotsHTML(true)}</div>
+              ${renderPlaybackControls(true)}
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-label">Launch</div>
+            <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+          </div>`,
 
         single_shot: () => `
-    <div class="section" style="margin-top:8px">
-      <div class="section-label">Position</div>
-      <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
-      <div class="court-summary-card">
-        <div class="court-summary-rows">
-          <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">243 cm</span></div>
-          <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">18.0 m × 9.0 m</span></div>
-        </div>
-      </div>
-    </div>
-    <div class="section">
-      <div class="section-label">Set Slots</div>
-      <div class="save-slots">${slotsHTML(true, 'single_shot')}</div>
-    </div>
-    <div class="section">
-      <div class="section-label">Launch</div>
-      <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
-    </div>`
+          <div class="section" style="margin-top:8px">
+            <div class="section-label">Position</div>
+            <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
+            <div class="court-summary-card">
+              <div class="court-summary-rows">
+                <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">${courtSettings.net} cm</span></div>
+                <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">${courtSettings.len.toFixed(1)} m × ${courtSettings.wid.toFixed(1)} m</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-label">Set Slots</div>
+            <div class="save-slots">${slotsHTML(true, 'single_shot')}</div>
+          </div>
+          <div class="section">
+            <div class="section-label">Launch</div>
+            <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+          </div>`
       };
 
       function updateCourtBtn() {
@@ -616,6 +634,47 @@
         const courtLaunch = document.getElementById('sum-court');
         if (netLaunch) netLaunch.textContent = netTxt;
         if (courtLaunch) courtLaunch.textContent = courtTxt;
+      }
+
+      function applyCourtPreset(key) {
+        const preset = courtPresets[key];
+        if (!preset) return;
+
+        const netRange = document.getElementById('net-val').closest('.card').querySelector('input[type="range"]');
+        const lenCard = document.getElementById('len-val').closest('.card');
+        const lenRange = lenCard.querySelectorAll('input[type="range"]')[0];
+        const widRange = lenCard.querySelectorAll('input[type="range"]')[1];
+
+        netRange.value = preset.net;
+        lenRange.value = preset.len;
+        widRange.value = preset.wid;
+
+        document.getElementById('net-val').textContent = preset.net + ' cm';
+        document.getElementById('len-val').textContent = preset.len.toFixed(1) + ' m';
+        document.getElementById('wid-val').textContent = preset.wid.toFixed(1) + ' m';
+
+        updateCourtBtn();
+        saveCourtSettings();
+      }
+
+      function markCourtCustom() {
+        const select = document.getElementById('court-preset-select');
+        if (select) select.value = 'custom';
+      }
+
+      function saveCourtSettings() {
+        const netEl = document.getElementById('net-val');
+        const lenEl = document.getElementById('len-val');
+        const widEl = document.getElementById('wid-val');
+        const presetEl = document.getElementById('court-preset-select');
+        if (!netEl || !lenEl || !widEl) return;
+
+        courtSettings = {
+          net: parseInt(netEl.textContent, 10),
+          len: parseFloat(lenEl.textContent),
+          wid: parseFloat(widEl.textContent),
+          preset: presetEl ? presetEl.value : 'custom',
+        };
       }
 
       function getCourtSummary() {
