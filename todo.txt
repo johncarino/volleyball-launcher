@@ -22,6 +22,7 @@ AESTHETIC
 
 CLEANUP
 - Remove any unused code
+- Remove gesture_ui.js, machine_control.js, page_control.js
 
 beaglebone/mnt/remote/jp/volleyball_launcher/server/
 npm start
