@@ -7,12 +7,48 @@
 
 #include <napi.h>
 #include <iostream>
+#include <atomic>
 
 extern "C" {
 #include "../src/include/operation.h"
 }
 
 using namespace Napi;
+
+// Guards against overlapping tilt operations. tilt_signal() mutates shared
+// hardware state (DAC, motor driver, curr_tilt_angle), so only one tilt may
+// run at a time. Set true when a TiltWorker is queued, cleared when it finishes.
+static std::atomic<bool> g_tiltInProgress(false);
+
+// Runs the blocking tilt_signal() feedback loop on a libuv worker thread so it
+// no longer freezes Node's event loop (telemetry and other socket handlers
+// keep running while the actuator moves).
+class TiltWorker : public AsyncWorker {
+public:
+    TiltWorker(Napi::Env env, float angle)
+        : AsyncWorker(env, "TiltWorker"), angle_(angle) {}
+
+    ~TiltWorker() override {}
+
+    // Executed on a worker thread -- safe to block here.
+    void Execute() override {
+        tilt_signal(angle_);
+    }
+
+    // Back on the main thread once the tilt returns.
+    void OnOK() override {
+        std::cout << "[operation] tilt signal complete: " << angle_ << std::endl;
+        g_tiltInProgress.store(false);
+    }
+
+    void OnError(const Error& e) override {
+        std::cerr << "[operation] tilt worker error: " << e.Message() << std::endl;
+        g_tiltInProgress.store(false);
+    }
+
+private:
+    float angle_;
+};
 
 // --- operationInit() ---
 Value operationInit(const CallbackInfo& info) {
@@ -39,14 +75,28 @@ Value homingSequence(const CallbackInfo& info) {
 }
 
 // --- tiltSignal(angle) ---
+// Non-blocking: queues the tilt feedback loop on a worker thread and returns
+// immediately so the Node event loop (telemetry, sockets) stays responsive.
 Value tiltSignal(const CallbackInfo& info) {
     Env env = info.Env();
     if (info.Length() < 1 || !info[0].IsNumber()) {
         TypeError::New(env, "tiltSignal expects a number").ThrowAsJavaScriptException();
         return env.Null();
     }
-    tilt_signal(info[0].As<Number>().FloatValue());
-    std::cout << "[operation] tilt signal sent: " << info[0].As<Number>().FloatValue() << std::endl;
+    float angle = info[0].As<Number>().FloatValue();
+
+    bool expected = false;
+    if (!g_tiltInProgress.compare_exchange_strong(expected, true)) {
+        std::cout << "[operation] tiltSignal ignored (angle=" << angle
+                  << "): a tilt is already in progress." << std::endl;
+        return env.Undefined();
+    }
+
+    std::cout << "[operation] tiltSignal received (angle=" << angle
+              << "); running tilt asynchronously..." << std::endl;
+
+    TiltWorker* worker = new TiltWorker(env, angle);
+    worker->Queue();
     return env.Undefined();
 }
 

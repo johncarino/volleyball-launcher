@@ -23,6 +23,11 @@
 
 #define FILTER_SIZE 10
 
+/* Transient I2C failures (EREMOTEIO) are common when the actuator motor is
+ * switching on the shared bus. Retry the transfer a few times before failing. */
+#define I2C_MAX_RETRIES 5
+#define I2C_RETRY_DELAY_US 1000
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -43,24 +48,29 @@ static int write_reg(int fd, uint8_t reg, uint8_t value)
 {
     uint8_t data[2] = {reg, value};
 
-    if (write(fd, data, 2) != 2) {
-        return -1;
+    for (int attempt = 0; attempt < I2C_MAX_RETRIES; attempt++) {
+        if (write(fd, data, 2) == 2) {
+            return 0;
+        }
+
+        usleep(I2C_RETRY_DELAY_US);
     }
 
-    return 0;
+    return -1;
 }
 
 static int read_regs(int fd, uint8_t reg, uint8_t *buffer, size_t length)
 {
-    if (write(fd, &reg, 1) != 1) {
-        return -1;
+    for (int attempt = 0; attempt < I2C_MAX_RETRIES; attempt++) {
+        if (write(fd, &reg, 1) == 1 &&
+            read(fd, buffer, length) == (ssize_t)length) {
+            return 0;
+        }
+
+        usleep(I2C_RETRY_DELAY_US);
     }
 
-    if (read(fd, buffer, length) != (ssize_t)length) {
-        return -1;
-    }
-
-    return 0;
+    return -1;
 }
 
 static int16_t to_int16(uint8_t high, uint8_t low)

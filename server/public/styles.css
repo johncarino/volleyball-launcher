@@ -16,6 +16,7 @@
   --blue: #185FA5;
   --green: #1a7a3a;
   --red: #b52a2a;
+  --amber: #c98a00;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -97,6 +98,13 @@ body {
   min-width: 0;
 }
 .topbar h1 { font-size: 18px; font-weight: 500; color: var(--text-primary); }
+
+.topbar .conn {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--text-success);
+  flex-shrink: 0;
+}
+.topbar .conn.disconnected { color: var(--text-danger); }
 
 .back-btn {
   width: 32px; height: 32px; border-radius: 50%;
@@ -231,7 +239,16 @@ body {
 }
 .op-btn.start { background: var(--green); color: #fff; padding: 40px 0; }
 .op-btn.stop  { background: var(--red);   color: #fff; padding: 40px 0; }
+.op-btn.confirm { background: var(--blue); color: #fff; padding: 40px 0; }
+.op-btn.needs-set { background: var(--amber); color: #fff; animation: op-shake 0.4s ease-in-out; }
 .op-btn.continue-style { background: var(--blue); color: #fff; }
+@keyframes op-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
 .op-btn:disabled { opacity: 0.45; cursor: default; }
 
 .statusbar-right { display: flex; align-items: center; gap: 10px; }

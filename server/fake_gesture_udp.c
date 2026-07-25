@@ -6,7 +6,10 @@
 // handful of named gestures so you can verify the web UI without a camera.
 //
 // Wire protocol (matches m2demo / gesture_server.js):
-//   "gesture <count> <thumb> <index> <middle> <ring> <pinky> <NAME>"
+//   "hands <n>" then, per hand, " <label> <count> <t> <i> <m> <r> <p> <NAME>"
+// where <label> is R/L/U (right/left/unknown). This tool emits a single
+// unknown-handed gesture per frame, which the backend treats as the signing
+// hand so the web UI updates without a camera.
 //
 // Build:  gcc -O2 -Wall -Wextra -o fake_gesture_udp fake_gesture_udp.c
 // Run:    ./fake_gesture_udp        (sends to 127.0.0.1:12345)
@@ -72,7 +75,7 @@ int main(int argc, char **argv) {
     for (;;) {
         const Gesture *g = &kGestures[idx];
         char msg[128];
-        snprintf(msg, sizeof(msg), "gesture %d %d %d %d %d %d %s",
+        snprintf(msg, sizeof(msg), "hands 1 U %d %d %d %d %d %d %s",
                  g->count, g->fingers[0], g->fingers[1], g->fingers[2],
                  g->fingers[3], g->fingers[4], g->name);
 

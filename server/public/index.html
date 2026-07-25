@@ -15,6 +15,10 @@
     <div class="topbar" id="topbar">
       <div class="topbar-left" id="topbar-left">
       </div>
+      <span class="conn" id="conn-status">
+        <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
+        <span id="conn-text">AVSS connected</span>
+      </span>
       <button class="power-btn" onclick="powerOff()" aria-label="Power off">
         <span>Power Off</span>
         <i class="ti ti-power" aria-hidden="true"></i>
@@ -119,8 +123,10 @@
 
       if (machineSocket) {
         machineSocket.on('connect', () => {
+          setConnStatus(true);
           machineSocket.emit('page-loaded');
         });
+        machineSocket.on('disconnect', () => { setConnStatus(false); });
 
         // ---- Gesture recogniser ----
         machineSocket.on('gesture-update', (data) => { renderGesture(data); handleLaunchStartGesture(data); });
@@ -131,6 +137,22 @@
         machineSocket.on('state-reply', (state) => { setGestureRunning(state === 'RUNNING'); });
         machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); renderGesture(null); });
         machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); });
+
+        // ---- Live telemetry (real tachometer RPM) ----
+        machineSocket.on('telemetry', (data) => { renderTelemetry(data); });
+
+        // ---- Server shutdown ----
+        machineSocket.on('server-shutdown', () => { showShuttingDown(); });
+      }
+
+      // Update the "AVSS connected/disconnected" indicator in the top bar.
+      function setConnStatus(connected) {
+        const wrap = document.getElementById('conn-status');
+        const text = document.getElementById('conn-text');
+        const icon = document.getElementById('conn-icon');
+        if (wrap) wrap.classList.toggle('disconnected', !connected);
+        if (text) text.textContent = connected ? 'AVSS connected' : 'AVSS disconnected';
+        if (icon) icon.className = 'ti ' + (connected ? 'ti-wifi' : 'ti-wifi-off');
       }
 
       function onAdvancedAngleInput(value) {
@@ -213,6 +235,9 @@
       // the OPEN_PALM gesture held briefly to avoid firing on a momentary/false
       // detection.
       const LAUNCH_GESTURE_HOLD_MS = 600;
+
+      // How long the "Select a set first" warning stays on the Start button.
+      const SELECT_SET_HINT_MS = 500;
 
       function armLaunchGesture() {
         window._launchGestureArmed = true;
@@ -411,8 +436,22 @@
       }
 
       function powerOff() {
-        if (!confirm('Power off the launcher?')) return;
-        //emitMachine('powerOff');
+        if (!confirm('Power off the launcher? The web app will stop and all motors will be stopped and freed. The program must be restarted on the device.')) return;
+        // Trigger the software interrupt (emergency abort) first so any in-progress
+        // motor operation stops immediately and the motors are freed, then ask the
+        // server to shut down. Show a shutting-down overlay while it exits.
+        emitMachine('requestInterrupt');
+        emitMachine('quit-server');
+        showShuttingDown();
+      }
+
+      function showShuttingDown() {
+        if (document.getElementById('shutdown-overlay')) return;
+        const overlay = document.createElement('div');
+        overlay.id = 'shutdown-overlay';
+        overlay.className = 'shutdown-overlay';
+        overlay.innerHTML = '<div class="shutdown-box"><i class="ti ti-power" aria-hidden="true"></i><div>Server is shutting down\u2026</div></div>';
+        document.body.appendChild(overlay);
       }
 
       function courtPickerHTML(readonly = false) {
@@ -892,7 +931,7 @@
           </div>
           <div class="section">
             <div class="section-label">Launch</div>
-            <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+            <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
           </div>`,
 
         single_shot: () => `
@@ -912,7 +951,7 @@
           </div>
           <div class="section">
             <div class="section-label">Launch</div>
-            <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+            <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
           </div>`
       };
 
@@ -1182,14 +1221,37 @@
       function startRunSequence() {
         runQueue = buildRunQueue();
         if (runQueue.length === 0) {
-          console.warn('No enabled sets to run');
-          stopRunSequence();
+          // Nothing selected to run: don't emit anything, just flag it on the button
+          // (shake + yellow "Select a set first") so the requirement is obvious.
+          console.warn('No enabled sets to run — select a set slot first');
+          isRunning = false;
+          flashSelectSetNeeded();
           return;
         }
         runIndex = 0;
         isRunning = true;
         emitMachine('resumeMotors');
         runNextInQueue();
+      }
+
+      // Nudge the user when Start is pressed with no set selected: reset the button
+      // to its Start look, then shake it, turn it yellow, and briefly show a
+      // "Select a set first" message before restoring the normal label.
+      function flashSelectSetNeeded() {
+        const btn = document.getElementById('launch-main-btn');
+        if (!btn) return;
+        btn.classList.remove('stop');
+        btn.classList.add('start');
+        btn.innerHTML = '<i class="ti ti-alert-triangle" aria-hidden="true"></i> Select a set first';
+        // Remove/re-add so the shake replays even on rapid repeat presses.
+        btn.classList.remove('needs-set');
+        void btn.offsetWidth;
+        btn.classList.add('needs-set');
+        clearTimeout(window._needsSetTimer);
+        window._needsSetTimer = setTimeout(() => {
+          btn.classList.remove('needs-set');
+          btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+        }, SELECT_SET_HINT_MS);
       }
 
       function runNextInQueue() {
@@ -1320,6 +1382,17 @@
         refreshCourtPicker();
       }
 
+      // Single Shot / Sequence: first press confirms the selection and turns the
+      // camera on to watch for the start gesture; the button then becomes the normal
+      // Start/Stop toggle (also triggerable by the open-palm start gesture).
+      function confirmRun(btn) {
+        armLaunchGesture();
+        btn.classList.remove('confirm');
+        btn.classList.add('start');
+        btn.setAttribute('onclick', 'toggleLaunch(this)');
+        btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+      }
+
       function toggleLaunch(btn) {
         if (window._activeMode === 'launch' || window._activeMode === 'single_shot') {
           if (isRunning) {
@@ -1360,7 +1433,6 @@
           </div>`;
         attachModeTabListeners();
         setMode('single_shot');
-        armLaunchGesture();
       }
 
       function homeTabsHTML() {
@@ -1428,6 +1500,11 @@
         if (mode === 'launch' || mode === 'single_shot') {
           syncLaunchSummary();
         }
+        // Camera/gesture arming: both run modes stay off until the user presses
+        // Confirm on the launch button (see confirmRun).
+        if (mode === 'launch' || mode === 'single_shot') {
+          disarmLaunchGesture();
+        }
         if (mode === 'gesture') {
           syncGestureControlUI();
         }
@@ -1448,16 +1525,25 @@
         }
       }
 
+      // Full-scale RPM used to scale the flywheel bar width.
+      const FW_MAX_RPM = 3700;
+
+      function renderTelemetry(data) {
+        if (!data) return;
+        const rpm = Math.max(0, Math.round(Number(data.rpm) || 0));
+        const fwl = document.getElementById('fw-l');
+        const fwv = document.getElementById('fw-l-v');
+        if (fwv) fwv.textContent = rpm + ' rpm';
+        if (fwl) {
+          const pct = Math.max(0, Math.min(100, (rpm / FW_MAX_RPM) * 100));
+          fwl.style.width = pct.toFixed(0) + '%';
+        }
+      }
+
       function startTelemetry() {
+        // Real telemetry is pushed by the server via the 'telemetry' event;
+        // stop any legacy simulated interval that may still be running.
         clearInterval(window._telem);
-        window._telem = setInterval(() => {
-          const fwl = document.getElementById('fw-l');
-          if (!fwl) return clearInterval(window._telem);
-          const jitter = v => Math.max(0, Math.min(100, v + (Math.random() - 0.5) * 4));
-          const lPct = jitter(74);
-          fwl.style.width = lPct.toFixed(0) + '%';
-          document.getElementById('fw-l-v').textContent = Math.round(lPct * 40) + ' rpm';
-        }, 800);
       }
 
       document.getElementById('topbar-left').innerHTML = homeTabsHTML();

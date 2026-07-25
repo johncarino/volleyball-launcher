@@ -148,13 +148,42 @@ exports.listen = function(server) {
 
 		socket.on('advanced-enter', function() {
 			initOperation(socket, 'advanced-enter');
+			startTelemetry(socket);
 		});
 
 		socket.on('advanced-leave', function() {
+			stopTelemetry(socket);
 			cleanupOperation(socket, 'advanced-leave');
+		});
+
+		socket.on('disconnect', function() {
+			stopTelemetry(socket);
 		});
 	});
 };
+
+// ---- Live telemetry (real tachometer RPM pushed to the Manual tab) ---------
+var TELEMETRY_INTERVAL_MS = 500;
+
+function startTelemetry(socket) {
+	if (!socket || socket._telemetryTimer) return;
+	socket._telemetryTimer = setInterval(function() {
+		if (!operationReady) return;
+		try {
+			var rpm = operation.getTachReading();
+			socket.emit('telemetry', { rpm: rpm });
+		} catch (e) {
+			// Transient read errors are ignored; next tick will retry.
+		}
+	}, TELEMETRY_INTERVAL_MS);
+}
+
+function stopTelemetry(socket) {
+	if (socket && socket._telemetryTimer) {
+		clearInterval(socket._telemetryTimer);
+		socket._telemetryTimer = null;
+	}
+}
 
 function ensureOperationReady(socket, commandName) {
 	if (operationReady) {
