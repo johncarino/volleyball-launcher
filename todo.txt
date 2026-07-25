@@ -1,5 +1,6 @@
 PRIORITY
 - Merge gesture into UI
+- Change court settings to be "Mens" "Womens" "Junior" etc
 
 SECONDARY
 - Fill in alignment modal
@@ -11,7 +12,6 @@ FUNCTIONAL
 
 CONSIDERATION
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
-- Remove court dimensions from launch screen
 - Move JS to separate file
 
 AESTHETIC
@@ -33,13 +33,3 @@ advanced mode->pulse hopper
 npm run build
 
 tb6600_test reverse
-
-Daniel feedback:
-Court calibration just make it its own tab and more obvious (4th menu)
-
-Option 1:
-Configure, Court, Single Shot, Sequence, Manual
-
-Option 2:
-Configure, Court
-Single Shot, Sequence, Manual

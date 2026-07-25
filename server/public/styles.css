@@ -375,21 +375,6 @@ input[type=range] { accent-color: var(--blue); }
   flex: 1;
   min-width: 0;
 }
-.edit-affordance {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 14px;
-  cursor: pointer;
-  pointer-events: none;
-}
 
 .modal-overlay {
   position: absolute; inset: 0;
