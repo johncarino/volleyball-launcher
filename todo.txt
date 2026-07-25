@@ -1,5 +1,4 @@
 PRIORITY
-- Merge gesture into UI
 
 SECONDARY
 - Fill in alignment modal
