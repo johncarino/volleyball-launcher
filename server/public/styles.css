@@ -347,6 +347,7 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
+  min-height: 256px;
 }
 .slot {
   border: 0.5px solid var(--border-secondary);
@@ -522,21 +523,29 @@ input[type=range] { accent-color: var(--blue); }
   display: flex; align-items: center; justify-content: center;
   gap: 32px; padding: 16px 0 4px;
 }
+
 .pb-btn {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  background: none; border: none; cursor: pointer; padding: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: transparent;
+  border: 0.5px solid var(--border-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer; padding: 8px 6px;
   font-family: inherit; position: relative;
+  width: 52px; height: 64px;
+  transition: all 0.15s;
 }
 .pb-btn-icon {
-  width: 44px; height: 44px; border-radius: 50%;
-  border: 0.5px solid var(--border-secondary);
-  display: flex; align-items: center; justify-content: center;
   font-size: 20px; color: var(--text-tertiary);
-  transition: all 0.15s; background: transparent;
+  transition: color 0.15s;
 }
-.pb-btn.active .pb-btn-icon { color: var(--blue); border-color: var(--blue); background: rgba(24,95,165,0.08); }
+.pb-btn.active {
+  background: rgba(24,95,165,0.08);
+  border-color: var(--blue);
+}
+.pb-btn.active .pb-btn-icon { color: var(--blue); }
 .pb-btn-label { font-size: 11px; color: var(--text-tertiary); transition: color 0.15s; }
 .pb-btn.active .pb-btn-label { color: var(--blue); }
+
 .repeat-badge {
   position: absolute; top: -3px; right: -3px;
   width: 14px; height: 14px; border-radius: 50%;

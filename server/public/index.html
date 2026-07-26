@@ -1400,7 +1400,6 @@
       // failed) — roll back the optimistic slot update so the UI doesn't claim
       // a slot is saved when it isn't.
       function onMachineError(message) {
-        /*
         console.warn('[machine-error]', message);
         if (pendingSlotSave) {
           const { machineKey, n, previousSlot, previousEnabled } = pendingSlotSave;
@@ -1413,7 +1412,7 @@
           pendingSlotSave = null;
           refreshSlots();
           refreshCourtPicker();
-        }*/
+        }
         showGestureError(typeof message === 'string' ? message : 'Machine error');
       }
 

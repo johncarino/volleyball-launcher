@@ -1,6 +1,4 @@
 PRIORITY
-- Change "Random" and "Repeat" button styling
-- Uncomment error code
 
 SECONDARY
 - Fill in alignment modal
@@ -10,7 +8,7 @@ FUNCTIONAL
 - Shot variance variable
 
 CONSIDERATION
-- Make decision on "Connected" icon
+- Make decision on "Connected" icon (Remove, Reimplement status bar)
 - Confirm button
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Change to light mode with company colours
