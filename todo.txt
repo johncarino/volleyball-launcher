@@ -1,22 +1,23 @@
 PRIORITY
+- Change "Random" and "Repeat" button styling
+- Uncomment error code
 
 SECONDARY
 - Fill in alignment modal
 
 FUNCTIONAL
 - Make launch menu set selection more intuitive
-- Power off button backend
 - Shot variance variable
 
 CONSIDERATION
+- Make decision on "Connected" icon
+- Confirm button
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
-- Move JS to separate file
+- Change to light mode with company colours
 
 AESTHETIC
 - Add finalized machine images
 - Change background colours to be better
-- Clean up target zone graphic
-- Change to light mode with company colours
 - Add company logo
 - Change set slot text
 

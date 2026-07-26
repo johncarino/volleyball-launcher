@@ -117,6 +117,10 @@
         return 'center'; // zone 3
       }
 
+      function machineHasSavedSlot(machineKey) {
+        return [1, 2, 3, 4].some(n => !!slots[machineKey] && !!slots[machineKey][n]);
+      }
+
       function emitMachine(eventName, value) {
         if (!machineSocket) return;
         machineSocket.emit(eventName, value);
@@ -491,42 +495,42 @@
           return 'images/front.jpg';
         }
         const mCircles = machineSpots.map(s => {
-          const active = mSel === s.id;
-          const ringStroke = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
-          const opacity = active ? 1 : (readonly ? 0 : 0.7);
-          const onclick = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
-          const cursor = readonly ? 'default' : 'pointer';
-          const rx = s.cx - machineRectW / 2;
-          const ry = s.cy - machineRectH / 2;
-          return `<g ${onclick} style="cursor:${cursor}">
-      <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
-      <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" preserveAspectRatio="xMidYMid slice" opacity="${opacity}" style="clip-path: inset(0 round 3px)"/>
-    </g>`;
-        }).join('');
+        const active = mSel === s.id;
+        const ringStroke = active ? '#185FA5' : (readonly ? 'transparent' : '#185FA5');
+        const opacity = active ? 1 : (readonly ? 0 : 0.7);
+        const onclick = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
+        const cursor = readonly ? 'default' : 'pointer';
+        const rx = s.cx - machineRectW / 2;
+        const ry = s.cy - machineRectH / 2;
+        return `<g ${onclick} style="cursor:${cursor}">
+          <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2.5" opacity="${active ? 1 : 0}" style="${active ? 'filter:drop-shadow(0 0 4px rgba(24,95,165,0.6))' : ''}"/>
+          <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" preserveAspectRatio="xMidYMid slice" opacity="${opacity}" style="clip-path: inset(0 round 3px)"/>
+        </g>`;
+      }).join('');
 
         const isMachineSelected = mSel !== null;
 
         const targetImgSize = 48; // width/height of the volleyball icon in SVG units
         const tCircles = targetSpots.map(s => {
-          const active = tSel === s.id;
-          const zSide = zoneSide(s.id);
-          const centerDisabled = mSel === 'C' && s.id === '3'; // Center machine can never target zone 3
-          const sideLocked = mSel === 'C' && !!lockedSide && !active && zSide !== 'center' && zSide !== lockedSide;
-          const disabled = centerDisabled || sideLocked;
-          const clickable = isMachineSelected && !readonly && !disabled;
-          const ringStroke = active ? '#1a7a3a' : (clickable ? '#1a7a3a' : 'transparent');
-          const opacity = active ? 1 : (disabled ? 0 : (clickable ? 0.75 : 0));
-          const lineOpacity = active ? 0.6 : (disabled ? 0 : (clickable ? 0.35 : 0));
-          const flashClass = (clickable && !tSel) ? 'selectable-flash' : '';
-          const onclick = clickable ? `onclick="selectTarget('${s.id}')"` : '';
-          const cursor = clickable ? 'pointer' : 'default';
-          const half = targetImgSize / 2;
-          return `<g ${onclick} style="cursor:${cursor}">
-          <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="${46 + baseOffset}" stroke="#1a7a3a" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
-          <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
+        const active = tSel === s.id;
+        const zSide = zoneSide(s.id);
+        const centerDisabled = mSel === 'C' && s.id === '3';
+        const sideLocked = mSel === 'C' && !!lockedSide && !active && zSide !== 'center' && zSide !== lockedSide;
+        const disabled = centerDisabled || sideLocked;
+        const clickable = isMachineSelected && !readonly && !disabled;
+        const ringStroke = active ? '#185FA5' : (clickable ? '#185FA5' : 'transparent');
+        const opacity = active ? 1 : (disabled ? 0 : (clickable ? 0.75 : 0));
+        const lineOpacity = active ? 0.6 : (disabled ? 0 : (clickable ? 0.35 : 0));
+        const flashClass = (clickable && !tSel) ? 'selectable-flash' : '';
+        const onclick = clickable ? `onclick="selectTarget('${s.id}')"` : '';
+        const cursor = clickable ? 'pointer' : 'default';
+        const half = targetImgSize / 2;
+        return `<g ${onclick} style="cursor:${cursor}">
+          <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="${46 + baseOffset}" stroke="#185FA5" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
+          <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="transparent" stroke="${ringStroke}" stroke-width="2.5" opacity="${active ? 1 : 0}" style="${active ? 'filter:drop-shadow(0 0 4px rgba(24,95,165,0.6))' : ''}"/>
           <image href="images/volleyball.png" x="${s.cx - half}" y="${s.cy - half}" width="${targetImgSize}" height="${targetImgSize}" opacity="${opacity}" class="${flashClass}"/>
         </g>`;
-        }).join('');
+      }).join('');
 
         let tempoArcs = '';
         if (mSel && tSel) {
@@ -569,8 +573,8 @@
           }).join('');
         }
 
-        // Determine the legend text
-        const dotsLegend = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#b52a2a;opacity:0.8"></span> Machine position <span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a7a3a;opacity:0.8"></span> Target zone</span>';
+        // Legend text
+        const dotsLegend = 'Continue to Launch';
 
         let legendText = 'Select a machine location';
         let legendClass = 'legend-text-select';
@@ -588,10 +592,10 @@
           legendClass = 'legend-text-select';
         } else if (mSel && tSel && tempoSelected && slotSaved && !readonly) {
           legendText = dotsLegend;
-          legendClass = '';
+          legendClass = 'legend-text-select';
         } else if (mSel && tSel && readonly) {
           legendText = dotsLegend;
-          legendClass = '';
+          legendClass = 'legend-text-select';
         }
 
         const showTempo = !readonly && mSel && tSel;
@@ -739,7 +743,6 @@
       const screens = {
         configure: () => `
           <div class="section" style="margin-top:8px">
-            <div class="section-label">Position</div>
             <div id="court-picker-wrap">${courtPickerHTML()}</div>
             <div class="tempo-attached" id="tempo-wrap">${tempoPillsHTML()}</div>
             <div class="court-summary-card">
@@ -918,7 +921,6 @@
 
         launch: () => `
           <div class="section" style="margin-top:8px">
-            <div class="section-label">Position</div>
             <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
             <div class="court-summary-card">
               <div class="court-summary-rows">
@@ -941,7 +943,6 @@
 
         single_shot: () => `
           <div class="section" style="margin-top:8px">
-            <div class="section-label">Position</div>
             <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
             <div class="court-summary-card">
               <div class="court-summary-rows">
@@ -1399,6 +1400,7 @@
       // failed) — roll back the optimistic slot update so the UI doesn't claim
       // a slot is saved when it isn't.
       function onMachineError(message) {
+        /*
         console.warn('[machine-error]', message);
         if (pendingSlotSave) {
           const { machineKey, n, previousSlot, previousEnabled } = pendingSlotSave;
@@ -1411,7 +1413,7 @@
           pendingSlotSave = null;
           refreshSlots();
           refreshCourtPicker();
-        }
+        }*/
         showGestureError(typeof message === 'string' ? message : 'Machine error');
       }
 
@@ -1529,8 +1531,20 @@
           emitMachine('advanced-leave');
         }
         if (previousMode === 'court_settings' && mode !== 'court_settings') {
-          updateCourtBtn(); // sync summaries with whatever was changed on the settings screen
+          updateCourtBtn();
         }
+
+        if (mode === 'launch' || mode === 'single_shot') {
+          if (!selectedMachine || !machineHasSavedSlot(selectedMachine)) {
+            selectedMachine = null;
+            selectedTarget = null;
+            selectedTempo = null;
+            tempoSelected = false;
+            slotSaved = false;
+            lockedSide = null;
+          }
+        }
+
         const appEl = document.querySelector('.app');
         if (appEl) {
           appEl.classList.toggle('mode-launch', mode === 'launch');
@@ -1549,10 +1563,6 @@
         }
         if (mode === 'launch' || mode === 'single_shot') {
           syncLaunchSummary();
-        }
-        // Camera/gesture arming: both run modes stay off until the user presses
-        // Confirm on the launch button (see confirmRun).
-        if (mode === 'launch' || mode === 'single_shot') {
           disarmLaunchGesture();
         }
         if (mode === 'gesture') {
