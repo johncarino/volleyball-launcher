@@ -12,9 +12,7 @@
 <body>
 
   <div class="app">
-    <div class="topbar" id="topbar">
-      <div class="topbar-left" id="topbar-left">
-      </div>
+    <div class="statusbar">
       <span class="conn" id="conn-status">
         <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
         <span id="conn-text">AVSS connected</span>
@@ -23,6 +21,11 @@
         <span>Power Off</span>
         <i class="ti ti-power" aria-hidden="true"></i>
       </button>
+    </div>
+
+    <div class="topbar" id="topbar">
+      <div class="topbar-left" id="topbar-left">
+      </div>
     </div>
 
     <div class="content" id="main-content"></div>
@@ -88,10 +91,8 @@
         mens: { net: 243, len: 18, wid: 9, label: "Men's" },
         womens: { net: 224, len: 18, wid: 9, label: "Women's" },
         junior: { net: 220, len: 16, wid: 8, label: 'Junior' },
-        beach: { net: 243, len: 16, wid: 8, label: 'Beach' },
-        grass: { net: 243, len: 18, wid: 9, label: 'Grass' },
       };
-      let courtSettings = { net: 243, len: 18, wid: 9, preset: 'custom' };
+      let courtSettings = { net: 243, len: 18, wid: 9, preset: 'mens' };
 
       function openAlignModal(id) {
         const img = document.getElementById('align-modal-img');
@@ -1498,6 +1499,7 @@
           <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
             <button class="modetab-header" role="tab" data-mode="single_shot">Single Shot</button>
             <button class="modetab-header" role="tab" data-mode="launch">Sequence</button>
+            <button class="modetab-header" role="tab" data-mode="gesture">Gesture</button>
           </div>`;
         attachModeTabListeners();
         setMode('single_shot');
@@ -1506,9 +1508,8 @@
       function homeTabsHTML() {
         return `<div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
             <button class="modetab-header" role="tab" data-mode="configure">Configure</button>
-            <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
             <button class="modetab-header" role="tab" data-mode="court_settings">Court Settings</button>
-            <button class="modetab-header" role="tab" data-mode="gesture">Gesture</button>
+            <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
           </div>`;
       }
 

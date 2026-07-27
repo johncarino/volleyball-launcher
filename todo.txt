@@ -2,6 +2,7 @@ PRIORITY
 
 SECONDARY
 - Fill in alignment modal
+- Change to light theme
 
 FUNCTIONAL
 - Make launch menu set selection more intuitive
