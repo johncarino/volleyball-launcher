@@ -1,24 +1,19 @@
 PRIORITY
-
-SECONDARY
 - Fill in alignment modal
 - Preselect most recently saved slot in single shot
 - Machine position appears after selecting set in center
 - Fix machine rotation in center
 - Change to light theme
 
-FUNCTIONAL
-- Make launch menu set selection more intuitive
-- Shot variance variable
-
-CONSIDERATION
-- Confirm button
-- further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
-
 AESTHETIC
 - Add finalized machine images
 - Change background colours to be better
 - Add company logo
+
+CONSIDERATION
+- Confirm button
+- further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
+- Shot variance variable
 
 CLEANUP
 - Remove any unused code
