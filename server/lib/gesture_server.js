@@ -115,7 +115,7 @@ var setApi = (function() {
 		return m;
 	} catch (e) {
 		console.warn('[set] Native addon not available (' + e.message + '). Set calls will be no-ops.');
-		return { saveSet: function(){} };
+		return { saveSet: function(){}, recalculateSets: function(){ return []; } };
 	}
 }());
 
@@ -391,6 +391,37 @@ function handleCommand(socket) {
 		} catch (e) {
 			console.log('[calibration] setCourtWidth failed: ' + e.message);
 			socket.emit('machine-error', 'Failed to set court width.');
+		}
+	});
+
+	// Sent once the user leaves the court settings tab: re-applies the
+	// (possibly just-changed) calibration and re-derives every already-saved
+	// set slot from it, since save_set() only snapshots values at save time
+	// and won't otherwise pick up a later calibration change.
+	socket.on('recalculateSets', function() {
+		console.log("Got recalculateSets command (court settings changed).");
+		try {
+			if (typeof setApi.setCalibration === 'function') {
+				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			}
+			var updatedSlots = (typeof setApi.recalculateSets === 'function') ? setApi.recalculateSets() : [];
+
+			// recalculateSets() only touches the native set_seq array directly;
+			// refresh the JS-side savedSets cache (used by setMachine) to match,
+			// since it was populated from saveSet()'s return value at save time
+			// and won't otherwise see this update.
+			if (Array.isArray(updatedSlots)) {
+				updatedSlots.forEach(function(slot) {
+					var key = slot.machine_position + '_' + slot.set_index;
+					savedSets[key] = slot;
+				});
+			}
+
+			console.log('[set] Recalculated ' + (Array.isArray(updatedSlots) ? updatedSlots.length : 0) + ' saved set slot(s) for new calibration.');
+			socket.emit('sets-recalculated', { updated: Array.isArray(updatedSlots) ? updatedSlots.length : 0 });
+		} catch (e) {
+			console.log('[set] recalculateSets failed: ' + e.message);
+			socket.emit('machine-error', 'Failed to recalculate saved sets.');
 		}
 	});
 

@@ -47,3 +47,44 @@ int save_set(int set_index, int mp, int tl, int t) {
 
     return 1;
 }
+
+// Refreshes every already-saved set slot from the current tilt_angle/
+// rpm_output/launch_speed/yaw_angle tables (see arc_calc.c). Those tables are
+// recomputed whenever calibration changes (net height / court dimensions),
+// but save_set() copies a snapshot into set_seq at save time, so previously
+// saved sets go stale unless re-derived. Call this after calibration changes
+// (e.g. once the user leaves the court settings tab) to bring every saved
+// slot back in sync with the new calibration.
+//
+// An empty/never-saved slot is identified by target_location == 0 (the
+// zero-initialized default; save_set() only ever stores 1-based locations),
+// so those are skipped. Slots that fail validation under the new calibration
+// (e.g. tilt angle or RPM now out of range) are left as-is with a warning,
+// matching save_set()'s existing failure behavior, since there's no better
+// value to fall back to without user input.
+//
+// Returns the number of slots successfully recalculated.
+int recalculate_saved_sets(void) {
+    int updated = 0;
+
+    for (int mp = 0; mp < NUM_MACHINE_POSITIONS; mp++) {
+        for (int set_index = 0; set_index < NUM_SETS; set_index++) {
+            set_specs_t *slot = &set_seq[mp][set_index];
+
+            if (slot->target_location == 0) {
+                continue; // never saved
+            }
+
+            int tl = slot->target_location;
+            int t = slot->tempo;
+
+            if (save_set(set_index, mp, tl, t)) {
+                updated++;
+            } else {
+                fprintf(stderr, "Warning: set %d (machine position %d) is no longer valid after the calibration change; it may need to be re-saved.\n", set_index, mp);
+            }
+        }
+    }
+
+    return updated;
+}

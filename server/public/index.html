@@ -147,6 +147,9 @@
         machineSocket.on('set-save-state', (state) => { onSetSaveState(state); });
         machineSocket.on('machine-error', (message) => { onMachineError(message); });
 
+        // ---- Court settings: existing saved sets recalculated after a calibration change ----
+        machineSocket.on('sets-recalculated', (data) => { console.log('[calibration] Saved sets recalculated:', data); });
+
         // ---- Live telemetry (real tachometer RPM) ----
         machineSocket.on('telemetry', (data) => { renderTelemetry(data); });
 
@@ -1021,6 +1024,20 @@
         };
       }
 
+      // Pushes the current courtSettings (net height / court dimensions) to the
+      // backend and asks it to recalculate every already-saved set slot against
+      // them. Called once when the user leaves the court settings tab, rather
+      // than on every slider input, since save_set() only snapshots values at
+      // save time and calibration changes wouldn't otherwise reach it (and
+      // recalculating on every input tick would be wasteful).
+      function commitCourtSettings() {
+        const netHeightM = courtSettings.net / 100;
+        emitMachine('setNetHeight', netHeightM);
+        emitMachine('setCourtLength', courtSettings.len);
+        emitMachine('setCourtWidth', courtSettings.wid);
+        emitMachine('recalculateSets');
+      }
+
       function getCourtSummary() {
         const net = document.getElementById('net-val');
         const len = document.getElementById('len-val');
@@ -1531,6 +1548,7 @@
         }
         if (previousMode === 'court_settings' && mode !== 'court_settings') {
           updateCourtBtn();
+          commitCourtSettings();
         }
 
         if (mode === 'launch' || mode === 'single_shot') {
