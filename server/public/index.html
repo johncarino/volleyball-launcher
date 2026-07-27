@@ -1365,9 +1365,9 @@
           return;
         }
         const machinePart = `Machine ${selectedMachine}`;
-        const zonePart = selectedTarget ? `Zone ${selectedTarget}` : null;
+        const zonePart = selectedTarget ? `Target ${selectedTarget}` : null;
         const tempoPart = `Tempo ${selectedTempo}`;
-        const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
+        const name = [zonePart, tempoPart].filter(Boolean).join(' ') || `Slot ${n}`;
 
         const previousSlot = slots[selectedMachine][n];
         const previousEnabled = slotEnabled[selectedMachine][n];

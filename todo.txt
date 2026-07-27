@@ -2,6 +2,8 @@ PRIORITY
 
 SECONDARY
 - Fill in alignment modal
+- Machine position appears after selecting set in center
+- Fix machine rotation in center
 - Change to light theme
 
 FUNCTIONAL
@@ -9,16 +11,13 @@ FUNCTIONAL
 - Shot variance variable
 
 CONSIDERATION
-- Make decision on "Connected" icon (Remove, Reimplement status bar)
 - Confirm button
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
-- Change to light mode with company colours
 
 AESTHETIC
 - Add finalized machine images
 - Change background colours to be better
 - Add company logo
-- Change set slot text
 
 CLEANUP
 - Remove any unused code
