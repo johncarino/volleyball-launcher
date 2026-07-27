@@ -2,6 +2,7 @@ PRIORITY
 
 SECONDARY
 - Fill in alignment modal
+- Preselect most recently saved slot in single shot
 - Machine position appears after selecting set in center
 - Fix machine rotation in center
 - Change to light theme
