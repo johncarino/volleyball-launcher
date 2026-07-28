@@ -84,7 +84,7 @@
       const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
       const targetNames = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4', T5: 'Zone 5' };
 
-      const alignImages = { L: 'images/left.jpg', C: 'images/front.jpg', R: 'images/right.jpg' };
+      const alignImages = { L: 'images/left.png', C: 'images/front.png', R: 'images/right.png' };
       const alignInstructions = {
         L: 'Placeholder instructions for aligning the machine at the LEFT position.',
         C: 'Placeholder instructions for aligning the machine at the CENTER position.',
@@ -494,25 +494,27 @@
 
         // Images for the machine - IMAGES ARE A PLACEHOLDER
         const machineRectW = 32;
-        const machineRectH = 74;
-        const machineImages = { L: 'images/left.jpg', R: 'images/right.jpg' };
+        const machineRectH = 96;
+        const machineAspect = { L: 548 / 902, C: 376 / 831, R: 523 / 858 }; // width/height ratios of images
+        const machineRectWFor = (id) => machineRectH * machineAspect[id];
+        const machineImages = { L: 'images/left.png', R: 'images/right.png' };
         function machineImageFor(id) {
           if (id !== 'C') return machineImages[id];
-          if (previewSide === 'left') return 'images/left.jpg';
-          if (previewSide === 'right') return 'images/right.jpg';
-          return 'images/front.jpg';
+          if (previewSide === 'left') return 'images/left.png';
+          if (previewSide === 'right') return 'images/right.png';
+          return 'images/front.png';
         }
         const mCircles = machineSpots.map(s => {
         const active = mSel === s.id;
         const ringStroke = active ? '#185FA5' : (readonly ? 'transparent' : '#185FA5');
-        const opacity = active ? 1 : (readonly ? 0 : 0.7);
         const onclick = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
         const cursor = readonly ? 'default' : 'pointer';
-        const rx = s.cx - machineRectW / 2;
+        const w = machineRectWFor(s.id);
+        const rx = s.cx - w / 2;
         const ry = s.cy - machineRectH / 2;
         return `<g ${onclick} style="cursor:${cursor}">
-          <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2.5" opacity="${active ? 1 : 0}" style="${active ? 'filter:drop-shadow(0 0 4px rgba(24,95,165,0.6))' : ''}"/>
-          <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" preserveAspectRatio="xMidYMid slice" opacity="${opacity}" style="clip-path: inset(0 round 3px)"/>
+          <rect x="${rx}" y="${ry}" width="${w}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2.5" opacity="${active ? 1 : 0}" style="${active ? 'filter:drop-shadow(0 0 4px rgba(24,95,165,0.6))' : ''}"/>
+          <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${w}" height="${machineRectH}" preserveAspectRatio="xMidYMid meet" style="clip-path: inset(0 round 3px)"/>
         </g>`;
       }).join('');
 

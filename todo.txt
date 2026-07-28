@@ -1,9 +1,9 @@
 PRIORITY
-- Fill in alignment modal
+- Fill in alignment modals
 - Machine position appears after selecting set in center
+- Change court dimensions to reflect presets
 
 AESTHETIC
-- Add finalized machine images
 - Change background colours to be better
 
 CONSIDERATION
