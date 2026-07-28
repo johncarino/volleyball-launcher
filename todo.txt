@@ -5,7 +5,6 @@ PRIORITY
 AESTHETIC
 - Add finalized machine images
 - Change background colours to be better
-- Add company logo
 
 CONSIDERATION
 - Confirm button

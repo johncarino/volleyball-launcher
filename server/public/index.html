@@ -13,14 +13,17 @@
 
   <div class="app">
     <div class="statusbar">
-      <span class="conn" id="conn-status">
-        <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
-        <span id="conn-text">AVSS connected</span>
-      </span>
-      <button class="power-btn" onclick="powerOff()" aria-label="Power off">
-        <span>Power Off</span>
-        <i class="ti ti-power" aria-hidden="true"></i>
-      </button>
+      <img src="images/logo.png" alt="AVSS logo" class="statusbar-logo">
+      <div class="statusbar-right">
+        <span class="conn" id="conn-status">
+          <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
+          <span id="conn-text">AVSS connected</span>
+        </span>
+        <button class="power-btn" onclick="powerOff()" aria-label="Power off">
+          <span>Power Off</span>
+          <i class="ti ti-power" aria-hidden="true"></i>
+        </button>
+      </div>
     </div>
 
     <div class="topbar" id="topbar">
@@ -159,13 +162,13 @@
         machineSocket.on('server-shutdown', () => { showShuttingDown(); });
       }
 
-      // Update the "AVSS connected/disconnected" indicator in the top bar.
+      // Update the "AVSS Connected/Disconnected" indicator in the top bar.
       function setConnStatus(connected) {
         const wrap = document.getElementById('conn-status');
         const text = document.getElementById('conn-text');
         const icon = document.getElementById('conn-icon');
         if (wrap) wrap.classList.toggle('disconnected', !connected);
-        if (text) text.textContent = connected ? 'AVSS connected' : 'AVSS disconnected';
+        if (text) text.textContent = connected ? 'AVSS Connected' : 'AVSS Disconnected';
         if (icon) icon.className = 'ti ' + (connected ? 'ti-wifi' : 'ti-wifi-off');
       }
 
