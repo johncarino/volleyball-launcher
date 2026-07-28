@@ -1,7 +1,6 @@
 PRIORITY
 - Fill in alignment modal
 - Machine position appears after selecting set in center
-- Fix machine rotation in center
 
 AESTHETIC
 - Add finalized machine images

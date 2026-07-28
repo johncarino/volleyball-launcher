@@ -59,6 +59,7 @@
       let tempoSelected = false; // Track if tempo has been selected
       let slotSaved = false; // whether the current machine/target/tempo combo has been saved to a slot
       let lockedSide = null; // 'left' | 'right' |
+      let previewSide = null; // 'left' | 'right' | null
       const alignShown = { L: false, C: false, R: false }; // whether the alignment modal has ever been shown for this machine
       const machineSocket = (typeof io !== 'undefined') ? io() : null;
       const slots = {
@@ -494,8 +495,8 @@
         const machineImages = { L: 'images/left.jpg', R: 'images/right.jpg' };
         function machineImageFor(id) {
           if (id !== 'C') return machineImages[id];
-          if (lockedSide === 'left') return 'images/left.jpg';
-          if (lockedSide === 'right') return 'images/right.jpg';
+          if (previewSide === 'left') return 'images/left.jpg';
+          if (previewSide === 'right') return 'images/right.jpg';
           return 'images/front.jpg';
         }
         const mCircles = machineSpots.map(s => {
@@ -669,11 +670,13 @@
           tempoSelected = true;
           slotSaved = true;
           lockedSide = (id === 'C') ? zoneSide(savedSlot.target) : null;
+          previewSide = lockedSide;
         } else {
           selectedTarget = null;
           tempoSelected = false;
           slotSaved = false;
           lockedSide = null;
+          previewSide = null;
         }
 
         refreshCourtPicker();
@@ -684,6 +687,10 @@
       function selectTarget(id) {
         selectedTarget = id;
         tempoSelected = selectedTempo !== null;
+        if (selectedMachine === 'C') {
+          const side = zoneSide(id);
+          previewSide = (side === 'left' || side === 'right') ? side : previewSide; // zone 3 (center) leaves it unchanged
+        }
         refreshCourtPicker();
         refreshTempo();
         refreshSlots();
@@ -1416,7 +1423,6 @@
       // failed) — roll back the optimistic slot update so the UI doesn't claim
       // a slot is saved when it isn't.
       function onMachineError(message) {
-        /*
         console.warn('[machine-error]', message);
         if (pendingSlotSave) {
           const { machineKey, n, previousSlot, previousEnabled } = pendingSlotSave;
@@ -1429,7 +1435,7 @@
           pendingSlotSave = null;
           refreshSlots();
           refreshCourtPicker();
-        }*/
+        }
         showGestureError(typeof message === 'string' ? message : 'Machine error');
       }
 
