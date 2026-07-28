@@ -13,14 +13,17 @@
 
   <div class="app">
     <div class="statusbar">
-      <span class="conn" id="conn-status">
-        <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
-        <span id="conn-text">AVSS connected</span>
-      </span>
-      <button class="power-btn" onclick="powerOff()" aria-label="Power off">
-        <span>Power Off</span>
-        <i class="ti ti-power" aria-hidden="true"></i>
-      </button>
+      <img src="images/logo.png" alt="AVSS logo" class="statusbar-logo">
+      <div class="statusbar-right">
+        <span class="conn" id="conn-status">
+          <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
+          <span id="conn-text">AVSS connected</span>
+        </span>
+        <button class="power-btn" onclick="powerOff()" aria-label="Power off">
+          <span>Power Off</span>
+          <i class="ti ti-power" aria-hidden="true"></i>
+        </button>
+      </div>
     </div>
 
     <div class="topbar" id="topbar">
@@ -59,6 +62,7 @@
       let tempoSelected = false; // Track if tempo has been selected
       let slotSaved = false; // whether the current machine/target/tempo combo has been saved to a slot
       let lockedSide = null; // 'left' | 'right' |
+      let previewSide = null; // 'left' | 'right' | null
       const alignShown = { L: false, C: false, R: false }; // whether the alignment modal has ever been shown for this machine
       const machineSocket = (typeof io !== 'undefined') ? io() : null;
       const slots = {
@@ -80,7 +84,7 @@
       const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
       const targetNames = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4', T5: 'Zone 5' };
 
-      const alignImages = { L: 'images/left.jpg', C: 'images/front.jpg', R: 'images/right.jpg' };
+      const alignImages = { L: 'images/left.png', C: 'images/front.png', R: 'images/right.png' };
       const alignInstructions = {
         L: 'Placeholder instructions for aligning the machine at the LEFT position.',
         C: 'Placeholder instructions for aligning the machine at the CENTER position.',
@@ -158,13 +162,13 @@
         machineSocket.on('server-shutdown', () => { showShuttingDown(); });
       }
 
-      // Update the "AVSS connected/disconnected" indicator in the top bar.
+      // Update the "AVSS Connected/Disconnected" indicator in the top bar.
       function setConnStatus(connected) {
         const wrap = document.getElementById('conn-status');
         const text = document.getElementById('conn-text');
         const icon = document.getElementById('conn-icon');
         if (wrap) wrap.classList.toggle('disconnected', !connected);
-        if (text) text.textContent = connected ? 'AVSS connected' : 'AVSS disconnected';
+        if (text) text.textContent = connected ? 'AVSS Connected' : 'AVSS Disconnected';
         if (icon) icon.className = 'ti ' + (connected ? 'ti-wifi' : 'ti-wifi-off');
       }
 
@@ -526,25 +530,27 @@
 
         // Images for the machine - IMAGES ARE A PLACEHOLDER
         const machineRectW = 32;
-        const machineRectH = 74;
-        const machineImages = { L: 'images/left.jpg', R: 'images/right.jpg' };
+        const machineRectH = 96;
+        const machineAspect = { L: 548 / 902, C: 376 / 831, R: 523 / 858 }; // width/height ratios of images
+        const machineRectWFor = (id) => machineRectH * machineAspect[id];
+        const machineImages = { L: 'images/left.png', R: 'images/right.png' };
         function machineImageFor(id) {
           if (id !== 'C') return machineImages[id];
-          if (lockedSide === 'left') return 'images/left.jpg';
-          if (lockedSide === 'right') return 'images/right.jpg';
-          return 'images/front.jpg';
+          if (previewSide === 'left') return 'images/left.png';
+          if (previewSide === 'right') return 'images/right.png';
+          return 'images/front.png';
         }
         const mCircles = machineSpots.map(s => {
         const active = mSel === s.id;
         const ringStroke = active ? '#185FA5' : (readonly ? 'transparent' : '#185FA5');
-        const opacity = active ? 1 : (readonly ? 0 : 0.7);
         const onclick = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
         const cursor = readonly ? 'default' : 'pointer';
-        const rx = s.cx - machineRectW / 2;
+        const w = machineRectWFor(s.id);
+        const rx = s.cx - w / 2;
         const ry = s.cy - machineRectH / 2;
         return `<g ${onclick} style="cursor:${cursor}">
-          <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2.5" opacity="${active ? 1 : 0}" style="${active ? 'filter:drop-shadow(0 0 4px rgba(24,95,165,0.6))' : ''}"/>
-          <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" preserveAspectRatio="xMidYMid slice" opacity="${opacity}" style="clip-path: inset(0 round 3px)"/>
+          <rect x="${rx}" y="${ry}" width="${w}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2.5" opacity="${active ? 1 : 0}" style="${active ? 'filter:drop-shadow(0 0 4px rgba(24,95,165,0.6))' : ''}"/>
+          <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${w}" height="${machineRectH}" preserveAspectRatio="xMidYMid meet" style="clip-path: inset(0 round 3px)"/>
         </g>`;
       }).join('');
 
@@ -705,11 +711,13 @@
           tempoSelected = true;
           slotSaved = true;
           lockedSide = (id === 'C') ? zoneSide(savedSlot.target) : null;
+          previewSide = lockedSide;
         } else {
           selectedTarget = null;
           tempoSelected = false;
           slotSaved = false;
           lockedSide = null;
+          previewSide = null;
         }
 
         refreshCourtPicker();
@@ -720,6 +728,10 @@
       function selectTarget(id) {
         selectedTarget = id;
         tempoSelected = selectedTempo !== null;
+        if (selectedMachine === 'C') {
+          const side = zoneSide(id);
+          previewSide = (side === 'left' || side === 'right') ? side : previewSide; // zone 3 (center) leaves it unchanged
+        }
         refreshCourtPicker();
         refreshTempo();
         refreshSlots();
@@ -1415,6 +1427,7 @@
           tempo: selectedTempo,
         };
         slotEnabled[selectedMachine][n] = true;
+        singleShotSelected[selectedMachine] = n; // add this line — newest save becomes the Single Shot selection
         slotSaved = true;
         if (selectedMachine === 'C') {
           lockedSide = zoneSide(selectedTarget);
@@ -1427,9 +1440,6 @@
         if (machineIndex === undefined || Number.isNaN(targetLocation) || Number.isNaN(tempo)) {
           console.warn('Invalid slot data, skipping backend save');
         } else {
-          // Persist the slot to the backend so it survives past this session
-          // and can be recalled by setMachine. The UI update above is optimistic;
-          // if the backend rejects the save (see onMachineError) we roll it back.
           pendingSlotSave = { machineKey: selectedMachine, n, previousSlot, previousEnabled };
           emitMachine('saveSet', {
             setIndex: n - 1,
@@ -1621,6 +1631,7 @@
           appEl.classList.toggle('mode-advanced', mode === 'advanced');
           appEl.classList.toggle('mode-configure', mode === 'configure');
           appEl.classList.toggle('mode-single_shot', mode === 'single_shot');
+          appEl.classList.toggle('mode-gesture', mode === 'gesture');
         }
 
         document.querySelectorAll('.modetab-header').forEach(t => t.classList.remove('active'));
