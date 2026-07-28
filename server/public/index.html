@@ -1365,9 +1365,9 @@
           return;
         }
         const machinePart = `Machine ${selectedMachine}`;
-        const zonePart = selectedTarget ? `Target ${selectedTarget}` : null;
+        const zonePart = selectedTarget ? `Zone ${selectedTarget}` : null;
         const tempoPart = `Tempo ${selectedTempo}`;
-        const name = [zonePart, tempoPart].filter(Boolean).join(' ') || `Slot ${n}`;
+        const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
 
         const previousSlot = slots[selectedMachine][n];
         const previousEnabled = slotEnabled[selectedMachine][n];
@@ -1379,6 +1379,7 @@
           tempo: selectedTempo,
         };
         slotEnabled[selectedMachine][n] = true;
+        singleShotSelected[selectedMachine] = n; // add this line — newest save becomes the Single Shot selection
         slotSaved = true;
         if (selectedMachine === 'C') {
           lockedSide = zoneSide(selectedTarget);
@@ -1391,9 +1392,6 @@
         if (machineIndex === undefined || Number.isNaN(targetLocation) || Number.isNaN(tempo)) {
           console.warn('Invalid slot data, skipping backend save');
         } else {
-          // Persist the slot to the backend so it survives past this session
-          // and can be recalled by setMachine. The UI update above is optimistic;
-          // if the backend rejects the save (see onMachineError) we roll it back.
           pendingSlotSave = { machineKey: selectedMachine, n, previousSlot, previousEnabled };
           emitMachine('saveSet', {
             setIndex: n - 1,
@@ -1418,6 +1416,7 @@
       // failed) — roll back the optimistic slot update so the UI doesn't claim
       // a slot is saved when it isn't.
       function onMachineError(message) {
+        /*
         console.warn('[machine-error]', message);
         if (pendingSlotSave) {
           const { machineKey, n, previousSlot, previousEnabled } = pendingSlotSave;
@@ -1430,7 +1429,7 @@
           pendingSlotSave = null;
           refreshSlots();
           refreshCourtPicker();
-        }
+        }*/
         showGestureError(typeof message === 'string' ? message : 'Machine error');
       }
 
