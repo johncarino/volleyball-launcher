@@ -32,6 +32,8 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_ACCEL_STEPS 400
 #define HOPPER_CONTINUOUS_DELAY_US 500
 #define HOPPER_RESET_INTERVAL_PULSES 4
+#define HOPPER_RESET_TIMEOUT_SEC 10
+#define HOPPER_RESET_POLL_DELAY_US 1000
 
 volatile float tilt_angle_w = 0;
 
@@ -328,6 +330,11 @@ void operation_init() {
         return;
     }
 
+    if (mcp4725_write_eeprom(&dac1, 0) != 0) {
+        fprintf(stderr, "Failed to write MCP4725 EEPROM power-on default\n");
+        return;
+    }
+
     operation_initialized = 1;
     
     //homing_sequence();
@@ -602,7 +609,12 @@ void toggle_hopper() {
     }
 }
 
-void hopper_start() {
+// Actual hopper-start implementation, deliberately NOT gated on
+// launcher_running: hopper_reset() (and therefore homing_sequence()) must be
+// able to spin the hopper stepper to find its home sensor regardless of
+// whether the launcher flywheel happens to be running. Only reachable via
+// hopper_start() (gated, below) or hopper_reset()/homing_sequence().
+static void hopper_start_internal(void) {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
 
@@ -635,6 +647,20 @@ void hopper_start() {
     //speed_signal(curr_rpm);
 }
 
+// Public, user/gesture-facing entry point: the hopper must never feed balls
+// into a flywheel that isn't spinning, so refuse to start unless the launcher
+// is running (see resume_machine()/pause_machine()). Returns 0 on success,
+// -1 if refused (or if the underlying start attempt otherwise failed).
+int hopper_start(void) {
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot start hopper: machine is not running. Start the launcher before starting the hopper.\n");
+        return -1;
+    }
+
+    hopper_start_internal();
+    return hopper_running ? 0 : -1;
+}
+
 void hopper_stop() {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
@@ -656,19 +682,27 @@ void hopper_stop() {
     //speed_signal(curr_rpm);
 }
 
-void hopper_pulse() {
+// Returns 0 on success, -1 if refused (motor not initialized, machine not
+// running, or an interrupt was pending).
+int hopper_pulse(void) {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
 
     if (!motor.request) {
         fprintf(stderr, "Cannot pulse hopper: motor not initialized\n");
-        return;
+        return -1;
+    }
+
+    // The hopper must never feed balls into a flywheel that isn't spinning.
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot pulse hopper: machine is not running. Start the launcher before pulsing the hopper.\n");
+        return -1;
     }
 
     if (operation_interrupt_pending()) {
         fprintf(stderr, "Hopper pulse aborted before start due to pending interrupt.\n");
         operation_clear_interrupt();
-        return;
+        return -1;
     }
 
     //turn hopper off if it is running
@@ -682,7 +716,7 @@ void hopper_pulse() {
         printf("Hopper pulse #%d: running reset instead of pulse.\n",
                HOPPER_RESET_INTERVAL_PULSES);
         hopper_reset();
-        return;
+        return 0;
     }
 
     printf("Pulsing hopper...\n");
@@ -695,6 +729,7 @@ void hopper_pulse() {
     printf("Hopper pulse complete.\n");
 
     //speed_signal(curr_rpm);
+    return 0;
 }
 
 void hopper_reset() {
@@ -719,12 +754,16 @@ void hopper_reset() {
     }
 
     printf("Resetting hopper: stepping until sensor trigger...\n");
-    hopper_start();
+    // Ungated: a reset (e.g. from homing_sequence()) must be able to run the
+    // hopper stepper even if the launcher flywheel isn't running.
+    hopper_start_internal();
 
     if (!hopper_running) {
         fprintf(stderr, "Hopper reset failed: unable to start hopper\n");
         return;
     }
+
+    time_t start_time = time(NULL);
 
     while (hopper_running) {
         if (operation_interrupt_pending()) {
@@ -738,7 +777,13 @@ void hopper_reset() {
             break;
         }
 
-        usleep(1000);
+        if (difftime(time(NULL), start_time) >= HOPPER_RESET_TIMEOUT_SEC) {
+            fprintf(stderr, "Hopper reset timed out after %d seconds waiting for sensor trigger -- stopping hopper.\n",
+                    HOPPER_RESET_TIMEOUT_SEC);
+            break;
+        }
+
+        usleep(HOPPER_RESET_POLL_DELAY_US);
     }
 
     hopper_stop();

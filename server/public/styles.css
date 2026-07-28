@@ -351,6 +351,13 @@ body {
   color: #fff;
 }
 
+.hopper-btn.blocked {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  animation: op-shake 0.4s ease-in-out;
+}
+
 .save-slots {
   display: grid;
   grid-template-columns: 1fr;

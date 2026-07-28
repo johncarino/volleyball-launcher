@@ -194,8 +194,40 @@
         emitMachine('hopper-' + action);
       }
 
+      // The hopper feeds balls into the flywheel, so it must never be started/
+      // pulsed while the Manual screen's launcher ("Start") is stopped -- the
+      // Launch button there is the same #launch-main-btn used by the other run
+      // modes, and only carries the 'stop' class while the flywheel is actually
+      // spinning (see toggleLaunch()).
+      function isManualMachineRunning() {
+        const btn = document.getElementById('launch-main-btn');
+        return !!btn && btn.classList.contains('stop');
+      }
+
+      // Briefly flash a hopper button red + shake it (reusing the same
+      // op-shake animation as the Launch button's "needs-set" hint) and swap in
+      // a warning label, instead of silently ignoring the click.
+      function flashHopperBlocked(btn) {
+        if (!btn) return;
+        const original = btn.dataset.origLabel || btn.textContent;
+        btn.dataset.origLabel = original;
+        btn.classList.remove('blocked');
+        void btn.offsetWidth; // restart animation on repeat clicks
+        btn.classList.add('blocked');
+        btn.textContent = 'Start machine first';
+        clearTimeout(btn._hopperBlockedTimer);
+        btn._hopperBlockedTimer = setTimeout(() => {
+          btn.classList.remove('blocked');
+          btn.textContent = btn.dataset.origLabel;
+        }, 1500);
+      }
+
       function pulseHopper(btn) {
         if (btn.disabled) return; // do nothing if already running
+        if (!isManualMachineRunning()) {
+          flashHopperBlocked(btn);
+          return;
+        }
         btn.disabled = true;
         btn.classList.add('active');
         onHopperControl('pulse');
@@ -207,8 +239,12 @@
       }
 
       function toggleHopper() {
-        hopperOn = !hopperOn;
         const btn = document.getElementById('hopper-toggle-btn');
+        if (!hopperOn && !isManualMachineRunning()) {
+          flashHopperBlocked(btn);
+          return;
+        }
+        hopperOn = !hopperOn;
         if (btn) {
           btn.textContent = hopperOn ? 'Hopper On' : 'Hopper Off';
           btn.classList.toggle('active', hopperOn);
@@ -548,7 +584,7 @@
           const baseMidY = (startY + endY) / 2;
 
           const highlightTempo = hoveredTempo || selectedTempo;
-          tempoArcs = [1, 2, 3, 4, 5].map(tempo => {
+          tempoArcs = [1, 2, 3, 4].map(tempo => {
             const active = tempo === highlightTempo;
             const isSelected = tempo === selectedTempo;
             const arcHeight = 16 + tempo * 50;
@@ -1051,7 +1087,7 @@
 
       function tempoPillsHTML() {
         const flashClass = !tempoSelected ? ' selectable-flash' : '';
-        const pills = [1, 2, 3, 4, 5].map(n =>
+        const pills = [1, 2, 3, 4].map(n =>
           `<button class="tempo-pill${flashClass} ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
       onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)">${n}</button>`
         ).join('');
@@ -1065,7 +1101,7 @@
       function onTempoHover(n) {
         hoveredTempo = n;
         const highlightTempo = hoveredTempo || selectedTempo;
-        for (let tempo = 1; tempo <= 5; tempo++) {
+        for (let tempo = 1; tempo <= 4; tempo++) {
           const line = document.getElementById('tempo-line-' + tempo);
           if (!line) continue;
           const active = tempo === highlightTempo;
@@ -1481,6 +1517,17 @@
           clearInterval(window._telem);
           if (window._activeMode === 'advanced') {
             emitMachine('stopMotors');
+            // Stopping the launcher must also stop the hopper -- it must never
+            // keep feeding balls into a flywheel that's no longer spinning.
+            if (hopperOn) {
+              hopperOn = false;
+              const hopperBtn = document.getElementById('hopper-toggle-btn');
+              if (hopperBtn) {
+                hopperBtn.textContent = 'Hopper Off';
+                hopperBtn.classList.remove('active');
+              }
+              onHopperControl('off');
+            }
           }
         } else {
           btn.classList.remove('start'); btn.classList.add('stop');
@@ -1539,6 +1586,8 @@
         if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
       }
 
+      const OPERATION_MODES = ['launch', 'single_shot', 'gesture'];
+
       function setMode(mode) {
         const previousMode = window._activeMode || 'configure';
         if ((previousMode === 'launch' || previousMode === 'single_shot') && mode !== previousMode && isRunning) {
@@ -1546,6 +1595,9 @@
         }
         if (previousMode === 'advanced' && mode !== 'advanced') {
           emitMachine('advanced-leave');
+        }
+        if (OPERATION_MODES.includes(previousMode) && !OPERATION_MODES.includes(mode)) {
+          emitMachine('operation-leave');
         }
         if (previousMode === 'court_settings' && mode !== 'court_settings') {
           updateCourtBtn();
@@ -1578,6 +1630,9 @@
         if (mode === 'advanced') {
           emitMachine('advanced-enter');
           startTelemetry();
+        }
+        if (OPERATION_MODES.includes(mode) && !OPERATION_MODES.includes(previousMode)) {
+          emitMachine('operation-enter');
         }
         if (mode === 'launch' || mode === 'single_shot') {
           syncLaunchSummary();

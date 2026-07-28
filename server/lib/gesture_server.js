@@ -156,6 +156,14 @@ exports.listen = function(server) {
 			cleanupOperation(socket, 'advanced-leave');
 		});
 
+		socket.on('operation-enter', function() {
+			initOperation(socket, 'operation-enter');
+		});
+
+		socket.on('operation-leave', function() {
+			cleanupOperation(socket, 'operation-leave');
+		});
+
 		socket.on('disconnect', function() {
 			stopTelemetry(socket);
 		});
@@ -544,7 +552,10 @@ function handleCommand(socket) {
 	socket.on('hopper-on', function() {
 		if (!ensureOperationReady(socket, 'hopper-on')) return;
 		console.log("Got hopper-on command.");
-		operation.hopperStart();
+		var started = operation.hopperStart();
+		if (started === false) {
+			socket.emit('machine-error', 'Cannot start hopper: machine is not running.');
+		}
 	});
 
 	socket.on('hopper-off', function() {
@@ -556,7 +567,10 @@ function handleCommand(socket) {
 	socket.on('hopper-pulse', function() {
 		if (!ensureOperationReady(socket, 'hopper-pulse')) return;
 		console.log("Got hopper-pulse command.");
-		operation.hopperPulse();
+		var pulsed = operation.hopperPulse();
+		if (pulsed === false) {
+			socket.emit('machine-error', 'Cannot pulse hopper: machine is not running.');
+		}
 	});
 
 	socket.on('requestTelemetry', function() {
@@ -956,7 +970,12 @@ function triggerControl(action) {
 	try {
 		if (action === 'start') {
 			if (!ensureOperationReady(null, 'gesture-start')) return;
-			operation.hopperStart();
+			var started = operation.hopperStart();
+			if (started === false) {
+				console.log('[gesture] control action start refused: machine is not running');
+				if (io) io.sockets.emit('machine-error', 'Cannot start hopper via gesture: machine is not running.');
+				return;
+			}
 		} else {
 			operation.hopperStop();
 		}
