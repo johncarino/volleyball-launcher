@@ -357,6 +357,22 @@ function handleCommand(socket) {
 		operation.tiltSignal(value);
 	});
 
+	socket.on('homeMachine', function() {
+		if (!ensureOperationReady(socket, 'homeMachine')) {
+			socket.emit('homing-state', 'FAILED');
+			return;
+		}
+		console.log('Got homeMachine command.');
+		try {
+			operation.homingSequence();
+			socket.emit('homing-state', 'COMPLETED');
+		} catch (e) {
+			console.log('[operation] homingSequence failed: ' + e.message);
+			socket.emit('homing-state', 'FAILED');
+			socket.emit('machine-error', 'Failed to home machine.');
+		}
+	});
+
 	socket.on('stopMotors', function() {
 		if (!ensureOperationReady(socket, 'stopMotors')) return;
 		console.log("Got stopMotors command.");

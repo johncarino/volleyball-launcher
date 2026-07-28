@@ -132,6 +132,24 @@
         if (fwlVal) fwlVal.textContent = rpm + ' rpm';
         if (fwrVal) fwrVal.textContent = rpm + ' rpm';
       });
+
+      machineSocket.on('homing-state', (state) => {
+        const btn = document.getElementById('home-machine-btn');
+        if (!btn) return;
+
+        btn.disabled = false;
+        btn.innerHTML = state === 'COMPLETED'
+          ? '<i class="ti ti-check" aria-hidden="true"></i> Homed'
+          : '<i class="ti ti-home" aria-hidden="true"></i> Home machine';
+
+        clearTimeout(window._homingButtonTimer);
+        if (state === 'COMPLETED') {
+          window._homingButtonTimer = setTimeout(() => {
+            const currentBtn = document.getElementById('home-machine-btn');
+            if (currentBtn) currentBtn.innerHTML = '<i class="ti ti-home" aria-hidden="true"></i> Home machine';
+          }, 1800);
+        }
+      });
     }
 
     function onAdvancedAngleInput(value) {
@@ -184,6 +202,15 @@
         btn.classList.toggle('active', hopperOn);
       }
       onHopperControl(hopperOn ? 'on' : 'off');
+    }
+
+    function homeMachine() {
+      const btn = document.getElementById('home-machine-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ti ti-loader-2 homing-spinner" aria-hidden="true"></i> Homing…';
+      }
+      emitMachine('homeMachine');
     }
 
     function courtPickerHTML(readonly = false) {
@@ -378,6 +405,9 @@
           </div>
         </div>
       </div>
+      <button class="home-machine-btn" id="home-machine-btn" onclick="homeMachine()">
+        <i class="ti ti-home" aria-hidden="true"></i> Home machine
+      </button>
     </div>
     <div class="section">
       <div class="section-label">Hopper</div>

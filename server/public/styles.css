@@ -161,6 +161,27 @@ body {
   color: #fff;
 }
 
+.home-machine-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: -2px 0 0 auto;
+  padding: 5px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.home-machine-btn:hover { color: var(--text-secondary); }
+.home-machine-btn:disabled { opacity: 0.6; cursor: wait; }
+.homing-spinner { animation: homing-spin 0.8s linear infinite; }
+
+@keyframes homing-spin { to { transform: rotate(360deg); } }
+
 .save-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .slot {
   border: 0.5px solid var(--border-secondary);
