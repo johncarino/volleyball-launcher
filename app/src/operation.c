@@ -36,6 +36,8 @@ volatile int launcher_running = 0;
 #define HOPPER_RESET_INTERVAL_PULSES 4
 #define HOPPER_SENSOR_RUN_ON_US 1000000
 #define HOPPER_SENSOR_RUN_ON_SLICE_US 10000
+#define HOPPER_RESET_MIN_RUN_US 250000
+#define HOMING_FLYWHEEL_RPM 300.0f
 #define HOPPER_RESET_TIMEOUT_SEC 30
 #define HOPPER_RESET_POLL_DELAY_US 10000
 
@@ -486,19 +488,25 @@ void operation_cleanup() {
 
 void homing_sequence() {
     printf("Homing sequence initiated. Moving to default position...\n");
-    // Move to default tilt angle
+
+    // 1. Return the launcher to its mechanical starting angle.
     tilt_signal(INITIAL_TILT_ANGLE);
     curr_tilt_angle = INITIAL_TILT_ANGLE;
 
-    // Run the motor at a low speed
-    mcp4725_set_raw(&dac1, 1600);
+    // 2. Spin the flywheel slowly while the hopper finds its home sensor.
+    printf("Homing: running flywheel at %.0f RPM.\n", HOMING_FLYWHEEL_RPM);
+    speed_signal(HOMING_FLYWHEEL_RPM);
 
-    // Reset the hopper position
+    // 3. Find and settle at the hopper home position.
     hopper_reset();
     hopper_pulse_count = 0;
 
-    // Stop the motor after homing
+    // 4. Homing always leaves the machine fully stopped.
     mcp4725_set_raw(&dac1, 0);
+    curr_speed = 0.0;
+    curr_rpm = 0;
+    launcher_running = 0;
+    printf("Homing sequence complete.\n");
 }
 
 void tilt_signal(float angle) {
@@ -926,6 +934,8 @@ void hopper_reset() {
     }
 
     time_t start_time = time(NULL);
+    struct timespec reset_started;
+    clock_gettime(CLOCK_MONOTONIC, &reset_started);
 
     while (hopper_running) {
         if (operation_interrupt_pending()) {
@@ -935,6 +945,18 @@ void hopper_reset() {
         }
 
         if (tach_gate_consume_signal()) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            long elapsed_us = (now.tv_sec - reset_started.tv_sec) * 1000000L +
+                (now.tv_nsec - reset_started.tv_nsec) / 1000L;
+            if (elapsed_us < HOPPER_RESET_MIN_RUN_US) {
+                fprintf(stderr,
+                        "Hopper reset: ignored immediate sensor trigger after %ld us.\n",
+                        elapsed_us);
+                tach_gate_prepare_for_reset();
+                continue;
+            }
+
             printf("Hopper reset sensor triggered; stopping in 1 second.\n");
 
             int run_on_elapsed_us = 0;

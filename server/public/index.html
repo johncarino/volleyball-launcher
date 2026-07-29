@@ -148,7 +148,10 @@
         // ---- Set-slot save confirmation from the backend ----
         machineSocket.on('set-save-state', (state) => { onSetSaveState(state); });
         machineSocket.on('machine-error', (message) => { onMachineError(message); });
-        machineSocket.on('homing-complete', () => { setHomingButtonState(false, 'Homing complete'); });
+        machineSocket.on('homing-complete', () => {
+          resetManualVisuals();
+          setHomingButtonState(false, 'Homing complete');
+        });
         machineSocket.on('homing-error', (message) => {
           setHomingButtonState(false, 'Home machine');
           onMachineError(message);
@@ -213,6 +216,32 @@
       function runHomingSequence() {
         setHomingButtonState(true, 'Homing...');
         emitMachine('homing-sequence');
+      }
+
+      function resetManualVisuals() {
+        const angle = document.getElementById('dev-ang-range');
+        const angleLabel = document.getElementById('dev-ang-val');
+        const speed = document.getElementById('dev-spd-range');
+        const speedLabel = document.getElementById('dev-spd-val');
+        const launch = document.getElementById('launch-main-btn');
+        const hopper = document.getElementById('hopper-toggle-btn');
+
+        if (angle) angle.value = '8';
+        if (angleLabel) angleLabel.textContent = '8°';
+        if (speed) speed.value = '0';
+        if (speedLabel) speedLabel.textContent = '0 %';
+        if (launch) {
+          launch.classList.remove('stop');
+          launch.classList.add('start');
+          launch.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+        }
+        hopperOn = false;
+        if (hopper) {
+          hopper.textContent = 'Hopper Off';
+          hopper.classList.remove('active');
+        }
+        clearInterval(window._telem);
+        renderTelemetry({ rpm: 0 });
       }
 
       // The hopper feeds balls into the flywheel, so it must never be started/
