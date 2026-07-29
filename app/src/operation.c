@@ -36,6 +36,8 @@ volatile int launcher_running = 0;
 #define HOPPER_RESET_INTERVAL_PULSES 4
 #define HOPPER_SENSOR_RUN_ON_US 1000000
 #define HOPPER_SENSOR_RUN_ON_SLICE_US 10000
+#define HOPPER_RESET_TIMEOUT_SEC 30
+#define HOPPER_RESET_POLL_DELAY_US 10000
 
 volatile float tilt_angle_w = 0;
 
@@ -810,7 +812,7 @@ int hopper_pulse(void) {
 
     if (!launcher_running) {
         fprintf(stderr, "Cannot pulse hopper: machine is not running\n");
-        return;
+        return -1;
     }
 
     if (!motor.request) {
@@ -852,7 +854,7 @@ int hopper_pulse(void) {
     if (operation_interrupt_pending()) {
         fprintf(stderr, "Hopper pulse aborted during launch warning.\n");
         operation_clear_interrupt();
-        return;
+        return -1;
     }
 
     printf("Pulsing hopper...\n");

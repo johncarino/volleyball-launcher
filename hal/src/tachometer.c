@@ -165,27 +165,28 @@ static void *tach_gate_worker(void *arg)
                 break;
             }
 
-        struct gpiod_edge_event *ev =
-            gpiod_edge_event_buffer_get_event(tach_gate_event_buffer, 0);
-        if (!ev) {
-            continue;
-        }
-
-        enum gpiod_edge_event_type ev_type =
-            gpiod_edge_event_get_event_type(ev);
-        uint64_t event_ns = gpiod_edge_event_get_timestamp_ns(ev);
-
-        pthread_mutex_lock(&tach_gate_mutex);
-        if (ev_type == GPIOD_EDGE_EVENT_FALLING_EDGE) {
-            if (tach_gate_accepting && tach_gate_armed &&
-                event_ns >= tach_gate_accept_after_ns) {
-                tach_gate_pending = 1;
-                tach_gate_armed = 0;
+            struct gpiod_edge_event *ev =
+                gpiod_edge_event_buffer_get_event(tach_gate_event_buffer, 0);
+            if (!ev) {
+                continue;
             }
-        } else if (ev_type == GPIOD_EDGE_EVENT_RISING_EDGE) {
-            tach_gate_armed = 1;
+
+            enum gpiod_edge_event_type ev_type =
+                gpiod_edge_event_get_event_type(ev);
+            uint64_t event_ns = gpiod_edge_event_get_timestamp_ns(ev);
+
+            pthread_mutex_lock(&tach_gate_mutex);
+            if (ev_type == GPIOD_EDGE_EVENT_FALLING_EDGE) {
+                if (tach_gate_accepting && tach_gate_armed &&
+                    event_ns >= tach_gate_accept_after_ns) {
+                    tach_gate_pending = 1;
+                    tach_gate_armed = 0;
+                }
+            } else if (ev_type == GPIOD_EDGE_EVENT_RISING_EDGE) {
+                tach_gate_armed = 1;
+            }
+            pthread_mutex_unlock(&tach_gate_mutex);
         }
-        pthread_mutex_unlock(&tach_gate_mutex);
     }
 
     return NULL;
