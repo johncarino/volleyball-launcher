@@ -606,6 +606,11 @@ void hopper_start() {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
 
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot start hopper: machine is not running\n");
+        return;
+    }
+
     if (!motor.request) {
         fprintf(stderr, "Cannot start hopper: motor not initialized\n");
         return;
@@ -660,6 +665,11 @@ void hopper_pulse() {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
 
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot pulse hopper: machine is not running\n");
+        return;
+    }
+
     if (!motor.request) {
         fprintf(stderr, "Cannot pulse hopper: motor not initialized\n");
         return;
@@ -698,6 +708,11 @@ void hopper_pulse() {
 }
 
 void hopper_reset() {
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot reset hopper: machine is not running\n");
+        return;
+    }
+
     if (!motor.request) {
         fprintf(stderr, "Cannot reset hopper: motor not initialized\n");
         return;
@@ -717,6 +732,8 @@ void hopper_reset() {
     if (hopper_running) {
         hopper_stop();
     }
+
+    tach_gate_prepare_for_reset();
 
     printf("Resetting hopper: stepping until sensor trigger...\n");
     hopper_start();
@@ -763,6 +780,7 @@ void pause_machine() {
     mcp4725_set_raw(&dac1, 0);
 
     launcher_running = 0;
+    hopper_stop();
 
     return;
 }
