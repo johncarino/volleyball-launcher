@@ -34,8 +34,8 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_ACCEL_STEPS 400
 #define HOPPER_CONTINUOUS_DELAY_US 800
 #define HOPPER_RESET_INTERVAL_PULSES 4
-#define HOPPER_RESET_TIMEOUT_SEC 10
-#define HOPPER_RESET_POLL_DELAY_US 1000
+#define HOPPER_SENSOR_RUN_ON_US 1000000
+#define HOPPER_SENSOR_RUN_ON_SLICE_US 10000
 
 volatile float tilt_angle_w = 0;
 
@@ -733,6 +733,11 @@ static void hopper_start_internal(void) {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
 
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot start hopper: machine is not running\n");
+        return;
+    }
+
     if (!motor.request) {
         fprintf(stderr, "Cannot start hopper: motor not initialized\n");
         return;
@@ -803,6 +808,11 @@ int hopper_pulse(void) {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
 
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot pulse hopper: machine is not running\n");
+        return;
+    }
+
     if (!motor.request) {
         fprintf(stderr, "Cannot pulse hopper: motor not initialized\n");
         return -1;
@@ -859,6 +869,11 @@ int hopper_pulse(void) {
 }
 
 void hopper_reset() {
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot reset hopper: machine is not running\n");
+        return;
+    }
+
     if (!motor.request) {
         fprintf(stderr, "Cannot reset hopper: motor not initialized\n");
         return;
@@ -879,10 +894,7 @@ void hopper_reset() {
         hopper_stop();
     }
 
-    // Flush any stale gate triggers from previous pulses/movement
-    while (tach_gate_consume_signal()) {
-        // Discard stale signals
-    }
+    tach_gate_prepare_for_reset();
 
     printf("Resetting hopper: stepping until sensor trigger...\n");
     // Ungated: a reset (e.g. from homing_sequence()) must be able to run the
@@ -904,7 +916,21 @@ void hopper_reset() {
         }
 
         if (tach_gate_consume_signal()) {
-            printf("Hopper reset sensor triggered.\n");
+            printf("Hopper reset sensor triggered; stopping in 1 second.\n");
+
+            int run_on_elapsed_us = 0;
+            while (hopper_running &&
+                   run_on_elapsed_us < HOPPER_SENSOR_RUN_ON_US) {
+                if (operation_interrupt_pending()) {
+                    fprintf(stderr,
+                            "Hopper reset interrupted during sensor run-on.\n");
+                    operation_clear_interrupt();
+                    break;
+                }
+
+                usleep(HOPPER_SENSOR_RUN_ON_SLICE_US);
+                run_on_elapsed_us += HOPPER_SENSOR_RUN_ON_SLICE_US;
+            }
             break;
         }
 
@@ -939,6 +965,7 @@ void pause_machine() {
     mcp4725_set_raw(&dac1, 0);
 
     launcher_running = 0;
+    hopper_stop();
 
     return;
 }

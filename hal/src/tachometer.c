@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <pthread.h>
+#include <time.h>
 
 // ---------------------------------------------------------------------------
 // Module-level state
@@ -23,6 +24,8 @@ static struct gpiod_line_request      *tach_gate_request      = NULL;
 static struct gpiod_edge_event_buffer *tach_gate_event_buffer = NULL;
 static int tach_gate_armed   = 1;
 static int tach_gate_pending = 0;
+static int tach_gate_accepting = 0;
+static uint64_t tach_gate_accept_after_ns = 0;
 
 static double tach_periods[TACH_AVG_WINDOW];
 static int    tach_period_count = 0;
@@ -162,44 +165,24 @@ static void *tach_gate_worker(void *arg)
                 break;
             }
 
-            if (num_events > 0) {
-                struct gpiod_edge_event *ev =
-                    gpiod_edge_event_buffer_get_event(tach_gate_event_buffer, 0);
-                if (ev) {
-                    enum gpiod_edge_event_type ev_type =
-                        gpiod_edge_event_get_event_type(ev);
-
-                    pthread_mutex_lock(&tach_gate_mutex);
-                    if (ev_type == GPIOD_EDGE_EVENT_FALLING_EDGE) {
-                        if (tach_gate_armed) {
-                            tach_gate_pending = 1;
-                            tach_gate_armed = 0;
-                        }
-                    } else if (ev_type == GPIOD_EDGE_EVENT_RISING_EDGE) {
-                        tach_gate_armed = 1;
-                    }
-                    pthread_mutex_unlock(&tach_gate_mutex);
-                }
-            }
-        }
-
-        // Reconcile the latch with the physical level. Edge events give the
-        // fastest response, while this level check makes a sustained magnet
-        // approach impossible to miss. The A3144 output is active-low.
-        enum gpiod_line_value value = gpiod_line_request_get_value(
-            tach_gate_request, TACH_GATE_LINE);
-        if (value == GPIOD_LINE_VALUE_ERROR) {
-            fprintf(stderr, "Tach gate: failed to read current line value\n");
+        struct gpiod_edge_event *ev =
+            gpiod_edge_event_buffer_get_event(tach_gate_event_buffer, 0);
+        if (!ev) {
             continue;
         }
 
+        enum gpiod_edge_event_type ev_type =
+            gpiod_edge_event_get_event_type(ev);
+        uint64_t event_ns = gpiod_edge_event_get_timestamp_ns(ev);
+
         pthread_mutex_lock(&tach_gate_mutex);
-        if (value == GPIOD_LINE_VALUE_INACTIVE) {
-            if (tach_gate_armed) {
+        if (ev_type == GPIOD_EDGE_EVENT_FALLING_EDGE) {
+            if (tach_gate_accepting && tach_gate_armed &&
+                event_ns >= tach_gate_accept_after_ns) {
                 tach_gate_pending = 1;
                 tach_gate_armed = 0;
             }
-        } else {
+        } else if (ev_type == GPIOD_EDGE_EVENT_RISING_EDGE) {
             tach_gate_armed = 1;
         }
         pthread_mutex_unlock(&tach_gate_mutex);
@@ -399,6 +382,8 @@ int tach_init(void)
         tach_gate_armed = 1;
     }
     tach_gate_pending = 0;
+    tach_gate_accepting = 0;
+    tach_gate_accept_after_ns = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     tach_gate_running = 1;
@@ -447,6 +432,8 @@ void tach_cleanup(void)
     pthread_mutex_lock(&tach_gate_mutex);
     tach_gate_pending = 0;
     tach_gate_armed = 1;
+    tach_gate_accepting = 0;
+    tach_gate_accept_after_ns = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     if (was_tach_running) {
@@ -473,6 +460,33 @@ float get_tach_rpm(void)
     return rpm;
 }
 
+void tach_gate_prepare_for_reset(void)
+{
+#if TACH_GATE_LINE >= 0
+    if (!tach_gate_request) {
+        return;
+    }
+
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    uint64_t now_ns = (uint64_t)now.tv_sec * 1000000000ULL +
+                      (uint64_t)now.tv_nsec;
+
+    pthread_mutex_lock(&tach_gate_mutex);
+    enum gpiod_line_value value = gpiod_line_request_get_value(
+        tach_gate_request, TACH_GATE_LINE);
+    tach_gate_pending = 0;
+    tach_gate_armed = (value == GPIOD_LINE_VALUE_ACTIVE);
+    tach_gate_accepting = (value != GPIOD_LINE_VALUE_ERROR);
+    tach_gate_accept_after_ns = now_ns;
+    pthread_mutex_unlock(&tach_gate_mutex);
+
+    if (value == GPIOD_LINE_VALUE_ERROR) {
+        fprintf(stderr, "Tach gate: failed to read level before reset\n");
+    }
+#endif
+}
+
 int tach_gate_consume_signal(void)
 {
     int signal = 0;
@@ -480,6 +494,7 @@ int tach_gate_consume_signal(void)
     if (tach_gate_pending) {
         signal = 1;
         tach_gate_pending = 0;
+        tach_gate_accepting = 0;
     }
     pthread_mutex_unlock(&tach_gate_mutex);
     return signal;
