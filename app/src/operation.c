@@ -32,6 +32,8 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_ACCEL_STEPS 400
 #define HOPPER_CONTINUOUS_DELAY_US 500
 #define HOPPER_RESET_INTERVAL_PULSES 4
+#define HOPPER_SENSOR_RUN_ON_US 1000000
+#define HOPPER_SENSOR_RUN_ON_SLICE_US 10000
 
 volatile float tilt_angle_w = 0;
 
@@ -751,7 +753,21 @@ void hopper_reset() {
         }
 
         if (tach_gate_consume_signal()) {
-            printf("Hopper reset sensor triggered.\n");
+            printf("Hopper reset sensor triggered; stopping in 1 second.\n");
+
+            int run_on_elapsed_us = 0;
+            while (hopper_running &&
+                   run_on_elapsed_us < HOPPER_SENSOR_RUN_ON_US) {
+                if (operation_interrupt_pending()) {
+                    fprintf(stderr,
+                            "Hopper reset interrupted during sensor run-on.\n");
+                    operation_clear_interrupt();
+                    break;
+                }
+
+                usleep(HOPPER_SENSOR_RUN_ON_SLICE_US);
+                run_on_elapsed_us += HOPPER_SENSOR_RUN_ON_SLICE_US;
+            }
             break;
         }
 
