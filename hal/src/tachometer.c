@@ -140,7 +140,11 @@ static void *tach_gate_worker(void *arg)
 {
     (void)arg;
 
-    const int64_t timeout_ns = 200000000LL;
+    // Wake periodically even when the kernel does not deliver an edge.  The
+    // hopper reset is safety/position critical, so an active sensor level must
+    // still be recognized if an edge is lost to electrical noise or the GPIO
+    // controller's event handling.
+    const int64_t timeout_ns = 10000000LL; // 10 ms
 
     while (tach_gate_running) {
         int wait_result = gpiod_line_request_wait_edge_events(
@@ -150,36 +154,52 @@ static void *tach_gate_worker(void *arg)
             fprintf(stderr, "Tach gate: wait_edge_events failed\n");
             break;
         }
-        if (wait_result == 0) {
-            continue;
+        if (wait_result > 0) {
+            int num_events = gpiod_line_request_read_edge_events(
+                tach_gate_request, tach_gate_event_buffer, 1);
+            if (num_events < 0) {
+                fprintf(stderr, "Tach gate: read_edge_events failed\n");
+                break;
+            }
+
+            if (num_events > 0) {
+                struct gpiod_edge_event *ev =
+                    gpiod_edge_event_buffer_get_event(tach_gate_event_buffer, 0);
+                if (ev) {
+                    enum gpiod_edge_event_type ev_type =
+                        gpiod_edge_event_get_event_type(ev);
+
+                    pthread_mutex_lock(&tach_gate_mutex);
+                    if (ev_type == GPIOD_EDGE_EVENT_FALLING_EDGE) {
+                        if (tach_gate_armed) {
+                            tach_gate_pending = 1;
+                            tach_gate_armed = 0;
+                        }
+                    } else if (ev_type == GPIOD_EDGE_EVENT_RISING_EDGE) {
+                        tach_gate_armed = 1;
+                    }
+                    pthread_mutex_unlock(&tach_gate_mutex);
+                }
+            }
         }
 
-        int num_events = gpiod_line_request_read_edge_events(
-            tach_gate_request, tach_gate_event_buffer, 1);
-        if (num_events < 0) {
-            fprintf(stderr, "Tach gate: read_edge_events failed\n");
-            break;
-        }
-        if (num_events == 0) {
+        // Reconcile the latch with the physical level. Edge events give the
+        // fastest response, while this level check makes a sustained magnet
+        // approach impossible to miss. The A3144 output is active-low.
+        enum gpiod_line_value value = gpiod_line_request_get_value(
+            tach_gate_request, TACH_GATE_LINE);
+        if (value == GPIOD_LINE_VALUE_ERROR) {
+            fprintf(stderr, "Tach gate: failed to read current line value\n");
             continue;
         }
-
-        struct gpiod_edge_event *ev =
-            gpiod_edge_event_buffer_get_event(tach_gate_event_buffer, 0);
-        if (!ev) {
-            continue;
-        }
-
-        enum gpiod_edge_event_type ev_type =
-            gpiod_edge_event_get_event_type(ev);
 
         pthread_mutex_lock(&tach_gate_mutex);
-        if (ev_type == GPIOD_EDGE_EVENT_FALLING_EDGE) {
+        if (value == GPIOD_LINE_VALUE_INACTIVE) {
             if (tach_gate_armed) {
                 tach_gate_pending = 1;
                 tach_gate_armed = 0;
             }
-        } else if (ev_type == GPIOD_EDGE_EVENT_RISING_EDGE) {
+        } else {
             tach_gate_armed = 1;
         }
         pthread_mutex_unlock(&tach_gate_mutex);

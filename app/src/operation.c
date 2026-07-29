@@ -3,6 +3,8 @@
 #include <pthread.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 float curr_tilt_angle = 0.0;
 float curr_speed = 0;
@@ -40,6 +42,119 @@ static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 static pthread_t hopper_thread;
 static volatile int hopper_thread_created = 0;
 static unsigned int hopper_pulse_count = 0;
+
+#define LAUNCH_BEEP_COUNT 3
+#define LAUNCH_BEEP_FREQUENCY_HZ 880
+#define LAUNCH_BEEP_DURATION_MS 180
+#define LAUNCH_BEEP_GAP_MS 120
+#define LAUNCH_BEEP_SAMPLE_RATE 48000
+
+typedef struct {
+    char riff[4];
+    uint32_t file_size;
+    char wave[4];
+    char fmt[4];
+    uint32_t fmt_size;
+    uint16_t audio_format;
+    uint16_t channel_count;
+    uint32_t sample_rate;
+    uint32_t byte_rate;
+    uint16_t block_align;
+    uint16_t bits_per_sample;
+    char data[4];
+    uint32_t data_size;
+} wav_header_t;
+
+static int play_launch_warning(void) {
+    const int beep_frames =
+        LAUNCH_BEEP_SAMPLE_RATE * LAUNCH_BEEP_DURATION_MS / 1000;
+    const int gap_frames =
+        LAUNCH_BEEP_SAMPLE_RATE * LAUNCH_BEEP_GAP_MS / 1000;
+    const int total_frames = LAUNCH_BEEP_COUNT * beep_frames +
+        (LAUNCH_BEEP_COUNT - 1) * gap_frames;
+    const uint32_t data_size = (uint32_t)total_frames * sizeof(int16_t);
+    char path[] = "/tmp/volleyball-launch-warning-XXXXXX";
+
+    int fd = mkstemp(path);
+    if (fd < 0) {
+        perror("Launch warning: unable to create temporary audio file");
+        return -1;
+    }
+
+    FILE *audio = fdopen(fd, "wb");
+    if (!audio) {
+        perror("Launch warning: fdopen failed");
+        close(fd);
+        unlink(path);
+        return -1;
+    }
+
+    wav_header_t header = {
+        .riff = {'R', 'I', 'F', 'F'},
+        .file_size = 36 + data_size,
+        .wave = {'W', 'A', 'V', 'E'},
+        .fmt = {'f', 'm', 't', ' '},
+        .fmt_size = 16,
+        .audio_format = 1,
+        .channel_count = 1,
+        .sample_rate = LAUNCH_BEEP_SAMPLE_RATE,
+        .byte_rate = LAUNCH_BEEP_SAMPLE_RATE * sizeof(int16_t),
+        .block_align = sizeof(int16_t),
+        .bits_per_sample = 16,
+        .data = {'d', 'a', 't', 'a'},
+        .data_size = data_size
+    };
+
+    int write_failed = fwrite(&header, sizeof(header), 1, audio) != 1;
+    for (int frame = 0; frame < total_frames && !write_failed; frame++) {
+        int segment_frames = beep_frames + gap_frames;
+        int position = frame % segment_frames;
+        int16_t sample = 0;
+
+        if (position < beep_frames) {
+            double phase = 2.0 * M_PI * LAUNCH_BEEP_FREQUENCY_HZ *
+                position / LAUNCH_BEEP_SAMPLE_RATE;
+            sample = (int16_t)(sin(phase) * 8192.0);
+        }
+
+        write_failed = fwrite(&sample, sizeof(sample), 1, audio) != 1;
+    }
+
+    if (fclose(audio) != 0 || write_failed) {
+        fprintf(stderr, "Launch warning: failed to write audio data\n");
+        unlink(path);
+        return -1;
+    }
+
+    const char *audio_device = getenv("VOLLEYBALL_AUDIO_DEVICE");
+    pid_t child = fork();
+    if (child < 0) {
+        perror("Launch warning: fork failed");
+        unlink(path);
+        return -1;
+    }
+    if (child == 0) {
+        if (audio_device && audio_device[0] != '\0') {
+            execlp("aplay", "aplay", "-q", "-D", audio_device,
+                   "-t", "wav", path, (char *)NULL);
+        } else {
+            execlp("aplay", "aplay", "-q", "-t", "wav", path,
+                   (char *)NULL);
+        }
+        _exit(127);
+    }
+
+    int status = 0;
+    int wait_result = waitpid(child, &status, 0);
+    unlink(path);
+    if (wait_result < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr,
+                "Launch warning: aplay failed; continuing without beeps\n");
+        return -1;
+    }
+
+    return 0;
+}
 
 /*
  * Software interrupt (emergency abort) support.
@@ -682,6 +797,17 @@ void hopper_pulse() {
         printf("Hopper pulse #%d: running reset instead of pulse.\n",
                HOPPER_RESET_INTERVAL_PULSES);
         hopper_reset();
+        return;
+    }
+
+    printf("Ball launch warning: sounding %d beeps...\n", LAUNCH_BEEP_COUNT);
+    play_launch_warning();
+
+    // The warning takes just under one second. Honour an emergency stop that
+    // arrives during that interval before allowing the hopper to move.
+    if (operation_interrupt_pending()) {
+        fprintf(stderr, "Hopper pulse aborted during launch warning.\n");
+        operation_clear_interrupt();
         return;
     }
 
