@@ -101,6 +101,19 @@ ABSL_FLAG(bool, usb_lock_exposure, false,
           "(default keeps the camera's own auto-exposure).");
 ABSL_FLAG(int, capture_width, 640, "Output (downscaled) frame width.");
 ABSL_FLAG(int, capture_height, 480, "Output (downscaled) frame height.");
+ABSL_FLAG(double, zoom, 1.0,
+          "Digital zoom: center-crop the frame to 1/zoom of its width/height, "
+          "then upscale back to --capture_width x --capture_height, before "
+          "handing it to MediaPipe. The palm detector always resizes its input "
+          "down to a fixed 192x192 tensor, so what matters for range is the "
+          "FRACTION of the frame the hand occupies, not raw capture "
+          "resolution -- narrowing the field of view this way makes a distant "
+          "hand look closer to the model at the cost of a smaller usable "
+          "capture area (the signer must stay within the cropped FOV). 1.0 "
+          "(default) disables cropping. This is a fixed value for the whole "
+          "session -- there is no adaptive/auto zoom (it made gesture reads "
+          "unreliable by cycling the crop in and out as the tracked hand's "
+          "apparent size fluctuated).");
 ABSL_FLAG(std::string, udp_host, "127.0.0.1",
           "Host to send gesture summaries to.");
 ABSL_FLAG(int, udp_port, 12345, "UDP port to send gesture summaries to.");
@@ -417,6 +430,9 @@ absl::Status RunMPPGraph() {
   std::mutex summary_mutex;
   gesture::HandSummary latest_summary;
 
+  // Static digital zoom (see --zoom): fixed for the whole session, read once.
+  const double zoom_value = std::max(1.0, absl::GetFlag(FLAGS_zoom));
+
   // 3. Observe the landmarks + handedness streams. MediaPipe emits both at the
   //    same timestamp (one entry per detected hand, index-aligned), but on
   //    separate streams and possibly separate threads, so we rendez-vous them
@@ -564,6 +580,11 @@ absl::Status RunMPPGraph() {
   ABSL_LOG(INFO) << "Gesture recogniser running; sending UDP to "
                  << absl::GetFlag(FLAGS_udp_host) << ":"
                  << absl::GetFlag(FLAGS_udp_port);
+  // Logged so it's obvious from the server logs whether a non-default zoom
+  // is configured, without having to eyeball the preview feed.
+  if (zoom_value > 1.0) {
+    ABSL_LOG(INFO) << "Digital zoom: " << zoom_value << "x (fixed, no auto-zoom).";
+  }
 
   // 5b. Optional low-latency MJPEG/RTP preview stream to a remote host. The
   //     board is headless, so this lets you watch the annotated frames on a
@@ -645,6 +666,21 @@ absl::Status RunMPPGraph() {
     if (mirror) cv::flip(camera_frame_raw, camera_frame_raw, /*flipCode=*/1);
     if (white_balance) ApplyGrayWorld(camera_frame_raw);
 
+    // Digital zoom: center-crop then upscale back to the capture size, so a
+    // distant hand occupies a larger fraction of the frame (see --zoom).
+    // Fixed for the whole session; there is no adaptive auto-zoom.
+    if (zoom_value > 1.0) {
+      const int full_w = camera_frame_raw.cols;
+      const int full_h = camera_frame_raw.rows;
+      const int crop_w = std::max(2, static_cast<int>(full_w / zoom_value));
+      const int crop_h = std::max(2, static_cast<int>(full_h / zoom_value));
+      const int x0 = (full_w - crop_w) / 2;
+      const int y0 = (full_h - crop_h) / 2;
+      cv::Mat cropped = camera_frame_raw(cv::Rect(x0, y0, crop_w, crop_h));
+      cv::resize(cropped, camera_frame_raw, cv::Size(full_w, full_h), 0, 0,
+                 cv::INTER_LINEAR);
+    }
+
     cv::Mat camera_frame;
     cv::cvtColor(camera_frame_raw, camera_frame, cv::COLOR_BGR2RGB);
 
@@ -694,6 +730,19 @@ absl::Status RunMPPGraph() {
                   1.0, cv::Scalar(0, 0, 0), 4, cv::LINE_AA);
       cv::putText(preview, label, cv::Point(12, 34), cv::FONT_HERSHEY_SIMPLEX,
                   1.0, cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
+
+      // Zoom readout, only shown when a non-default --zoom is configured
+      // (fixed for the session; there is no more adaptive auto-zoom).
+      if (zoom_value > 1.0) {
+        char zoom_label[32];
+        std::snprintf(zoom_label, sizeof(zoom_label), "zoom %.2fx", zoom_value);
+        cv::putText(preview, zoom_label, cv::Point(12, 68),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 0, 0), 3,
+                    cv::LINE_AA);
+        cv::putText(preview, zoom_label, cv::Point(12, 68),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 255), 2,
+                    cv::LINE_AA);
+      }
       if (streamer.isOpened()) streamer.write(preview);
       // JPEG-encode and push to the web UI. Skip the rare oversized frame
       // rather than fragment it across datagrams.

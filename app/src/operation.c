@@ -30,8 +30,9 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_START_DELAY_US 1000
 #define HOPPER_PULSE_END_DELAY_US 500
 #define HOPPER_PULSE_ACCEL_STEPS 400
-#define HOPPER_CONTINUOUS_DELAY_US 500
+#define HOPPER_CONTINUOUS_DELAY_US 800
 #define HOPPER_RESET_INTERVAL_PULSES 4
+#define HOPPER_RESET_TIMEOUT_SEC 10
 
 volatile float tilt_angle_w = 0;
 
@@ -207,7 +208,7 @@ static long tilt_angle_to_time(float i_angle, float f_angle) {
             i_angle = 75.0;
         }
 
-        if (i_angle <= 85.0) {
+        if (i_angle <= 87.0) {
             d_angle = f_angle - i_angle;
             c_duration += d_angle * FTC_75_85;
             return c_duration;
@@ -471,17 +472,24 @@ void percentage_to_mv(float percentage) {
 }
 
 void set_machine(int machine_position, int set_index) {
+    if (machine_position < 0 || machine_position >= NUM_MACHINE_POSITIONS ||
+        set_index < 0 || set_index >= NUM_SETS) {
+        fprintf(stderr, "Invalid machine position (%d) or set index (%d)\n",
+                machine_position, set_index);
+        return;
+    }
+
     mcp4725_set_raw(&dac1, 0);
 
-    printf("Setting machine for set %d\n", set_index);
+    printf("Setting machine for position %d, set %d\n", machine_position, set_index);
     printf("Tilt angle: %f, Yaw angle: %f, Speed: %f\n",
-            set_seq[set_index]->tilt_angle,
-            set_seq[set_index]->yaw_angle,
-            set_seq[set_index]->rpm_output);
+            set_seq[machine_position][set_index].tilt_angle,
+            set_seq[machine_position][set_index].yaw_angle,
+            set_seq[machine_position][set_index].rpm_output);
     
-    //tilt_signal(set_seq[set_index]->tilt_angle);
-    //yaw_signal(set_seq[set_index]->yaw_angle);
-    //speed_signal(set_seq[set_index]->rpm_output);
+    //tilt_signal(set_seq[machine_position][set_index].tilt_angle);
+    //yaw_signal(set_seq[machine_position][set_index].yaw_angle);
+    //speed_signal(set_seq[machine_position][set_index].rpm_output);
 }
 
 void tilt_with_feedback(float angle) {
@@ -706,6 +714,11 @@ void hopper_reset() {
         hopper_stop();
     }
 
+    // Flush any stale gate triggers from previous pulses/movement
+    while (tach_gate_consume_signal()) {
+        // Discard stale signals
+    }
+
     printf("Resetting hopper: stepping until sensor trigger...\n");
     hopper_start();
 
@@ -714,6 +727,7 @@ void hopper_reset() {
         return;
     }
 
+    time_t start_time = time(NULL);
     while (hopper_running) {
         if (operation_interrupt_pending()) {
             fprintf(stderr, "Hopper reset interrupted -- stopping hopper.\n");
@@ -723,6 +737,12 @@ void hopper_reset() {
 
         if (tach_gate_consume_signal()) {
             printf("Hopper reset sensor triggered.\n");
+            break;
+        }
+
+        if (difftime(time(NULL), start_time) >= HOPPER_RESET_TIMEOUT_SEC) {
+            fprintf(stderr, "Hopper reset timed out after %d seconds without sensor trigger.\n",
+                    HOPPER_RESET_TIMEOUT_SEC);
             break;
         }
 

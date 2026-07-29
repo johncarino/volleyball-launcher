@@ -129,14 +129,11 @@
         machineSocket.on('disconnect', () => { setConnStatus(false); });
 
         // ---- Gesture recogniser ----
-        machineSocket.on('gesture-update', (data) => { renderGesture(data); handleLaunchStartGesture(data); });
+        machineSocket.on('gesture-update', (data) => { handleLaunchGestureFrame(data); });
         machineSocket.on('gesture-frame', (data) => { renderPreviewFrame(data); });
-        machineSocket.on('gesture-set', (data) => { onGestureSet(data); });
-        machineSocket.on('gesture-control-state', (state) => { applyFeasibility(state && state.feasible); });
-        machineSocket.on('gesture-set-hand-state', (data) => { applySetHand(data && data.hand); });
         machineSocket.on('state-reply', (state) => { setGestureRunning(state === 'RUNNING'); });
-        machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); renderGesture(null); });
-        machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); });
+        machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); setLaunchPreviewVisible(false); });
+        machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); setLaunchPreviewVisible(false); });
 
         // ---- Live telemetry (real tachometer RPM) ----
         machineSocket.on('telemetry', (data) => { renderTelemetry(data); });
@@ -203,83 +200,89 @@
         onHopperControl(hopperOn ? 'on' : 'off');
       }
 
-      // ---- Gesture recogniser controls -------------------------------------------
-      const FINGER_KEYS = ['thumb', 'index', 'middle', 'ring', 'pinky'];
-
-      function startGesture() {
-        emitMachine('start');
-      }
-
-      function stopGesture() {
-        emitMachine('stop');
-      }
-
-      function setGestureRunning(running) {
-        window._recognizerRunning = running;
-        const pill = document.getElementById('gesture-state-pill');
-        const startBtn = document.getElementById('gestureStartBtn');
-        const stopBtn = document.getElementById('gestureStopBtn');
-        if (pill) pill.textContent = running ? 'Running' : 'Idle';
-        if (startBtn) startBtn.disabled = running;
-        if (stopBtn) stopBtn.disabled = !running;
-        const previewSection = document.getElementById('gesture-preview-section');
-        if (previewSection) previewSection.style.display = running ? '' : 'none';
-        if (!running) {
-          const img = document.getElementById('gesture-preview');
-          if (img) img.removeAttribute('src');
-        }
-      }
-
-      // ---- Start the run sequence with an open-palm (5 finger) gesture -----------
-      // Armed once the user enters a run screen (Single Shot or Sequence). Requires
-      // the OPEN_PALM gesture held briefly to avoid firing on a momentary/false
-      // detection.
-      const LAUNCH_GESTURE_HOLD_MS = 600;
+      // ---- Gesture recogniser: open-hand start/stop for Single Shot/Sequence ----
+      // No gesture->set mapping: once armed (see armLaunchGesture) the camera
+      // watches for an open RIGHT hand to start the run and an open LEFT hand to
+      // stop it (Sequence mode finishes the current shot first, see
+      // requestSequenceStop).
+      const LAUNCH_GESTURE_HOLD_MS = 600;  // hold an open hand this long to confirm
+      const LAUNCH_BUFFER_SECONDS = 5;     // countdown before the camera turns on
 
       // How long the "Select a set first" warning stays on the Start button.
       const SELECT_SET_HINT_MS = 500;
 
+      function setGestureRunning(running) {
+        window._recognizerRunning = running;
+      }
+
+      function resetLaunchGestureHolds() {
+        window._launchHoldRight = { name: null, since: 0, fired: false };
+        window._launchHoldLeft = { name: null, since: 0, fired: false };
+      }
+      resetLaunchGestureHolds();
+
+      // Single Shot / Sequence: Confirm arms gesture control, but the camera
+      // doesn't turn on immediately — a short buffer (with a visible countdown
+      // on the button) gives the user time to get in frame first.
       function armLaunchGesture() {
         window._launchGestureArmed = true;
-        window._launchGestureHoldName = null;
-        window._launchGestureHoldSince = 0;
-        window._launchGestureFiredName = null;
+        window._launchGestureCameraReady = false;
         window._launchGestureAutoStarted = false;
-        if (!window._recognizerRunning) {
-          window._launchGestureAutoStarted = true;
-          emitMachine('start');
-        }
+        window._stopRequested = false;
+        resetLaunchGestureHolds();
+
+        const btn = document.getElementById('launch-main-btn');
+        if (btn) btn.disabled = true;
+        let remaining = LAUNCH_BUFFER_SECONDS;
+        const showCountdown = () => {
+          if (btn) btn.innerHTML = `<i class="ti ti-hourglass" aria-hidden="true"></i> Starting camera in ${remaining}s`;
+        };
+        showCountdown();
+        clearInterval(window._launchBufferTimer);
+        window._launchBufferTimer = setInterval(() => {
+          remaining--;
+          if (remaining > 0) { showCountdown(); return; }
+
+          clearInterval(window._launchBufferTimer);
+          window._launchBufferTimer = null;
+          if (!window._recognizerRunning) {
+            window._launchGestureAutoStarted = true;
+            emitMachine('start');
+          }
+          window._launchGestureCameraReady = true;
+          setLaunchPreviewVisible(true);
+          if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('confirm');
+            btn.classList.add('start');
+            btn.setAttribute('onclick', 'toggleLaunch(this)');
+            btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+          }
+        }, 1000);
       }
 
       function disarmLaunchGesture() {
         window._launchGestureArmed = false;
+        window._launchGestureCameraReady = false;
+        window._stopRequested = false;
+        clearInterval(window._launchBufferTimer);
+        window._launchBufferTimer = null;
+        setLaunchPreviewVisible(false);
         if (window._launchGestureAutoStarted) {
           emitMachine('stop');
           window._launchGestureAutoStarted = false;
         }
       }
 
-      function handleLaunchStartGesture(data) {
-        if (!window._launchGestureArmed) return;
-
-        const name = (data && data.name) || 'NONE';
-        const now = Date.now();
-
-        if (name !== window._launchGestureHoldName) {
-          window._launchGestureHoldName = name;
-          window._launchGestureHoldSince = now;
-          window._launchGestureFiredName = null;
+      // Small camera preview shown once the camera is actually looking for
+      // hands (after the countdown buffer completes); hidden while idle/armed.
+      function setLaunchPreviewVisible(visible) {
+        const section = document.getElementById('gesture-preview-section');
+        if (section) section.style.display = visible ? '' : 'none';
+        if (!visible) {
+          const img = document.getElementById('gesture-preview');
+          if (img) img.removeAttribute('src');
         }
-
-        if (name !== 'OPEN_PALM') return;
-        if (now - window._launchGestureHoldSince < LAUNCH_GESTURE_HOLD_MS) return;
-        if (window._launchGestureFiredName === 'OPEN_PALM') return;
-
-        window._launchGestureFiredName = 'OPEN_PALM';
-        const btn = document.getElementById('launch-main-btn');
-        if (!btn || btn.classList.contains('stop')) return;
-        console.log('[gesture] OPEN_PALM held — starting the run sequence');
-        toggleLaunch(btn);
       }
 
       let _previewUrl = null;
@@ -300,48 +303,32 @@
         _previewUrl = url;
       }
 
-      let _setHand = 'right';
-      function toggleSetHand() {
-        _setHand = (_setHand === 'right') ? 'left' : 'right';
-        emitMachine('gesture-set-hand', { hand: _setHand });
-      }
+      // data is { left, right }, one gesture summary per hand (see
+      // gesture_server.js). Right hand open = start; left hand open = stop.
+      function handleLaunchGestureFrame(data) {
+        if (!window._launchGestureArmed || !window._launchGestureCameraReady) return;
+        const now = Date.now();
 
-      function applySetHand(hand) {
-        _setHand = (hand === 'left') ? 'left' : 'right';
-        const btn = document.getElementById('set-hand-toggle');
-        if (btn) btn.textContent = (_setHand === 'right') ? 'Right' : 'Left';
-        const hint = document.getElementById('gesture-control-hint');
-        if (hint) {
-          const other = (_setHand === 'right') ? 'Left' : 'Right';
-          hint.innerHTML = other + ' hand: thumbs up = start feed &middot; hold open palm = stop';
-        }
-      }
-
-      function renderGesture(data) {
-        const nameEl = document.getElementById('gesture-name');
-        if (!nameEl) return;
-        const countEl = document.getElementById('gesture-count');
-
-        if (!data) {
-          nameEl.textContent = 'NONE';
-          if (countEl) countEl.textContent = '0 fingers';
-          FINGER_KEYS.forEach((k) => setFingerChip(k, false));
-          return;
+        const rightName = (data && data.right && data.right.name) || 'NONE';
+        const rst = window._launchHoldRight;
+        if (rightName !== rst.name) { rst.name = rightName; rst.since = now; rst.fired = false; }
+        if (rightName === 'OPEN_PALM' && !rst.fired && now - rst.since >= LAUNCH_GESTURE_HOLD_MS) {
+          rst.fired = true;
+          const btn = document.getElementById('launch-main-btn');
+          if (btn && !btn.disabled && !btn.classList.contains('stop')) {
+            console.log('[gesture] open right hand held — starting the run');
+            toggleLaunch(btn);
+          }
         }
 
-        nameEl.textContent = data.name || 'UNKNOWN';
-        if (countEl) countEl.textContent = (data.count != null ? data.count : 0) + ' fingers';
-        const fingers = data.fingers || {};
-        FINGER_KEYS.forEach((k) => setFingerChip(k, !!fingers[k]));
-      }
-
-      function setFingerChip(key, up) {
-        const chip = document.getElementById('finger-' + key);
-        if (!chip) return;
-        chip.classList.toggle('up', up);
-        chip.classList.toggle('down', !up);
-        const state = chip.querySelector('.finger-state');
-        if (state) state.textContent = up ? 'UP' : 'down';
+        const leftName = (data && data.left && data.left.name) || 'NONE';
+        const lst = window._launchHoldLeft;
+        if (leftName !== lst.name) { lst.name = leftName; lst.since = now; lst.fired = false; }
+        if (leftName === 'OPEN_PALM' && !lst.fired && now - lst.since >= LAUNCH_GESTURE_HOLD_MS) {
+          lst.fired = true;
+          console.log('[gesture] open left hand held — stopping after the current shot');
+          requestSequenceStop();
+        }
       }
 
       function showGestureError(message) {
@@ -352,87 +339,6 @@
         box.style.display = 'block';
         clearTimeout(window._gestureErrTimer);
         window._gestureErrTimer = setTimeout(() => { box.style.display = 'none'; }, 5000);
-      }
-
-      // ---- Gesture-control mode --------------------------------------------------
-      const MACHINE_INDEX = { L: 0, C: 1, R: 2 };
-      const MACHINE_LABEL = { L: 'Left', C: 'Center', R: 'Right' };
-      let gestureControlOn = false;
-
-      const GESTURE_LEGEND = [
-        { set: '1', gesture: 'POINT', hint: 'Index up' },
-        { set: '2', gesture: 'PEACE', hint: 'Index + middle' },
-        { set: '3/Shoot', gesture: 'GUN', hint: 'Thumb + index' },
-        { set: '4', gesture: 'FOUR', hint: 'Four fingers' },
-        { set: '5', gesture: 'OPEN_PALM', hint: 'Open hand' },
-        { set: 'Red', gesture: 'FIST', hint: 'Closed fist' },
-        { set: 'Slide', gesture: 'CALL_ME', hint: 'Shaka' }
-      ];
-
-      function setSlug(s) { return s.replace(/[^a-z0-9]+/gi, '').toLowerCase(); }
-
-      function gestureLegendHTML() {
-        return GESTURE_LEGEND.map(e =>
-          `<div class="set-legend-item" id="setleg-${setSlug(e.set)}" data-set="${e.set}">
-            <span class="set-legend-name">${e.set}</span>
-            <span class="set-legend-gesture">${e.gesture}</span>
-            <span class="set-legend-hint">${e.hint}</span>
-          </div>`).join('');
-      }
-
-      function currentMachineIndex() {
-        const key = selectedMachine || 'C';
-        return MACHINE_INDEX[key] != null ? MACHINE_INDEX[key] : 1;
-      }
-
-      function toggleGestureControl() {
-        gestureControlOn = !gestureControlOn;
-        const btn = document.getElementById('gesture-control-toggle');
-        if (btn) { btn.classList.toggle('active', gestureControlOn); btn.textContent = gestureControlOn ? 'On' : 'Off'; }
-        const mpLabel = document.getElementById('gesture-mp-label');
-        if (mpLabel) mpLabel.textContent = MACHINE_LABEL[selectedMachine || 'C'] || 'Center';
-        if (!gestureControlOn) highlightRecognisedSet(null);
-        emitMachine('gesture-control-enable', {
-          enabled: gestureControlOn,
-          machinePosition: currentMachineIndex()
-        });
-      }
-
-      function applyFeasibility(feasibleSets) {
-        const allowed = feasibleSets || [];
-        GESTURE_LEGEND.forEach(e => {
-          const el = document.getElementById('setleg-' + setSlug(e.set));
-          if (el) el.classList.toggle('infeasible', allowed.indexOf(e.set) === -1);
-        });
-      }
-
-      function highlightRecognisedSet(set) {
-        document.querySelectorAll('.set-legend-item.recognised')
-          .forEach(el => el.classList.remove('recognised'));
-        if (!set) return;
-        const el = document.getElementById('setleg-' + setSlug(set));
-        if (el) {
-          el.classList.add('recognised');
-          clearTimeout(window._setHighlightTimer);
-          window._setHighlightTimer = setTimeout(() => el.classList.remove('recognised'), 2500);
-        }
-      }
-
-      function onGestureSet(data) {
-        if (!data) return;
-        const label = document.getElementById('gesture-set-label');
-        if (label) label.textContent = data.set + (data.feasible ? '' : ' (unavailable)');
-        highlightRecognisedSet(data.feasible ? data.set : null);
-      }
-
-      function syncGestureControlUI() {
-        const btn = document.getElementById('gesture-control-toggle');
-        if (btn) { btn.classList.toggle('active', gestureControlOn); btn.textContent = gestureControlOn ? 'On' : 'Off'; }
-        const mpLabel = document.getElementById('gesture-mp-label');
-        if (mpLabel) mpLabel.textContent = MACHINE_LABEL[selectedMachine || 'C'] || 'Center';
-        if (gestureControlOn) {
-          emitMachine('gesture-control-enable', { enabled: true, machinePosition: currentMachineIndex() });
-        }
       }
 
       function powerOff() {
@@ -846,71 +752,6 @@
             <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
           </div>`,
 
-        gesture: () => `
-            <div class="section" style="margin-top:8px">
-              <div class="section-label">Recogniser</div>
-              <div class="card">
-                <div class="field-row">
-                  <span class="field-label"><i class="ti ti-hand-stop" aria-hidden="true"></i> Status</span>
-                  <span class="field-value" id="gesture-state-pill">Idle</span>
-                </div>
-              </div>
-              <div class="gesture-buttons">
-                <button class="op-btn start" id="gestureStartBtn" onclick="startGesture()"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
-                <button class="op-btn stop" id="gestureStopBtn" onclick="stopGesture()" disabled><i class="ti ti-player-stop" aria-hidden="true"></i> Stop</button>
-              </div>
-            </div>
-            <div class="section" id="gesture-preview-section" style="display:none">
-              <div class="section-label">Live preview</div>
-              <div class="card" style="padding:0;overflow:hidden">
-                <img id="gesture-preview" alt="Live camera preview"
-                    style="display:block;width:100%;height:auto;background:#000" />
-              </div>
-            </div>
-            <div class="section">
-              <div class="section-label">Live gesture</div>
-              <div class="card gesture-readout">
-                <div class="gesture-name" id="gesture-name">NONE</div>
-                <div class="gesture-count" id="gesture-count">0 fingers</div>
-                <div class="finger-chips">
-                  <div class="finger-chip down" id="finger-thumb"><span>Thumb</span><span class="finger-state">down</span></div>
-                  <div class="finger-chip down" id="finger-index"><span>Index</span><span class="finger-state">down</span></div>
-                  <div class="finger-chip down" id="finger-middle"><span>Middle</span><span class="finger-state">down</span></div>
-                  <div class="finger-chip down" id="finger-ring"><span>Ring</span><span class="finger-state">down</span></div>
-                  <div class="finger-chip down" id="finger-pinky"><span>Pinky</span><span class="finger-state">down</span></div>
-                </div>
-              </div>
-            </div>
-            <div class="section">
-              <div class="section-label">Gesture control</div>
-              <div class="card">
-                <div class="field-row">
-                  <span class="field-label"><i class="ti ti-hand-finger" aria-hidden="true"></i> Control mode</span>
-                  <button class="gc-toggle-btn" id="gesture-control-toggle" onclick="toggleGestureControl()">Off</button>
-                </div>
-                <div class="field-row">
-                  <span class="field-label"><i class="ti ti-hand-three-fingers" aria-hidden="true"></i> Set-sign hand</span>
-                  <button class="gc-toggle-btn" id="set-hand-toggle" onclick="toggleSetHand()">Right</button>
-                </div>
-                <div class="field-row">
-                  <span class="field-label">Machine position</span>
-                  <span class="field-value" id="gesture-mp-label">-</span>
-                </div>
-                <div class="field-row">
-                  <span class="field-label">Recognised set</span>
-                  <span class="field-value" id="gesture-set-label">-</span>
-                </div>
-                <div class="gesture-control-hint" id="gesture-control-hint">Left hand: thumbs up = start feed &middot; hold open palm = stop</div>
-              </div>
-            </div>
-            <div class="section">
-              <div class="section-label">Sets &middot; grey = not reachable here</div>
-              <div class="set-legend" id="set-legend">${gestureLegendHTML()}</div>
-            </div>
-            <div class="section" id="gesture-error-box" style="display:none">
-              <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
-            </div>`,
-
         launch: () => `
           <div class="section" style="margin-top:8px">
             <div class="section-label">Position</div>
@@ -932,6 +773,16 @@
           <div class="section">
             <div class="section-label">Launch</div>
             <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
+            <div class="gesture-hint">Confirm arms the camera: open your right hand to start, open your left hand to stop.</div>
+          </div>
+          <div class="section" id="gesture-preview-section" style="display:none">
+            <div class="section-label">Camera</div>
+            <div class="gesture-preview-wrap">
+              <img id="gesture-preview" alt="Camera view" />
+            </div>
+          </div>
+          <div class="section" id="gesture-error-box" style="display:none">
+            <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
           </div>`,
 
         single_shot: () => `
@@ -952,6 +803,16 @@
           <div class="section">
             <div class="section-label">Launch</div>
             <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
+            <div class="gesture-hint">Confirm arms the camera: open your right hand to start, open your left hand to stop.</div>
+          </div>
+          <div class="section" id="gesture-preview-section" style="display:none">
+            <div class="section-label">Camera</div>
+            <div class="gesture-preview-wrap">
+              <img id="gesture-preview" alt="Camera view" />
+            </div>
+          </div>
+          <div class="section" id="gesture-error-box" style="display:none">
+            <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
           </div>`
       };
 
@@ -1268,6 +1129,14 @@
         window._runTimer = setTimeout(() => {
           stopFiring(machine, n);
 
+          // A gesture-triggered stop request lets the current shot finish (above)
+          // instead of aborting mid-fire; apply it now that the shot is done.
+          if (window._stopRequested) {
+            window._stopRequested = false;
+            stopRunSequence();
+            return;
+          }
+
           runIndex++;
           if (runIndex >= runQueue.length) {
             if (window._activeMode === 'launch' && repeatState === 1) {
@@ -1283,7 +1152,16 @@
         }, SET_RUN_DURATION_MS);
       }
 
+      // Gesture-triggered stop (open left hand): if a sequence is actively
+      // firing, let the current shot finish rather than aborting it (see the
+      // check in runNextInQueue above). No-op if nothing is running.
+      function requestSequenceStop() {
+        if (!isRunning) return;
+        window._stopRequested = true;
+      }
+
       function stopRunSequence() {
+        window._stopRequested = false;
         const wasRunning = isRunning;
         isRunning = false;
         clearTimeout(window._runTimer);
@@ -1382,15 +1260,12 @@
         refreshCourtPicker();
       }
 
-      // Single Shot / Sequence: first press confirms the selection and turns the
-      // camera on to watch for the start gesture; the button then becomes the normal
-      // Start/Stop toggle (also triggerable by the open-palm start gesture).
+      // Single Shot / Sequence: first press confirms the selection and arms
+      // gesture control. The camera doesn't turn on immediately — armLaunchGesture
+      // runs a short countdown on the button first, then turns the button into the
+      // normal Start/Stop toggle (also triggerable by the open-hand gestures).
       function confirmRun(btn) {
         armLaunchGesture();
-        btn.classList.remove('confirm');
-        btn.classList.add('start');
-        btn.setAttribute('onclick', 'toggleLaunch(this)');
-        btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
       }
 
       function toggleLaunch(btn) {
@@ -1440,7 +1315,6 @@
             <button class="modetab-header" role="tab" data-mode="configure">Configure</button>
             <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
             <button class="modetab-header" role="tab" data-mode="court_settings">Court Settings</button>
-            <button class="modetab-header" role="tab" data-mode="gesture">Gesture</button>
           </div>`;
       }
 
@@ -1504,9 +1378,6 @@
         // Confirm on the launch button (see confirmRun).
         if (mode === 'launch' || mode === 'single_shot') {
           disarmLaunchGesture();
-        }
-        if (mode === 'gesture') {
-          syncGestureControlUI();
         }
         window._activeMode = mode;
       }
