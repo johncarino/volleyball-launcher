@@ -49,5 +49,6 @@ typedef struct {
 extern set_specs_t set_seq[NUM_MACHINE_POSITIONS][NUM_SETS];
 
 int save_set(int set_index, int mp, int tl, int t);
+int recalculate_saved_sets(void);
 
 #endif // SET_H

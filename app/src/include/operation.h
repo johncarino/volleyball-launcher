@@ -43,9 +43,9 @@ void tilt_signal_advanced(float angle);
 void yaw_signal_advanced(float angle);
 void tilt_with_feedback(float angle);
 void toggle_hopper();
-void hopper_start();
+int hopper_start();
 void hopper_stop();
-void hopper_pulse();
+int hopper_pulse();
 void hopper_reset();
 int get_tach_reading();
 

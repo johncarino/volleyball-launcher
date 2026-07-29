@@ -1,192 +1,628 @@
 #include "app/src/include/arc_calc.h"
 
-// Global variable definitions
+/* Global variable definitions */
+
 int machine_position = 0;
 float machine_x[NUM_MACHINE_POSITIONS];
-const float machine_y = 1.50;
+const float machine_y = 1.55f;
 
 int target_position = 0;
 float target_x[NUM_TARGETS];
-const float target_y = 0.0;
+const float target_y = 0.0f;
 
 int tempo_position = 0;
 float peak_height[NUM_TEMPOS];
 
-float tilt_angle[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
-float tilt_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+float tilt_angle
+    [NUM_MACHINE_POSITIONS]
+    [NUM_TARGETS]
+    [NUM_TEMPOS];
 
-float yaw_angle[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
-float yaw_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+float tilt_output
+    [NUM_MACHINE_POSITIONS]
+    [NUM_TARGETS]
+    [NUM_TEMPOS];
 
-float launch_speed[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
-float launch_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+float yaw_angle
+    [NUM_MACHINE_POSITIONS]
+    [NUM_TARGETS]
+    [NUM_TEMPOS];
 
-float rpm_output[NUM_MACHINE_POSITIONS][NUM_TARGETS][NUM_TEMPOS];
+float yaw_output
+    [NUM_MACHINE_POSITIONS]
+    [NUM_TARGETS]
+    [NUM_TEMPOS];
 
-void arc_calc_params(float net_height, float court_width, float court_length) {
-    //launch positions (metre)
-    machine_x[0] = 0; // left target
-    machine_x[1] = court_width / 2; // center target
-    machine_x[2] = court_width; // right target
+float launch_speed
+    [NUM_MACHINE_POSITIONS]
+    [NUM_TARGETS]
+    [NUM_TEMPOS];
 
-    //target positions (metre)
-    target_x[0] = 0 + 1; // left target
-    target_x[1] = court_width / 4; // left center target
-    target_x[2] = 3 * court_width / 4; // right center target
-    target_x[3] = court_width - 1; // right target
+float launch_output
+    [NUM_MACHINE_POSITIONS]
+    [NUM_TARGETS]
+    [NUM_TEMPOS];
 
-    //tempo heights (metre)
-    peak_height[0] = net_height + 0.5; // tempo 1
-    peak_height[1] = net_height + 1.0; // tempo 2
-    peak_height[2] = net_height + 1.5; // tempo 3
-    peak_height[3] = net_height + 2.0; // tempo 4
-    peak_height[4] = net_height + 2.5; // tempo 5
+float rpm_output
+    [NUM_MACHINE_POSITIONS]
+    [NUM_TARGETS]
+    [NUM_TEMPOS];
 
-    //court length unused
+
+/*
+ * Marks all calculated trajectory values as invalid.
+ */
+static void invalidate_arc_results(void)
+{
+    for (int i = 0; i < NUM_MACHINE_POSITIONS; i++) {
+        for (int j = 0; j < NUM_TARGETS; j++) {
+            for (int k = 0; k < NUM_TEMPOS; k++) {
+                tilt_angle[i][j][k] = NAN;
+                launch_speed[i][j][k] = NAN;
+                rpm_output[i][j][k] = NAN;
+            }
+        }
+    }
+}
+
+
+/*
+ * Updates the machine positions, target positions, and tempo heights.
+ *
+ * All distance inputs must be provided in metres.
+ */
+void arc_calc_params(
+    float net_height,
+    float court_width,
+    float court_length
+)
+{
+    if (!isfinite(net_height) || net_height <= 0.0f) {
+        fprintf(
+            stderr,
+            "Error: net_height must be a positive finite value.\n"
+        );
+
+        invalidate_arc_results();
+        return;
+    }
+
+    if (!isfinite(court_width) || court_width <= 0.0f) {
+        fprintf(
+            stderr,
+            "Error: court_width must be a positive finite value.\n"
+        );
+
+        invalidate_arc_results();
+        return;
+    }
+
+    /*
+     * Machine positions in metres.
+     */
+    machine_x[0] = 0.0f;
+    machine_x[1] = court_width / 2.0f;
+    machine_x[2] = court_width;
+
+    /*
+     * Target positions in metres.
+     */
+    target_x[0] = 1.0f;
+    target_x[1] = court_width / 4.0f;
+    target_x[2] = court_width / 2.0f;
+    target_x[3] = 3.0f * court_width / 4.0f;
+    target_x[4] = court_width - 1.0f;
+
+    /*
+     * Maximum trajectory heights in metres.
+     */
+    peak_height[0] = net_height + 0.5f - PEAK_HEIGHT_OFFSET;
+    peak_height[1] = net_height + 1.0f - PEAK_HEIGHT_OFFSET;
+    peak_height[2] = net_height + 1.5f - PEAK_HEIGHT_OFFSET;
+    peak_height[3] = net_height + 2.0f - PEAK_HEIGHT_OFFSET;
+
+    /*
+     * Court length is currently not used by this calculation.
+     */
     (void)court_length;
 
     calculation();
 
-    //test
-    printf("Arc calculation parameters updated based on calibration:\n");
-}
-//xf = target_x
-//xi = machine_x
-
-// Total offset of the ball exit point relative to machine_x/machine_y (the
-// machine reference point), as a function of tilt angle. This combines:
-//   1) the fixed reference-point -> pivot offset (PIVOT_OFFSET_X/Y), and
-//   2) the tilt-angle-dependent pivot -> exit-point offset, fit from measured
-//      calibration data (see arc_calc.h for the raw points).
-// Clamp theta to the calibrated range [0, 90] deg since the quadratic fit for
-// part 2 is not valid for extrapolation outside it.
-void exit_point_offset(float theta_deg, float *dx_off, float *dy_off) {
-    float t = theta_deg;
-    if (t < 0.0f) t = 0.0f;
-    if (t > 90.0f) t = 90.0f;
-
-    *dx_off = PIVOT_OFFSET_X + (ARM_DX_C2*t*t + ARM_DX_C1*t + ARM_DX_C0);
-    *dy_off = PIVOT_OFFSET_Y + (ARM_DY_C2*t*t + ARM_DY_C1*t + ARM_DY_C0);
+    printf(
+        "Arc calculation parameters updated based on calibration.\n"
+    );
 }
 
-void calculation() {
-    //replace with calculation logic
 
-    //x displacement (machine reference point to target), and the offset-
-    //corrected version
-    float dx_ref, dx, dy_off;
-    //launch velocity
-    float vy0, vx0, v0;
-    //time to peak, time from peak to target, total time of flight
-    float t_up, t_down, t_total;
+/*
+ * Calculates the total offset from the machine reference point to the
+ * ball exit point.
+ *
+ * dx_off is measured along the forward direction of the machine.
+ * dy_off is measured vertically.
+ */
+void exit_point_offset(
+    float theta_deg,
+    float *dx_off,
+    float *dy_off
+)
+{
+    if (dx_off == NULL || dy_off == NULL) {
+        fprintf(
+            stderr,
+            "Error: exit point output pointer is null.\n"
+        );
 
-    float theta, rpm;
+        return;
+    }
 
+    float clamped_theta = theta_deg;
+
+    if (!isfinite(clamped_theta)) {
+        *dx_off = NAN;
+        *dy_off = NAN;
+        return;
+    }
+
+    if (clamped_theta < 0.0f) {
+        clamped_theta = 0.0f;
+    }
+
+    if (clamped_theta > 90.0f) {
+        clamped_theta = 90.0f;
+    }
+
+    const float theta_rad =
+        clamped_theta * ARC_PI / 180.0f;
+
+    *dx_off =
+        PIVOT_OFFSET_X
+        + ARM_LEN_A * cosf(theta_rad)
+        - ARM_LEN_B * sinf(theta_rad);
+
+    *dy_off =
+        PIVOT_OFFSET_Y
+        + ARM_LEN_A * sinf(theta_rad)
+        + ARM_LEN_B * cosf(theta_rad);
+}
+
+
+/*
+ * Calculates the required launch angle, launch speed, and wheel speed for
+ * every machine position, target position, and tempo.
+ */
+void calculation(void)
+{
     for (int i = 0; i < NUM_MACHINE_POSITIONS; i++) {
         for (int j = 0; j < NUM_TARGETS; j++) {
-            dx_ref = fabs(target_x[j] - machine_x[i]);
+            const float dx_ref =
+                fabsf(target_x[j] - machine_x[i]);
 
             for (int k = 0; k < NUM_TEMPOS; k++) {
-                //initial guess ignoring the exit-point offset
-                theta = 45.0;
+                float theta = 45.0f;
+                float v0 = NAN;
+                int trajectory_valid = 1;
 
-                //fixed-point iteration: the exit point (and therefore dx and
-                //the effective launch height) depends on theta, which is what
-                //we're solving for. A handful of passes converges since the
-                //offset is small relative to the target distance.
-                for (int iter = 0; iter < ARM_OFFSET_ITERATIONS; iter++) {
-                    exit_point_offset(theta, &dx, &dy_off);
+                /*
+                 * The ball exit point depends on the tilt angle.
+                 * The tilt angle also depends on the ball exit point.
+                 *
+                 * Fixed point iteration is used to solve this relationship.
+                 */
+                for (
+                    int iter = 0;
+                    iter < ARM_OFFSET_ITERATIONS;
+                    iter++
+                ) {
+                    float dx_off;
+                    float dy_off;
 
-                    //effective horizontal distance from the actual exit
-                    //point to the target
-                    dx = dx_ref - dx;
+                    exit_point_offset(
+                        theta,
+                        &dx_off,
+                        &dy_off
+                    );
 
-                    //vertical launch velocity calculation, using the actual
-                    //(tilt-dependent) exit height
-                    vy0 = sqrt(2*GRAVITY*(peak_height[k] - (machine_y + dy_off)));
+                    if (
+                        !isfinite(dx_off)
+                        || !isfinite(dy_off)
+                    ) {
+                        fprintf(
+                            stderr,
+                            "Invalid exit point offset at "
+                            "machine %d, target %d, tempo %d.\n",
+                            i,
+                            j,
+                            k
+                        );
 
-                    //time to peak calculation
-                    t_up = vy0 / GRAVITY;
+                        trajectory_valid = 0;
+                        break;
+                    }
 
-                    //time from peak to target calculation
-                    t_down = sqrt(2*(peak_height[k] - target_y) / GRAVITY);
+                    /*
+                     * dx_off is negative when the exit point is behind the
+                     * machine reference point.
+                     *
+                     * Subtracting a negative offset increases the actual
+                     * launch distance.
+                     */
+                    const float dx =
+                        dx_ref - dx_off;
 
-                    //total time of flight calculation
-                    t_total = t_up + t_down;
+                    const float exit_height =
+                        machine_y + dy_off;
 
-                    //horizontal launch velocity calculation
-                    vx0 = dx / t_total;
+                    const float vertical_rise =
+                        peak_height[k] - exit_height;
 
-                    //total launch speed calculation
-                    v0 = sqrt(vx0*vx0 + vy0*vy0);
+                    const float vertical_drop =
+                        peak_height[k] - target_y;
 
-                    //launch angle calculation
-                    theta = atan2(vy0, vx0);
+                    if (!isfinite(dx) || dx < 0.0f) {
+                        fprintf(
+                            stderr,
+                            "Invalid horizontal distance at "
+                            "machine %d, target %d, tempo %d: "
+                            "dx=%.3f.\n",
+                            i,
+                            j,
+                            k,
+                            dx
+                        );
 
-                    //convert to degrees
-                    theta = theta * 180 / M_PI;
+                        trajectory_valid = 0;
+                        break;
+                    }
+
+                    /*
+                     * A square root of a negative value produces NaN.
+                     *
+                     * The requested peak must be above the ball exit point.
+                     */
+                    if (
+                        !isfinite(vertical_rise)
+                        || vertical_rise <= 0.0f
+                    ) {
+                        fprintf(
+                            stderr,
+                            "Invalid peak height at machine %d, "
+                            "target %d, tempo %d: "
+                            "peak=%.3f, exit_height=%.3f.\n",
+                            i,
+                            j,
+                            k,
+                            peak_height[k],
+                            exit_height
+                        );
+
+                        trajectory_valid = 0;
+                        break;
+                    }
+
+                    /*
+                     * The requested peak must also be at or above the final
+                     * target height.
+                     */
+                    if (
+                        !isfinite(vertical_drop)
+                        || vertical_drop < 0.0f
+                    ) {
+                        fprintf(
+                            stderr,
+                            "Invalid target height at machine %d, "
+                            "target %d, tempo %d: "
+                            "peak=%.3f, target_height=%.3f.\n",
+                            i,
+                            j,
+                            k,
+                            peak_height[k],
+                            target_y
+                        );
+
+                        trajectory_valid = 0;
+                        break;
+                    }
+
+                    /*
+                     * Required vertical launch velocity.
+                     */
+                    const float vy0 =
+                        sqrtf(
+                            2.0f
+                            * GRAVITY
+                            * vertical_rise
+                        );
+
+                    /*
+                     * Time from launch to the peak.
+                     */
+                    const float t_up =
+                        vy0 / GRAVITY;
+
+                    /*
+                     * Time from the peak to the target.
+                     */
+                    const float t_down =
+                        sqrtf(
+                            2.0f
+                            * vertical_drop
+                            / GRAVITY
+                        );
+
+                    const float t_total =
+                        t_up + t_down;
+
+                    if (
+                        !isfinite(t_total)
+                        || t_total <= 0.0f
+                    ) {
+                        fprintf(
+                            stderr,
+                            "Invalid flight time at machine %d, "
+                            "target %d, tempo %d.\n",
+                            i,
+                            j,
+                            k
+                        );
+
+                        trajectory_valid = 0;
+                        break;
+                    }
+
+                    /*
+                     * Required horizontal launch velocity.
+                     */
+                    const float vx0 =
+                        dx / t_total;
+
+                    /*
+                     * Total launch speed.
+                     */
+                    v0 = hypotf(vx0, vy0);
+
+                    /*
+                     * Updated launch angle in degrees.
+                     */
+                    theta =
+                        atan2f(vy0, vx0)
+                        * 180.0f
+                        / ARC_PI;
+
+                    if (
+                        !isfinite(v0)
+                        || !isfinite(theta)
+                    ) {
+                        fprintf(
+                            stderr,
+                            "Invalid launch result at machine %d, "
+                            "target %d, tempo %d.\n",
+                            i,
+                            j,
+                            k
+                        );
+
+                        trajectory_valid = 0;
+                        break;
+                    }
                 }
 
-                rpm = (v0 / (2*M_PI*WHEEL_R)) * 60 / EFF_K;
+                if (!trajectory_valid) {
+                    tilt_angle[i][j][k] = NAN;
+                    launch_speed[i][j][k] = NAN;
+                    rpm_output[i][j][k] = NAN;
+                    continue;
+                }
 
-                //store results
-                launch_speed[i][j][k] = v0;
+                /*
+                 * Convert linear launch speed to wheel revolutions per minute.
+                 */
+                const float rpm =
+                    v0
+                    / (
+                        2.0f
+                        * ARC_PI
+                        * WHEEL_R
+                    )
+                    * 60.0f
+                    / EFF_K;
+
+                if (!isfinite(rpm)) {
+                    fprintf(
+                        stderr,
+                        "Invalid wheel speed at machine %d, "
+                        "target %d, tempo %d.\n",
+                        i,
+                        j,
+                        k
+                    );
+
+                    tilt_angle[i][j][k] = NAN;
+                    launch_speed[i][j][k] = NAN;
+                    rpm_output[i][j][k] = NAN;
+                    continue;
+                }
+
                 tilt_angle[i][j][k] = theta;
+                launch_speed[i][j][k] = v0;
                 rpm_output[i][j][k] = rpm;
             }
         }
     }
 }
 
-float landing_position(float xi, float yi, float theta, float rpm, float yf, float facing_dir) {
-    
-    float v0, theta_rad, vx, vy;
-    float a, b, c, discriminant, t1, t2, t_flight, xf;
-    float dx_off, dy_off;
 
-    //dx_off/vx are both defined in the machine's forward-facing frame
-    //(positive = toward whichever target it's yawed to face). Since xi/xf
-    //are world x-coordinates, that frame must be rotated into world
-    //coordinates using facing_dir before combining with xi: +1.0 if the
-    //machine is yawed to face +x (target at higher x than xi), -1.0 if it's
-    //facing -x (target at lower x than xi). Without this, the offset and
-    //velocity get applied backwards whenever the machine faces -x, since the
-    //raw values from exit_point_offset()/cos(theta) assume a positive-x
-    //forward direction.
-    exit_point_offset(theta, &dx_off, &dy_off);
-    xi = xi + dx_off * facing_dir;
-    yi = yi + dy_off;
+/*
+ * Calculates the world x coordinate where the ball reaches height yf.
+ */
+float landing_position(
+    float xi,
+    float yi,
+    float theta,
+    float rpm,
+    float yf,
+    float facing_dir
+)
+{
+    if (
+        !isfinite(xi)
+        || !isfinite(yi)
+        || !isfinite(theta)
+        || !isfinite(rpm)
+        || !isfinite(yf)
+        || !isfinite(facing_dir)
+    ) {
+        fprintf(
+            stderr,
+            "Error: landing_position received invalid input.\n"
+        );
 
-    //convert rpm to launch speed
-    v0 = 2*M_PI*WHEEL_R*(rpm * EFF_K / 60);
-
-    //convert angle to radians
-    theta_rad = theta * M_PI / 180;
-
-    //velocity components (vx rotated into world coordinates the same way)
-    vx = v0 * cos(theta_rad) * facing_dir;
-    vy = v0 * sin(theta_rad);
-
-    //quadratic formula for time
-    a = 0.5 * GRAVITY;
-    b = -vy;
-    c = yi - yf;
-
-    discriminant = b*b - 4*a*c;
-
-    if (discriminant < 0) {
-        fprintf(stderr, "Error: No real solution for time of flight.\n");
-        return -1; // error code
+        return NAN;
     }
 
-    t1 = (-b + sqrt(discriminant)) / (2*a);
-    t2 = (-b - sqrt(discriminant)) / (2*a);
+    if (facing_dir == 0.0f) {
+        fprintf(
+            stderr,
+            "Error: facing_dir cannot be zero.\n"
+        );
 
-    //select positive time
-    t_flight = (t1 > 0) ? t1 : t2;
+        return NAN;
+    }
 
-    //calculate landing position
-    xf = xi + vx * t_flight;
+    /*
+     * Convert any positive value to 1 and any negative value to negative 1.
+     */
+    const float direction =
+        facing_dir > 0.0f ? 1.0f : -1.0f;
 
-    return xf;
+    float dx_off;
+    float dy_off;
+
+    exit_point_offset(
+        theta,
+        &dx_off,
+        &dy_off
+    );
+
+    if (
+        !isfinite(dx_off)
+        || !isfinite(dy_off)
+    ) {
+        fprintf(
+            stderr,
+            "Error: invalid exit point offset.\n"
+        );
+
+        return NAN;
+    }
+
+    /*
+     * Move from the machine reference point to the actual ball exit point.
+     */
+    xi += dx_off * direction;
+    yi += dy_off;
+
+    /*
+     * Convert wheel revolutions per minute to launch speed.
+     */
+    const float v0 =
+        2.0f
+        * ARC_PI
+        * WHEEL_R
+        * (
+            rpm
+            * EFF_K
+            / 60.0f
+        );
+
+    const float theta_rad =
+        theta * ARC_PI / 180.0f;
+
+    /*
+     * Velocity components in world coordinates.
+     */
+    const float vx =
+        v0
+        * cosf(theta_rad)
+        * direction;
+
+    const float vy =
+        v0
+        * sinf(theta_rad);
+
+    /*
+     * Solve:
+     *
+     * yf = yi + vy t - 0.5 g t squared
+     *
+     * Rearranged:
+     *
+     * 0.5 g t squared - vy t + yf - yi = 0
+     */
+    const float a =
+        0.5f * GRAVITY;
+
+    const float b =
+        -vy;
+
+    const float c =
+        yf - yi;
+
+    const float discriminant =
+        b * b
+        - 4.0f * a * c;
+
+    if (
+        !isfinite(discriminant)
+        || discriminant < 0.0f
+    ) {
+        fprintf(
+            stderr,
+            "Error: no real solution for time of flight.\n"
+        );
+
+        return NAN;
+    }
+
+    const float sqrt_discriminant =
+        sqrtf(discriminant);
+
+    const float t1 =
+        (
+            -b
+            + sqrt_discriminant
+        )
+        / (2.0f * a);
+
+    const float t2 =
+        (
+            -b
+            - sqrt_discriminant
+        )
+        / (2.0f * a);
+
+    float t_flight = NAN;
+
+    /*
+     * When both roots are positive, the larger root represents the descending
+     * point where the ball reaches the requested final height.
+     */
+    if (t1 > 0.0f && t2 > 0.0f) {
+        t_flight = fmaxf(t1, t2);
+    } else if (t1 > 0.0f) {
+        t_flight = t1;
+    } else if (t2 > 0.0f) {
+        t_flight = t2;
+    }
+
+    if (!isfinite(t_flight)) {
+        fprintf(
+            stderr,
+            "Error: no positive solution for time of flight.\n"
+        );
+
+        return NAN;
+    }
+
+    return xi + vx * t_flight;
 }

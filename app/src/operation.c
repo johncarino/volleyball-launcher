@@ -33,6 +33,7 @@ volatile int launcher_running = 0;
 #define HOPPER_CONTINUOUS_DELAY_US 800
 #define HOPPER_RESET_INTERVAL_PULSES 4
 #define HOPPER_RESET_TIMEOUT_SEC 10
+#define HOPPER_RESET_POLL_DELAY_US 1000
 
 volatile float tilt_angle_w = 0;
 
@@ -329,6 +330,11 @@ void operation_init() {
         return;
     }
 
+    if (mcp4725_write_eeprom(&dac1, 0) != 0) {
+        fprintf(stderr, "Failed to write MCP4725 EEPROM power-on default\n");
+        return;
+    }
+
     operation_initialized = 1;
     
     //homing_sequence();
@@ -472,24 +478,29 @@ void percentage_to_mv(float percentage) {
 }
 
 void set_machine(int machine_position, int set_index) {
-    if (machine_position < 0 || machine_position >= NUM_MACHINE_POSITIONS ||
-        set_index < 0 || set_index >= NUM_SETS) {
-        fprintf(stderr, "Invalid machine position (%d) or set index (%d)\n",
-                machine_position, set_index);
+    if (machine_position < 0 || machine_position >= NUM_MACHINE_POSITIONS) {
+        fprintf(stderr, "Invalid machine position: %d\n", machine_position);
         return;
     }
 
-    mcp4725_set_raw(&dac1, 0);
+    if (set_index < 0 || set_index >= NUM_SETS) {
+        fprintf(stderr, "Invalid set index: %d\n", set_index);
+        return;
+    }
 
-    printf("Setting machine for position %d, set %d\n", machine_position, set_index);
-    printf("Tilt angle: %f, Yaw angle: %f, Speed: %f\n",
-            set_seq[machine_position][set_index].tilt_angle,
-            set_seq[machine_position][set_index].yaw_angle,
-            set_seq[machine_position][set_index].rpm_output);
-    
-    //tilt_signal(set_seq[machine_position][set_index].tilt_angle);
-    //yaw_signal(set_seq[machine_position][set_index].yaw_angle);
-    //speed_signal(set_seq[machine_position][set_index].rpm_output);
+    set_specs_t *spec = &set_seq[machine_position][set_index];
+
+    printf("Setting machine %d for set %d\n", machine_position, set_index);
+    printf("Tilt angle: %f, Speed (RPM): %f\n",
+            spec->tilt_angle, spec->rpm_output);
+
+    // Configure the launch speed target first so that once tilt_signal()
+    // reaches the target angle it resumes the flywheel (if already running)
+    // at the correct value for this set rather than the previous one.
+    //set_speed(spec->rpm_output);
+
+    // Blocking feedback-controlled tilt move to this set's angle.
+    //tilt_signal(spec->tilt_angle);
 }
 
 void tilt_with_feedback(float angle) {
@@ -598,7 +609,12 @@ void toggle_hopper() {
     }
 }
 
-void hopper_start() {
+// Actual hopper-start implementation, deliberately NOT gated on
+// launcher_running: hopper_reset() (and therefore homing_sequence()) must be
+// able to spin the hopper stepper to find its home sensor regardless of
+// whether the launcher flywheel happens to be running. Only reachable via
+// hopper_start() (gated, below) or hopper_reset()/homing_sequence().
+static void hopper_start_internal(void) {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
 
@@ -631,6 +647,20 @@ void hopper_start() {
     //speed_signal(curr_rpm);
 }
 
+// Public, user/gesture-facing entry point: the hopper must never feed balls
+// into a flywheel that isn't spinning, so refuse to start unless the launcher
+// is running (see resume_machine()/pause_machine()). Returns 0 on success,
+// -1 if refused (or if the underlying start attempt otherwise failed).
+int hopper_start(void) {
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot start hopper: machine is not running. Start the launcher before starting the hopper.\n");
+        return -1;
+    }
+
+    hopper_start_internal();
+    return hopper_running ? 0 : -1;
+}
+
 void hopper_stop() {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
@@ -652,19 +682,27 @@ void hopper_stop() {
     //speed_signal(curr_rpm);
 }
 
-void hopper_pulse() {
+// Returns 0 on success, -1 if refused (motor not initialized, machine not
+// running, or an interrupt was pending).
+int hopper_pulse(void) {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
 
     if (!motor.request) {
         fprintf(stderr, "Cannot pulse hopper: motor not initialized\n");
-        return;
+        return -1;
+    }
+
+    // The hopper must never feed balls into a flywheel that isn't spinning.
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot pulse hopper: machine is not running. Start the launcher before pulsing the hopper.\n");
+        return -1;
     }
 
     if (operation_interrupt_pending()) {
         fprintf(stderr, "Hopper pulse aborted before start due to pending interrupt.\n");
         operation_clear_interrupt();
-        return;
+        return -1;
     }
 
     //turn hopper off if it is running
@@ -678,7 +716,7 @@ void hopper_pulse() {
         printf("Hopper pulse #%d: running reset instead of pulse.\n",
                HOPPER_RESET_INTERVAL_PULSES);
         hopper_reset();
-        return;
+        return 0;
     }
 
     printf("Pulsing hopper...\n");
@@ -691,6 +729,7 @@ void hopper_pulse() {
     printf("Hopper pulse complete.\n");
 
     //speed_signal(curr_rpm);
+    return 0;
 }
 
 void hopper_reset() {
@@ -720,7 +759,9 @@ void hopper_reset() {
     }
 
     printf("Resetting hopper: stepping until sensor trigger...\n");
-    hopper_start();
+    // Ungated: a reset (e.g. from homing_sequence()) must be able to run the
+    // hopper stepper even if the launcher flywheel isn't running.
+    hopper_start_internal();
 
     if (!hopper_running) {
         fprintf(stderr, "Hopper reset failed: unable to start hopper\n");
@@ -728,6 +769,7 @@ void hopper_reset() {
     }
 
     time_t start_time = time(NULL);
+
     while (hopper_running) {
         if (operation_interrupt_pending()) {
             fprintf(stderr, "Hopper reset interrupted -- stopping hopper.\n");
@@ -741,12 +783,12 @@ void hopper_reset() {
         }
 
         if (difftime(time(NULL), start_time) >= HOPPER_RESET_TIMEOUT_SEC) {
-            fprintf(stderr, "Hopper reset timed out after %d seconds without sensor trigger.\n",
+            fprintf(stderr, "Hopper reset timed out after %d seconds waiting for sensor trigger -- stopping hopper.\n",
                     HOPPER_RESET_TIMEOUT_SEC);
             break;
         }
 
-        usleep(1000);
+        usleep(HOPPER_RESET_POLL_DELAY_US);
     }
 
     hopper_stop();

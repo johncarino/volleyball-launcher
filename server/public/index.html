@@ -12,17 +12,23 @@
 <body>
 
   <div class="app">
+    <div class="statusbar">
+      <img src="images/logo.png" alt="AVSS logo" class="statusbar-logo">
+      <div class="statusbar-right">
+        <span class="conn" id="conn-status">
+          <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
+          <span id="conn-text">AVSS connected</span>
+        </span>
+        <button class="power-btn" onclick="powerOff()" aria-label="Power off">
+          <span>Power Off</span>
+          <i class="ti ti-power" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+
     <div class="topbar" id="topbar">
       <div class="topbar-left" id="topbar-left">
       </div>
-      <span class="conn" id="conn-status">
-        <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
-        <span id="conn-text">AVSS connected</span>
-      </span>
-      <button class="power-btn" onclick="powerOff()" aria-label="Power off">
-        <span>Power Off</span>
-        <i class="ti ti-power" aria-hidden="true"></i>
-      </button>
     </div>
 
     <div class="content" id="main-content"></div>
@@ -56,6 +62,7 @@
       let tempoSelected = false; // Track if tempo has been selected
       let slotSaved = false; // whether the current machine/target/tempo combo has been saved to a slot
       let lockedSide = null; // 'left' | 'right' |
+      let previewSide = null; // 'left' | 'right' | null
       const alignShown = { L: false, C: false, R: false }; // whether the alignment modal has ever been shown for this machine
       const machineSocket = (typeof io !== 'undefined') ? io() : null;
       const slots = {
@@ -69,6 +76,7 @@
         R: { 1: false, 2: false, 3: false, 4: false },
       };
       const singleShotSelected = { L: null, C: null, R: null }; // selected slot number per machine, or null
+      let pendingSlotSave = null; // { machineKey, n, previousSlot, previousEnabled } awaiting backend confirmation
 
       const repeatLabels = ['Repeat', 'Repeat'];
       const repeatIcons = ['ti-repeat', 'ti-repeat'];
@@ -76,7 +84,7 @@
       const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
       const targetNames = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4', T5: 'Zone 5' };
 
-      const alignImages = { L: 'images/left.jpg', C: 'images/front.jpg', R: 'images/right.jpg' };
+      const alignImages = { L: 'images/left.png', C: 'images/front.png', R: 'images/right.png' };
       const alignInstructions = {
         L: 'Placeholder instructions for aligning the machine at the LEFT position.',
         C: 'Placeholder instructions for aligning the machine at the CENTER position.',
@@ -87,10 +95,8 @@
         mens: { net: 243, len: 18, wid: 9, label: "Men's" },
         womens: { net: 224, len: 18, wid: 9, label: "Women's" },
         junior: { net: 220, len: 16, wid: 8, label: 'Junior' },
-        beach: { net: 243, len: 16, wid: 8, label: 'Beach' },
-        grass: { net: 243, len: 18, wid: 9, label: 'Grass' },
       };
-      let courtSettings = { net: 243, len: 18, wid: 9, preset: 'custom' };
+      let courtSettings = { net: 243, len: 18, wid: 9, preset: 'mens' };
 
       function openAlignModal(id) {
         const img = document.getElementById('align-modal-img');
@@ -116,6 +122,10 @@
         return 'center'; // zone 3
       }
 
+      function machineHasSavedSlot(machineKey) {
+        return [1, 2, 3, 4].some(n => !!slots[machineKey] && !!slots[machineKey][n]);
+      }
+
       function emitMachine(eventName, value) {
         if (!machineSocket) return;
         machineSocket.emit(eventName, value);
@@ -135,6 +145,13 @@
         machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); setLaunchPreviewVisible(false); });
         machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); setLaunchPreviewVisible(false); });
 
+        // ---- Set-slot save confirmation from the backend ----
+        machineSocket.on('set-save-state', (state) => { onSetSaveState(state); });
+        machineSocket.on('machine-error', (message) => { onMachineError(message); });
+
+        // ---- Court settings: existing saved sets recalculated after a calibration change ----
+        machineSocket.on('sets-recalculated', (data) => { console.log('[calibration] Saved sets recalculated:', data); });
+
         // ---- Live telemetry (real tachometer RPM) ----
         machineSocket.on('telemetry', (data) => { renderTelemetry(data); });
 
@@ -142,13 +159,13 @@
         machineSocket.on('server-shutdown', () => { showShuttingDown(); });
       }
 
-      // Update the "AVSS connected/disconnected" indicator in the top bar.
+      // Update the "AVSS Connected/Disconnected" indicator in the top bar.
       function setConnStatus(connected) {
         const wrap = document.getElementById('conn-status');
         const text = document.getElementById('conn-text');
         const icon = document.getElementById('conn-icon');
         if (wrap) wrap.classList.toggle('disconnected', !connected);
-        if (text) text.textContent = connected ? 'AVSS connected' : 'AVSS disconnected';
+        if (text) text.textContent = connected ? 'AVSS Connected' : 'AVSS Disconnected';
         if (icon) icon.className = 'ti ' + (connected ? 'ti-wifi' : 'ti-wifi-off');
       }
 
@@ -178,8 +195,40 @@
         emitMachine('hopper-' + action);
       }
 
+      // The hopper feeds balls into the flywheel, so it must never be started/
+      // pulsed while the Manual screen's launcher ("Start") is stopped -- the
+      // Launch button there is the same #launch-main-btn used by the other run
+      // modes, and only carries the 'stop' class while the flywheel is actually
+      // spinning (see toggleLaunch()).
+      function isManualMachineRunning() {
+        const btn = document.getElementById('launch-main-btn');
+        return !!btn && btn.classList.contains('stop');
+      }
+
+      // Briefly flash a hopper button red + shake it (reusing the same
+      // op-shake animation as the Launch button's "needs-set" hint) and swap in
+      // a warning label, instead of silently ignoring the click.
+      function flashHopperBlocked(btn) {
+        if (!btn) return;
+        const original = btn.dataset.origLabel || btn.textContent;
+        btn.dataset.origLabel = original;
+        btn.classList.remove('blocked');
+        void btn.offsetWidth; // restart animation on repeat clicks
+        btn.classList.add('blocked');
+        btn.textContent = 'Start machine first';
+        clearTimeout(btn._hopperBlockedTimer);
+        btn._hopperBlockedTimer = setTimeout(() => {
+          btn.classList.remove('blocked');
+          btn.textContent = btn.dataset.origLabel;
+        }, 1500);
+      }
+
       function pulseHopper(btn) {
         if (btn.disabled) return; // do nothing if already running
+        if (!isManualMachineRunning()) {
+          flashHopperBlocked(btn);
+          return;
+        }
         btn.disabled = true;
         btn.classList.add('active');
         onHopperControl('pulse');
@@ -191,8 +240,12 @@
       }
 
       function toggleHopper() {
-        hopperOn = !hopperOn;
         const btn = document.getElementById('hopper-toggle-btn');
+        if (!hopperOn && !isManualMachineRunning()) {
+          flashHopperBlocked(btn);
+          return;
+        }
+        hopperOn = !hopperOn;
         if (btn) {
           btn.textContent = hopperOn ? 'Hopper On' : 'Hopper Off';
           btn.classList.toggle('active', hopperOn);
@@ -383,51 +436,53 @@
 
         // Images for the machine - IMAGES ARE A PLACEHOLDER
         const machineRectW = 32;
-        const machineRectH = 74;
-        const machineImages = { L: 'images/left.jpg', R: 'images/right.jpg' };
+        const machineRectH = 96;
+        const machineAspect = { L: 548 / 902, C: 376 / 831, R: 523 / 858 }; // width/height ratios of images
+        const machineRectWFor = (id) => machineRectH * machineAspect[id];
+        const machineImages = { L: 'images/left.png', R: 'images/right.png' };
         function machineImageFor(id) {
           if (id !== 'C') return machineImages[id];
-          if (lockedSide === 'left') return 'images/left.jpg';
-          if (lockedSide === 'right') return 'images/right.jpg';
-          return 'images/front.jpg';
+          if (previewSide === 'left') return 'images/left.png';
+          if (previewSide === 'right') return 'images/right.png';
+          return 'images/front.png';
         }
         const mCircles = machineSpots.map(s => {
-          const active = mSel === s.id;
-          const ringStroke = active ? '#b52a2a' : (readonly ? 'transparent' : '#b52a2a');
-          const opacity = active ? 1 : (readonly ? 0 : 0.7);
-          const onclick = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
-          const cursor = readonly ? 'default' : 'pointer';
-          const rx = s.cx - machineRectW / 2;
-          const ry = s.cy - machineRectH / 2;
-          return `<g ${onclick} style="cursor:${cursor}">
-      <rect x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
-      <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${machineRectW}" height="${machineRectH}" preserveAspectRatio="xMidYMid slice" opacity="${opacity}" style="clip-path: inset(0 round 3px)"/>
-    </g>`;
-        }).join('');
+        const active = mSel === s.id;
+        const ringStroke = active ? '#185FA5' : (readonly ? 'transparent' : '#185FA5');
+        const onclick = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
+        const cursor = readonly ? 'default' : 'pointer';
+        const w = machineRectWFor(s.id);
+        const rx = s.cx - w / 2;
+        const ry = s.cy - machineRectH / 2;
+        return `<g ${onclick} style="cursor:${cursor}">
+          <rect x="${rx}" y="${ry}" width="${w}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2.5" opacity="${active ? 1 : 0}" style="${active ? 'filter:drop-shadow(0 0 4px rgba(24,95,165,0.6))' : ''}"/>
+          <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${w}" height="${machineRectH}" preserveAspectRatio="xMidYMid meet" style="clip-path: inset(0 round 3px)"/>
+        </g>`;
+      }).join('');
 
         const isMachineSelected = mSel !== null;
 
         const targetImgSize = 48; // width/height of the volleyball icon in SVG units
         const tCircles = targetSpots.map(s => {
-          const active = tSel === s.id;
-          const zSide = zoneSide(s.id);
-          const centerDisabled = mSel === 'C' && s.id === '3'; // Center machine can never target zone 3
-          const sideLocked = mSel === 'C' && !!lockedSide && !active && zSide !== 'center' && zSide !== lockedSide;
-          const disabled = centerDisabled || sideLocked;
-          const clickable = isMachineSelected && !readonly && !disabled;
-          const ringStroke = active ? '#1a7a3a' : (clickable ? '#1a7a3a' : 'transparent');
-          const opacity = active ? 1 : (disabled ? 0 : (clickable ? 0.75 : 0));
-          const lineOpacity = active ? 0.6 : (disabled ? 0 : (clickable ? 0.35 : 0));
-          const flashClass = (clickable && !tSel) ? 'selectable-flash' : '';
-          const onclick = clickable ? `onclick="selectTarget('${s.id}')"` : '';
-          const cursor = clickable ? 'pointer' : 'default';
-          const half = targetImgSize / 2;
-          return `<g ${onclick} style="cursor:${cursor}">
-          <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="${46 + baseOffset}" stroke="#1a7a3a" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
-          <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="transparent" stroke="${ringStroke}" stroke-width="2" opacity="${active ? 1 : 0}"/>
+        const active = tSel === s.id;
+        const zSide = zoneSide(s.id);
+        const centerDisabled = mSel === 'C' && s.id === '3';
+        const sideLocked = mSel === 'C' && !!lockedSide && !active && zSide !== 'center' && zSide !== lockedSide;
+        const disabled = centerDisabled || sideLocked;
+        const clickable = isMachineSelected && !readonly && !disabled;
+        const ringStroke = active ? '#185FA5' : (clickable ? '#185FA5' : 'transparent');
+        const opacity = active ? 1 : (disabled ? 0 : (clickable ? 0.75 : 0));
+        const lineOpacity = active ? 0.6 : (disabled ? 0 : (clickable ? 0.35 : 0));
+        const flashClass = (clickable && !tSel) ? 'selectable-flash' : '';
+        const onclick = clickable ? `onclick="selectTarget('${s.id}')"` : '';
+        const cursor = clickable ? 'pointer' : 'default';
+        const half = targetImgSize / 2;
+        return `<g ${onclick} style="cursor:${cursor}">
+          <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="${46 + baseOffset}" stroke="#185FA5" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
+          <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="transparent" stroke="${ringStroke}" stroke-width="2.5" opacity="${active ? 1 : 0}" style="${active ? 'filter:drop-shadow(0 0 4px rgba(24,95,165,0.6))' : ''}"/>
           <image href="images/volleyball.png" x="${s.cx - half}" y="${s.cy - half}" width="${targetImgSize}" height="${targetImgSize}" opacity="${opacity}" class="${flashClass}"/>
         </g>`;
-        }).join('');
+      }).join('');
 
         let tempoArcs = '';
         if (mSel && tSel) {
@@ -441,7 +496,7 @@
           const baseMidY = (startY + endY) / 2;
 
           const highlightTempo = hoveredTempo || selectedTempo;
-          tempoArcs = [1, 2, 3, 4, 5].map(tempo => {
+          tempoArcs = [1, 2, 3, 4].map(tempo => {
             const active = tempo === highlightTempo;
             const isSelected = tempo === selectedTempo;
             const arcHeight = 16 + tempo * 50;
@@ -470,8 +525,8 @@
           }).join('');
         }
 
-        // Determine the legend text
-        const dotsLegend = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#b52a2a;opacity:0.8"></span> Machine position <span class="legend-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a7a3a;opacity:0.8"></span> Target zone</span>';
+        // Legend text
+        const dotsLegend = 'Continue to Launch';
 
         let legendText = 'Select a machine location';
         let legendClass = 'legend-text-select';
@@ -489,10 +544,10 @@
           legendClass = 'legend-text-select';
         } else if (mSel && tSel && tempoSelected && slotSaved && !readonly) {
           legendText = dotsLegend;
-          legendClass = '';
+          legendClass = 'legend-text-select';
         } else if (mSel && tSel && readonly) {
           legendText = dotsLegend;
-          legendClass = '';
+          legendClass = 'legend-text-select';
         }
 
         const showTempo = !readonly && mSel && tSel;
@@ -562,11 +617,13 @@
           tempoSelected = true;
           slotSaved = true;
           lockedSide = (id === 'C') ? zoneSide(savedSlot.target) : null;
+          previewSide = lockedSide;
         } else {
           selectedTarget = null;
           tempoSelected = false;
           slotSaved = false;
           lockedSide = null;
+          previewSide = null;
         }
 
         refreshCourtPicker();
@@ -577,6 +634,10 @@
       function selectTarget(id) {
         selectedTarget = id;
         tempoSelected = selectedTempo !== null;
+        if (selectedMachine === 'C') {
+          const side = zoneSide(id);
+          previewSide = (side === 'left' || side === 'right') ? side : previewSide; // zone 3 (center) leaves it unchanged
+        }
         refreshCourtPicker();
         refreshTempo();
         refreshSlots();
@@ -640,7 +701,6 @@
       const screens = {
         configure: () => `
           <div class="section" style="margin-top:8px">
-            <div class="section-label">Position</div>
             <div id="court-picker-wrap">${courtPickerHTML()}</div>
             <div class="tempo-attached" id="tempo-wrap">${tempoPillsHTML()}</div>
             <div class="court-summary-card">
@@ -754,7 +814,6 @@
 
         launch: () => `
           <div class="section" style="margin-top:8px">
-            <div class="section-label">Position</div>
             <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
             <div class="court-summary-card">
               <div class="court-summary-rows">
@@ -787,7 +846,6 @@
 
         single_shot: () => `
           <div class="section" style="margin-top:8px">
-            <div class="section-label">Position</div>
             <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
             <div class="court-summary-card">
               <div class="court-summary-rows">
@@ -876,6 +934,20 @@
         };
       }
 
+      // Pushes the current courtSettings (net height / court dimensions) to the
+      // backend and asks it to recalculate every already-saved set slot against
+      // them. Called once when the user leaves the court settings tab, rather
+      // than on every slider input, since save_set() only snapshots values at
+      // save time and calibration changes wouldn't otherwise reach it (and
+      // recalculating on every input tick would be wasteful).
+      function commitCourtSettings() {
+        const netHeightM = courtSettings.net / 100;
+        emitMachine('setNetHeight', netHeightM);
+        emitMachine('setCourtLength', courtSettings.len);
+        emitMachine('setCourtWidth', courtSettings.wid);
+        emitMachine('recalculateSets');
+      }
+
       function getCourtSummary() {
         const net = document.getElementById('net-val');
         const len = document.getElementById('len-val');
@@ -888,7 +960,7 @@
 
       function tempoPillsHTML() {
         const flashClass = !tempoSelected ? ' selectable-flash' : '';
-        const pills = [1, 2, 3, 4, 5].map(n =>
+        const pills = [1, 2, 3, 4].map(n =>
           `<button class="tempo-pill${flashClass} ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
       onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)">${n}</button>`
         ).join('');
@@ -902,7 +974,7 @@
       function onTempoHover(n) {
         hoveredTempo = n;
         const highlightTempo = hoveredTempo || selectedTempo;
-        for (let tempo = 1; tempo <= 5; tempo++) {
+        for (let tempo = 1; tempo <= 4; tempo++) {
           const line = document.getElementById('tempo-line-' + tempo);
           if (!line) continue;
           const active = tempo === highlightTempo;
@@ -1032,31 +1104,26 @@
         refreshSlots();
       }
 
+      // Actually apply the selected set slot to the machine and start feeding
+      // balls for it. setMachine syncs the saved set data natively and drives
+      // the tilt/speed actuators (see gesture_server.js's 'setMachine' handler
+      // and operation.c's set_machine()); resumeMotors spins the flywheel up
+      // to the newly-configured speed, and hopper-on starts continuously
+      // feeding balls through it. Used by both the Single Shot and Sequence
+      // (Launch) run modes whenever a set slot is selected/enabled and run.
       function fireSet(machine, n, slotData) {
-        fetch('/api/slot-click', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ machine, slot: n, data: slotData })
-        })
-          .then(res => {
-            if (!res.ok) throw new Error('Server responded with ' + res.status);
-            return res.json().catch(() => ({}));
-          })
-          .then(json => console.log('Server ack:', json))
-          .catch(err => console.error('Failed to send slot fire to server:', err));
+        const machineIndex = MACHINE_INDEX[machine];
+        if (machineIndex === undefined) {
+          console.error('Unknown machine key, cannot fire set:', machine);
+          return;
+        }
+        emitMachine('setMachine', { machinePosition: machineIndex, setIndex: n - 1 });
+        emitMachine('resumeMotors');
+        emitMachine('hopper-on');
       }
 
       function stopFiring(machine, n) {
-        fetch('/api/slot-click', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ machine, slot: n, action: 'stop' })
-        })
-          .then(res => {
-            if (!res.ok) throw new Error('Server responded with ' + res.status);
-            return res.json().catch(() => ({}));
-          })
-          .catch(err => console.error('Failed to send slot stop to server:', err));
+        emitMachine('hopper-off');
       }
 
       function shuffleArray(arr) {
@@ -1091,7 +1158,6 @@
         }
         runIndex = 0;
         isRunning = true;
-        emitMachine('resumeMotors');
         runNextInQueue();
       }
 
@@ -1228,6 +1294,10 @@
         const zonePart = selectedTarget ? `Zone ${selectedTarget}` : null;
         const tempoPart = `Tempo ${selectedTempo}`;
         const name = [machinePart, zonePart, tempoPart].filter(Boolean).join(' · ') || `Slot ${n}`;
+
+        const previousSlot = slots[selectedMachine][n];
+        const previousEnabled = slotEnabled[selectedMachine][n];
+
         slots[selectedMachine][n] = {
           name,
           machine: selectedMachine,
@@ -1235,12 +1305,57 @@
           tempo: selectedTempo,
         };
         slotEnabled[selectedMachine][n] = true;
+        singleShotSelected[selectedMachine] = n; // add this line — newest save becomes the Single Shot selection
         slotSaved = true;
         if (selectedMachine === 'C') {
           lockedSide = zoneSide(selectedTarget);
         }
+
+        const machineIndex = MACHINE_INDEX[selectedMachine];
+        const targetLocation = parseInt(selectedTarget, 10);
+        const tempo = parseInt(selectedTempo, 10);
+
+        if (machineIndex === undefined || Number.isNaN(targetLocation) || Number.isNaN(tempo)) {
+          console.warn('Invalid slot data, skipping backend save');
+        } else {
+          pendingSlotSave = { machineKey: selectedMachine, n, previousSlot, previousEnabled };
+          emitMachine('saveSet', {
+            setIndex: n - 1,
+            machinePosition: machineIndex,
+            targetLocation,
+            tempo,
+          });
+        }
+
         refreshSlots();
         refreshCourtPicker();
+      }
+
+      // Backend confirmed the slot was persisted (set_seq updated natively).
+      function onSetSaveState(state) {
+        if (state === 'SAVED') {
+          pendingSlotSave = null;
+        }
+      }
+
+      // Backend rejected the save (e.g. native addon unavailable or validation
+      // failed) — roll back the optimistic slot update so the UI doesn't claim
+      // a slot is saved when it isn't.
+      function onMachineError(message) {
+        console.warn('[machine-error]', message);
+        if (pendingSlotSave) {
+          const { machineKey, n, previousSlot, previousEnabled } = pendingSlotSave;
+          slots[machineKey][n] = previousSlot;
+          slotEnabled[machineKey][n] = previousEnabled;
+          if (machineKey === selectedMachine) {
+            const stillHasSlots = [1, 2, 3, 4].some(i => !!slots[machineKey][i]);
+            slotSaved = stillHasSlots ? slotSaved : false;
+          }
+          pendingSlotSave = null;
+          refreshSlots();
+          refreshCourtPicker();
+        }
+        showGestureError(typeof message === 'string' ? message : 'Machine error');
       }
 
       function deleteSlot(machineKey, n) {
@@ -1287,6 +1402,17 @@
           clearInterval(window._telem);
           if (window._activeMode === 'advanced') {
             emitMachine('stopMotors');
+            // Stopping the launcher must also stop the hopper -- it must never
+            // keep feeding balls into a flywheel that's no longer spinning.
+            if (hopperOn) {
+              hopperOn = false;
+              const hopperBtn = document.getElementById('hopper-toggle-btn');
+              if (hopperBtn) {
+                hopperBtn.textContent = 'Hopper Off';
+                hopperBtn.classList.remove('active');
+              }
+              onHopperControl('off');
+            }
           }
         } else {
           btn.classList.remove('start'); btn.classList.add('stop');
@@ -1305,6 +1431,7 @@
           <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
             <button class="modetab-header" role="tab" data-mode="single_shot">Single Shot</button>
             <button class="modetab-header" role="tab" data-mode="launch">Sequence</button>
+            <button class="modetab-header" role="tab" data-mode="gesture">Gesture</button>
           </div>`;
         attachModeTabListeners();
         setMode('single_shot');
@@ -1344,6 +1471,8 @@
         if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
       }
 
+      const OPERATION_MODES = ['launch', 'single_shot', 'gesture'];
+
       function setMode(mode) {
         const previousMode = window._activeMode || 'configure';
         if ((previousMode === 'launch' || previousMode === 'single_shot') && mode !== previousMode && isRunning) {
@@ -1352,15 +1481,32 @@
         if (previousMode === 'advanced' && mode !== 'advanced') {
           emitMachine('advanced-leave');
         }
-        if (previousMode === 'court_settings' && mode !== 'court_settings') {
-          updateCourtBtn(); // sync summaries with whatever was changed on the settings screen
+        if (OPERATION_MODES.includes(previousMode) && !OPERATION_MODES.includes(mode)) {
+          emitMachine('operation-leave');
         }
+        if (previousMode === 'court_settings' && mode !== 'court_settings') {
+          updateCourtBtn();
+          commitCourtSettings();
+        }
+
+        if (mode === 'launch' || mode === 'single_shot') {
+          if (!selectedMachine || !machineHasSavedSlot(selectedMachine)) {
+            selectedMachine = null;
+            selectedTarget = null;
+            selectedTempo = null;
+            tempoSelected = false;
+            slotSaved = false;
+            lockedSide = null;
+          }
+        }
+
         const appEl = document.querySelector('.app');
         if (appEl) {
           appEl.classList.toggle('mode-launch', mode === 'launch');
           appEl.classList.toggle('mode-advanced', mode === 'advanced');
           appEl.classList.toggle('mode-configure', mode === 'configure');
           appEl.classList.toggle('mode-single_shot', mode === 'single_shot');
+          appEl.classList.toggle('mode-gesture', mode === 'gesture');
         }
 
         document.querySelectorAll('.modetab-header').forEach(t => t.classList.remove('active'));
@@ -1371,12 +1517,11 @@
           emitMachine('advanced-enter');
           startTelemetry();
         }
+        if (OPERATION_MODES.includes(mode) && !OPERATION_MODES.includes(previousMode)) {
+          emitMachine('operation-enter');
+        }
         if (mode === 'launch' || mode === 'single_shot') {
           syncLaunchSummary();
-        }
-        // Camera/gesture arming: both run modes stay off until the user presses
-        // Confirm on the launch button (see confirmRun).
-        if (mode === 'launch' || mode === 'single_shot') {
           disarmLaunchGesture();
         }
         window._activeMode = mode;

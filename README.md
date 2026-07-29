@@ -51,6 +51,32 @@ under `hal/src/`) requires **two steps**:
 Running `make server` alone, **without** editing `binding.gyp` first, will not
 pick up the new file — node-gyp only compiles what's listed.
 
+## Tuning: Detecting Hands Farther Away
+
+The palm detector (MediaPipe's `PalmDetectionCpu`, external to this repo) only
+proposes hand candidates from a fixed set of SSD anchor boxes sized relative to
+its 192x192 model input. A hand farther from the camera occupies a smaller
+fraction of the frame; if no anchor is small enough, it's never detected, no
+matter how low any confidence threshold is set.
+
+`make m2demo` now runs
+[mediapipe_files/patch_palm_detection.sh](mediapipe_files/patch_palm_detection.sh)
+against the external `mediapipe/` checkout before building, lowering
+`SsdAnchorsCalculatorOptions.min_scale` in
+`mediapipe/modules/palm_detection/palm_detection_cpu.pbtxt` from the stock
+`0.1484375` down to `PALM_MIN_SCALE` (default `0.05`) so smaller/farther hands
+get matching anchors. A pristine backup is kept alongside it as
+`palm_detection_cpu.pbtxt.orig` the first time it's patched.
+
+- Detect from farther away (smaller `min_scale` = smaller minimum anchor):
+  `make m2demo PALM_MIN_SCALE=0.03`
+- Also loosen the confidence threshold for borderline far-away detections:
+  `make m2demo PALM_MIN_SCALE=0.05 PALM_MIN_SCORE_THRESH=0.35`
+- Revert to stock behaviour: `make m2demo PALM_MIN_SCALE=0.1484375`
+
+Going too low increases false positives and costs a little extra CPU (more
+candidate anchors), so tune incrementally and re-test.
+
 ## Local Make Targets (from this folder)
 
 This repo now includes [Makefile](Makefile) at its root (`gesture-control/`):

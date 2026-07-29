@@ -50,6 +50,39 @@ private:
     float angle_;
 };
 
+// Runs the blocking set_machine() call (which itself drives the tilt feedback
+// loop, see operation.c) on a libuv worker thread. set_machine() is invoked
+// once per selected set slot in both Single Shot and Sequence launch modes,
+// so keeping it off the main thread is what keeps telemetry/sockets
+// responsive while the machine re-tilts between shots.
+class SetMachineWorker : public AsyncWorker {
+public:
+    SetMachineWorker(Napi::Env env, int machinePosition, int setIndex)
+        : AsyncWorker(env, "SetMachineWorker"),
+          machinePosition_(machinePosition), setIndex_(setIndex) {}
+
+    ~SetMachineWorker() override {}
+
+    void Execute() override {
+        set_machine(machinePosition_, setIndex_);
+    }
+
+    void OnOK() override {
+        std::cout << "[operation] set_machine complete: position=" << machinePosition_
+                  << ", set=" << setIndex_ << std::endl;
+        g_tiltInProgress.store(false);
+    }
+
+    void OnError(const Error& e) override {
+        std::cerr << "[operation] setMachine worker error: " << e.Message() << std::endl;
+        g_tiltInProgress.store(false);
+    }
+
+private:
+    int machinePosition_;
+    int setIndex_;
+};
+
 // --- operationInit() ---
 Value operationInit(const CallbackInfo& info) {
     Env env = info.Env();
@@ -154,8 +187,23 @@ Value setMachine(const CallbackInfo& info) {
     }
     int machine_position = info[0].As<Number>().Int32Value();
     int set_index = info[1].As<Number>().Int32Value();
-    set_machine(machine_position, set_index);
-    std::cout << "[operation] machine set for position: " << machine_position << ", set index: " << set_index << std::endl;
+
+    // set_machine() ends up calling tilt_signal() internally, which mutates
+    // the same shared hardware state (DAC, motor driver, curr_tilt_angle) as
+    // the standalone tiltSignal() above, so it shares the same in-flight
+    // guard rather than blocking the event loop.
+    bool expected = false;
+    if (!g_tiltInProgress.compare_exchange_strong(expected, true)) {
+        std::cout << "[operation] setMachine ignored (position=" << machine_position
+                  << ", set=" << set_index << "): a tilt is already in progress." << std::endl;
+        return env.Undefined();
+    }
+
+    std::cout << "[operation] setMachine received (position=" << machine_position
+              << ", set=" << set_index << "); running asynchronously..." << std::endl;
+
+    SetMachineWorker* worker = new SetMachineWorker(env, machine_position, set_index);
+    worker->Queue();
     return env.Undefined();
 }
 
@@ -174,10 +222,12 @@ Value pauseMachine(const CallbackInfo& info) {
 }
 
 // --- hopperStart() ---
+// Returns true if the hopper actually started, false if it was refused (e.g.
+// the launcher isn't running -- see hopper_start()'s gating in operation.c).
 Value hopperStart(const CallbackInfo& info) {
     Env env = info.Env();
-    hopper_start();
-    return env.Undefined();
+    int rc = hopper_start();
+    return Boolean::New(env, rc == 0);
 }
 
 // --- hopperStop() ---
@@ -188,10 +238,11 @@ Value hopperStop(const CallbackInfo& info) {
 }
 
 // --- hopperPulse() ---
+// Returns true if the pulse actually ran, false if it was refused.
 Value hopperPulse(const CallbackInfo& info) {
     Env env = info.Env();
-    hopper_pulse();
-    return env.Undefined();
+    int rc = hopper_pulse();
+    return Boolean::New(env, rc == 0);
 }
 
 // --- getTachReading() ---

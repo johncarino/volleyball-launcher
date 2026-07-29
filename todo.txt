@@ -1,24 +1,15 @@
 PRIORITY
-
-SECONDARY
-- Fill in alignment modal
-
-FUNCTIONAL
-- Make launch menu set selection more intuitive
-- Power off button backend
-- Shot variance variable
-
-CONSIDERATION
-- further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
-- Move JS to separate file
+- Fill in alignment modals
+- Machine position appears after selecting set in center
+- Change court dimensions to reflect presets
 
 AESTHETIC
-- Add finalized machine images
 - Change background colours to be better
-- Clean up target zone graphic
-- Change to light mode with company colours
-- Add company logo
-- Change set slot text
+
+CONSIDERATION
+- Confirm button
+- further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
+- Shot variance variable
 
 CLEANUP
 - Remove any unused code

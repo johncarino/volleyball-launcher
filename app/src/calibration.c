@@ -2,7 +2,7 @@
 #include "app/src/include/calibration.h"
 
 // Calibration constants
-const float STANDARD_NET_HEIGHT = 2.430; // Standard volleyball net height in meters
+const float STANDARD_NET_HEIGHT = 2.30; // Standard volleyball net height in meters
 const float STANDARD_COURT_LENGTH = 18.0; // Standard volleyball court length in meters
 const float STANDARD_COURT_WIDTH = 9.0; // Standard volleyball court width
 
@@ -16,7 +16,7 @@ const float MIN_COURT_WIDTH = 5.0; // Minimum court width in meters
 const float MAX_COURT_WIDTH = 20.0; // Maximum court width in meters
 
 // Calibration variables
-float net_height = 2.430;
+float net_height = 2.30;
 float court_length = 18.0;
 float court_width = 9.0;
 
@@ -28,7 +28,7 @@ void set_net_height(float height) {
     }
     net_height = height;
 
-    arc_calc_params(net_height, court_length, court_width);
+    arc_calc_params(net_height, court_width, court_length);
 
     //test
     printf("Net height set to %.2f meters.\n", net_height);
@@ -47,7 +47,7 @@ void set_court_dimensions(float length, float width) {
     court_length = length;
     court_width = width;
 
-    arc_calc_params(net_height, court_length, court_width);
+    arc_calc_params(net_height, court_width, court_length);
 
     //test
     printf("Court dimensions set to %.2f meters (length) x %.2f meters (width).\n", court_length, court_width);
@@ -63,8 +63,6 @@ void set_court_width(float width) {
 }
 
 void calibrate_user_input(char input, float value) {
-
-    arc_calc_params(net_height, court_length, court_width);
 
     switch (input) {
         case 'w':
@@ -88,7 +86,7 @@ void default_calibration() {
     court_length = STANDARD_COURT_LENGTH;
     court_width = STANDARD_COURT_WIDTH;
 
-    arc_calc_params(net_height, court_length, court_width);
+    arc_calc_params(net_height, court_width, court_length);
 
     return;
 }
