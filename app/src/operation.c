@@ -45,8 +45,8 @@ static unsigned int hopper_pulse_count = 0;
 
 #define LAUNCH_BEEP_COUNT 3
 #define LAUNCH_BEEP_FREQUENCY_HZ 880
-#define LAUNCH_BEEP_DURATION_MS 180
-#define LAUNCH_BEEP_GAP_MS 120
+#define LAUNCH_BEEP_DURATION_MS 600
+#define LAUNCH_BEEP_GAP_MS 200
 #define LAUNCH_BEEP_SAMPLE_RATE 48000
 
 typedef struct {
