@@ -148,6 +148,11 @@
         // ---- Set-slot save confirmation from the backend ----
         machineSocket.on('set-save-state', (state) => { onSetSaveState(state); });
         machineSocket.on('machine-error', (message) => { onMachineError(message); });
+        machineSocket.on('homing-complete', () => { setHomingButtonState(false, 'Homing complete'); });
+        machineSocket.on('homing-error', (message) => {
+          setHomingButtonState(false, 'Home machine');
+          onMachineError(message);
+        });
 
         // ---- Court settings: existing saved sets recalculated after a calibration change ----
         machineSocket.on('sets-recalculated', (data) => { console.log('[calibration] Saved sets recalculated:', data); });
@@ -193,6 +198,21 @@
 
       function onHopperControl(action) {
         emitMachine('hopper-' + action);
+      }
+
+      function setHomingButtonState(running, label) {
+        const btn = document.getElementById('manual-home-btn');
+        if (!btn) return;
+        btn.disabled = running;
+        btn.innerHTML = `<i class="ti ti-home" aria-hidden="true"></i> ${label}`;
+        if (!running && label === 'Homing complete') {
+          setTimeout(() => setHomingButtonState(false, 'Home machine'), 1800);
+        }
+      }
+
+      function runHomingSequence() {
+        setHomingButtonState(true, 'Homing...');
+        emitMachine('homing-sequence');
       }
 
       // The hopper feeds balls into the flywheel, so it must never be started/
@@ -771,14 +791,14 @@
               <div class="vert-sliders">
                 <div class="vert-slider-col">
                   <span class="vert-slider-label">Angle</span>
-                  <span class="vert-slider-val" id="dev-ang-val">5°</span>
+                  <span class="vert-slider-val" id="dev-ang-val">8°</span>
                   <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
                   <div class="vert-slider-track">
-                    <input type="range" id="dev-ang-range" class="vertical" min="5" max="85" value="5" step="1"
+                    <input type="range" id="dev-ang-range" class="vertical" min="8" max="85" value="8" step="1"
                       oninput="onAdvancedAngleInput(this.value)" onchange="onAdvancedAngleChange(this.value)">
                   </div>
                   <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
-                  <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
+                  <span style="font-size:11px;color:var(--text-tertiary)">8° – 85°</span>
                 </div>
                 <div class="vert-slider-col">
                   <span class="vert-slider-label">Speed</span>
@@ -810,6 +830,9 @@
           <div class="section">
             <div class="section-label">Launch</div>
             <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+            <div class="manual-utility-actions">
+              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and hopper to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
+            </div>
           </div>`,
 
         launch: () => `

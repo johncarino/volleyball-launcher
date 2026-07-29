@@ -542,6 +542,21 @@ function handleCommand(socket) {
 		}
 	});
 
+	socket.on('homing-sequence', function() {
+		if (!ensureOperationReady(socket, 'homing-sequence')) {
+			socket.emit('homing-error', 'Machine control is not ready.');
+			return;
+		}
+		console.log("Got homing-sequence command.");
+		try {
+			operation.homingSequence();
+			socket.emit('homing-complete');
+		} catch (e) {
+			console.error('[operation] Homing sequence failed: ' + e.message);
+			socket.emit('homing-error', 'Homing sequence failed.');
+		}
+	});
+
 	socket.on('requestTelemetry', function() {
 		if (!ensureOperationReady(socket, 'requestTelemetry')) return;
 		try {

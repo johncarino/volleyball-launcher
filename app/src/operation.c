@@ -32,7 +32,7 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_START_DELAY_US 1000
 #define HOPPER_PULSE_END_DELAY_US 500
 #define HOPPER_PULSE_ACCEL_STEPS 400
-#define HOPPER_CONTINUOUS_DELAY_US 800
+#define HOPPER_CONTINUOUS_DELAY_US 500
 #define HOPPER_RESET_INTERVAL_PULSES 4
 #define HOPPER_SENSOR_RUN_ON_US 1000000
 #define HOPPER_SENSOR_RUN_ON_SLICE_US 10000
@@ -158,6 +158,12 @@ static int play_launch_warning(void) {
     }
 
     return 0;
+}
+
+static void *play_launch_warning_thread(void *arg) {
+    (void)arg;
+    play_launch_warning();
+    return NULL;
 }
 
 /*
@@ -580,11 +586,16 @@ void set_speed(float speed) {
 }
 
 void percentage_to_mv(float percentage) {
-    if (percentage > 100.0) {
-        fprintf(stderr, "Invalid percentage: %.2f (must be 100 or less). Skipping speed.\n", percentage);
+    if (percentage < 0.0 || percentage > 100.0) {
+        fprintf(stderr, "Invalid percentage: %.2f (must be between 0 and 100). Skipping speed.\n", percentage);
         return;
     }
-    float mv = 1350.0 + (percentage / 100.0) * (4095.0 - 1350.0);
+
+    // Zero is an explicit motor-off command. Apply the minimum-running
+    // voltage offset only to non-zero Manual speed requests.
+    float mv = percentage == 0.0
+        ? 0.0
+        : 1350.0 + (percentage / 100.0) * (4095.0 - 1350.0);
     printf("setting speed to %.2f mV\n", mv);
     
     if (launcher_running) {
@@ -846,23 +857,34 @@ int hopper_pulse(void) {
         return 0;
     }
 
-    printf("Ball launch warning: sounding %d beeps...\n", LAUNCH_BEEP_COUNT);
-    play_launch_warning();
+    // aplay blocks until the warning finishes, so run it alongside the pulse.
+    pthread_t warning_thread;
+    int warning_thread_started =
+        pthread_create(&warning_thread, NULL, play_launch_warning_thread, NULL) == 0;
+    if (!warning_thread_started) {
+        fprintf(stderr, "Launch warning: unable to start audio thread; continuing without beeps\n");
+    }
 
-    // The warning takes just under one second. Honour an emergency stop that
-    // arrives during that interval before allowing the hopper to move.
     if (operation_interrupt_pending()) {
-        fprintf(stderr, "Hopper pulse aborted during launch warning.\n");
+        fprintf(stderr, "Hopper pulse aborted before movement.\n");
         operation_clear_interrupt();
+        if (warning_thread_started) {
+            pthread_join(warning_thread, NULL);
+        }
         return -1;
     }
 
-    printf("Pulsing hopper...\n");
+    printf("Pulsing hopper while sounding %d warning beeps...\n",
+           LAUNCH_BEEP_COUNT);
 
     
     tb6600_enable(&motor, 1);
     tb6600_step_accel(&motor, HOPPER_PULSE_STEPS, HOPPER_PULSE_START_DELAY_US, HOPPER_PULSE_END_DELAY_US, HOPPER_PULSE_ACCEL_STEPS);
     tb6600_enable(&motor, 0);
+
+    if (warning_thread_started) {
+        pthread_join(warning_thread, NULL);
+    }
     
     printf("Hopper pulse complete.\n");
 
@@ -871,11 +893,6 @@ int hopper_pulse(void) {
 }
 
 void hopper_reset() {
-    if (!launcher_running) {
-        fprintf(stderr, "Cannot reset hopper: machine is not running\n");
-        return;
-    }
-
     if (!motor.request) {
         fprintf(stderr, "Cannot reset hopper: motor not initialized\n");
         return;

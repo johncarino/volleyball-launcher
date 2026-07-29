@@ -625,3 +625,22 @@ input[type=range] { accent-color: var(--blue); }
   color: var(--text-secondary);
   line-height: 1.5;
 }
+
+.manual-utility-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.manual-home-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  padding: 4px 6px;
+  font: 500 10px/1.2 inherit;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.manual-home-btn:hover { opacity: 1; }
+.manual-home-btn:disabled { cursor: wait; opacity: 0.5; }
