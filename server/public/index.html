@@ -1094,6 +1094,7 @@
       let runIndex = 0;
       let currentRunSlot = null; // { machine, n } currently firing, for the "now playing" highlight
       const SET_RUN_DURATION_MS = 6000; // assumed dwell time per set before advancing
+      const SINGLE_SHOT_PULSE_INTERVAL_MS = 4000;
 
       function slotsHTML(readonly = false, variant = 'sequence') {
         const machineKey = selectedMachine || 'L';
@@ -1210,7 +1211,36 @@
         }
         runIndex = 0;
         isRunning = true;
+        if (window._activeMode === 'single_shot') {
+          startSingleShotPulsing();
+          return;
+        }
         runNextInQueue();
+      }
+
+      function startSingleShotPulsing() {
+        const { machine, n } = runQueue[0];
+        const machineIndex = MACHINE_INDEX[machine];
+        if (machineIndex === undefined) {
+          stopRunSequence();
+          return;
+        }
+
+        currentRunSlot = { machine, n };
+        activateSlot(machine, n);
+        refreshSlots();
+
+        // Apply the selected set and explicitly resume the flywheel before
+        // feeding balls. Single Shot uses discrete pulses, not hopper-on.
+        emitMachine('setMachine', { machinePosition: machineIndex, setIndex: n - 1 });
+        emitMachine('resumeMotors');
+        emitMachine('hopper-pulse');
+
+        clearInterval(window._singleShotPulseTimer);
+        window._singleShotPulseTimer = setInterval(() => {
+          if (!isRunning || window._activeMode !== 'single_shot') return;
+          emitMachine('hopper-pulse');
+        }, SINGLE_SHOT_PULSE_INTERVAL_MS);
       }
 
       // Nudge the user when Start is pressed with no set selected: reset the button
@@ -1275,6 +1305,10 @@
       // check in runNextInQueue above). No-op if nothing is running.
       function requestSequenceStop() {
         if (!isRunning) return;
+        if (window._activeMode === 'single_shot') {
+          stopRunSequence();
+          return;
+        }
         window._stopRequested = true;
       }
 
@@ -1283,6 +1317,8 @@
         const wasRunning = isRunning;
         isRunning = false;
         clearTimeout(window._runTimer);
+        clearInterval(window._singleShotPulseTimer);
+        window._singleShotPulseTimer = null;
         if (wasRunning && currentRunSlot) {
           stopFiring(currentRunSlot.machine, currentRunSlot.n);
         }
