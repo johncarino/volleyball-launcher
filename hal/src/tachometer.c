@@ -26,8 +26,6 @@ static int tach_gate_armed   = 1;
 static int tach_gate_pending = 0;
 static int tach_gate_accepting = 0;
 static uint64_t tach_gate_accept_after_ns = 0;
-static int tach_gate_first_reset = 1;
-static int tach_gate_skip_next_falling = 0;
 
 static double tach_periods[TACH_AVG_WINDOW];
 static int    tach_period_count = 0;
@@ -181,13 +179,7 @@ static void *tach_gate_worker(void *arg)
 
         pthread_mutex_lock(&tach_gate_mutex);
         if (ev_type == GPIOD_EDGE_EVENT_FALLING_EDGE) {
-            if (tach_gate_accepting && tach_gate_skip_next_falling) {
-                // The GPIO request reports one startup falling edge during
-                // the first reset. Consume it, then require a rising edge to
-                // rearm before accepting the next magnet approach.
-                tach_gate_skip_next_falling = 0;
-                tach_gate_armed = 0;
-            } else if (tach_gate_accepting && tach_gate_armed &&
+            if (tach_gate_accepting && tach_gate_armed &&
                 event_ns >= tach_gate_accept_after_ns) {
                 tach_gate_pending = 1;
                 tach_gate_armed = 0;
@@ -394,8 +386,6 @@ int tach_init(void)
     tach_gate_pending = 0;
     tach_gate_accepting = 0;
     tach_gate_accept_after_ns = 0;
-    tach_gate_first_reset = 1;
-    tach_gate_skip_next_falling = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     tach_gate_running = 1;
@@ -446,8 +436,6 @@ void tach_cleanup(void)
     tach_gate_armed = 1;
     tach_gate_accepting = 0;
     tach_gate_accept_after_ns = 0;
-    tach_gate_first_reset = 1;
-    tach_gate_skip_next_falling = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     if (was_tach_running) {
@@ -493,8 +481,6 @@ void tach_gate_prepare_for_reset(void)
     tach_gate_armed = (value == GPIOD_LINE_VALUE_ACTIVE);
     tach_gate_accepting = (value != GPIOD_LINE_VALUE_ERROR);
     tach_gate_accept_after_ns = now_ns;
-    tach_gate_skip_next_falling = tach_gate_first_reset;
-    tach_gate_first_reset = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     if (value == GPIOD_LINE_VALUE_ERROR) {
@@ -511,7 +497,6 @@ int tach_gate_consume_signal(void)
         signal = 1;
         tach_gate_pending = 0;
         tach_gate_accepting = 0;
-        tach_gate_skip_next_falling = 0;
     }
     pthread_mutex_unlock(&tach_gate_mutex);
     return signal;
