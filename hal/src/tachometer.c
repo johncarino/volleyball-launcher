@@ -26,9 +26,10 @@ static int tach_gate_armed   = 1;
 static int tach_gate_pending = 0;
 static int tach_gate_accepting = 0;
 static uint64_t tach_gate_accept_after_ns = 0;
-static int tach_gate_first_reset = 1;
+static int tach_gate_flushing = 0;
+static uint64_t tach_gate_flush_after_ns = 0;
 
-#define TACH_GATE_FIRST_RESET_GUARD_NS 250000000ULL
+#define TACH_GATE_FLUSH_QUIET_NS 200000000ULL
 
 static double tach_periods[TACH_AVG_WINDOW];
 static int    tach_period_count = 0;
@@ -157,6 +158,39 @@ static void *tach_gate_worker(void *arg)
             break;
         }
         if (wait_result == 0) {
+            pthread_mutex_lock(&tach_gate_mutex);
+            if (tach_gate_flushing) {
+                struct timespec now;
+                clock_gettime(CLOCK_MONOTONIC, &now);
+                uint64_t now_ns =
+                    (uint64_t)now.tv_sec * 1000000000ULL +
+                    (uint64_t)now.tv_nsec;
+
+                if (now_ns < tach_gate_flush_after_ns) {
+                    pthread_mutex_unlock(&tach_gate_mutex);
+                    continue;
+                }
+
+                enum gpiod_line_value value = gpiod_line_request_get_value(
+                    tach_gate_request, TACH_GATE_LINE);
+
+                tach_gate_pending = 0;
+                tach_gate_armed =
+                    (value == GPIOD_LINE_VALUE_ACTIVE);
+                tach_gate_accept_after_ns = now_ns;
+                tach_gate_accepting =
+                    (value != GPIOD_LINE_VALUE_ERROR);
+                tach_gate_flushing = 0;
+                tach_gate_flush_after_ns = 0;
+
+                if (value == GPIOD_LINE_VALUE_ERROR) {
+                    fprintf(stderr,
+                            "Tach gate: failed to read level after flush\n");
+                } else {
+                    printf("Tach gate: reset sensor armed after queue flush\n");
+                }
+            }
+            pthread_mutex_unlock(&tach_gate_mutex);
             continue;
         }
 
@@ -181,15 +215,18 @@ static void *tach_gate_worker(void *arg)
         uint64_t event_ns = gpiod_edge_event_get_timestamp_ns(ev);
 
         pthread_mutex_lock(&tach_gate_mutex);
+        if (tach_gate_flushing) {
+            // This event was already queued when the reset began. Discard it;
+            // the gate is armed only after an event-free worker interval.
+            pthread_mutex_unlock(&tach_gate_mutex);
+            continue;
+        }
         if (ev_type == GPIOD_EDGE_EVENT_FALLING_EDGE) {
             if (tach_gate_accepting && tach_gate_armed &&
                 event_ns >= tach_gate_accept_after_ns) {
                 tach_gate_pending = 1;
+                tach_gate_armed = 0;
             }
-            // Even an edge rejected by the first-reset guard means the line
-            // went low. Require it to rise again before another approach can
-            // be accepted.
-            tach_gate_armed = 0;
         } else if (ev_type == GPIOD_EDGE_EVENT_RISING_EDGE) {
             tach_gate_armed = 1;
         }
@@ -316,10 +353,6 @@ int tach_init(void)
     }
     gpiod_line_settings_set_direction(gate_settings, GPIOD_LINE_DIRECTION_INPUT);
     gpiod_line_settings_set_edge_detection(gate_settings, GPIOD_LINE_EDGE_BOTH);
-    // Match the CLOCK_MONOTONIC timestamp used when each reset is armed so
-    // startup/queued events can be compared reliably.
-    gpiod_line_settings_set_event_clock(gate_settings,
-                                        GPIOD_LINE_CLOCK_MONOTONIC);
     // See TACH_GATE_BIAS in tachometer.h -- defaults to internal pull-up
     // since this sensor is typically wired without an external pull-up.
     gpiod_line_settings_set_bias(gate_settings, TACH_GATE_BIAS);
@@ -396,7 +429,8 @@ int tach_init(void)
     tach_gate_pending = 0;
     tach_gate_accepting = 0;
     tach_gate_accept_after_ns = 0;
-    tach_gate_first_reset = 1;
+    tach_gate_flushing = 0;
+    tach_gate_flush_after_ns = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     tach_gate_running = 1;
@@ -447,7 +481,8 @@ void tach_cleanup(void)
     tach_gate_armed = 1;
     tach_gate_accepting = 0;
     tach_gate_accept_after_ns = 0;
-    tach_gate_first_reset = 1;
+    tach_gate_flushing = 0;
+    tach_gate_flush_after_ns = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     if (was_tach_running) {
@@ -487,27 +522,13 @@ void tach_gate_prepare_for_reset(void)
                       (uint64_t)now.tv_nsec;
 
     pthread_mutex_lock(&tach_gate_mutex);
-    enum gpiod_line_value value = gpiod_line_request_get_value(
-        tach_gate_request, TACH_GATE_LINE);
-
     tach_gate_pending = 0;
-    tach_gate_accept_after_ns = now_ns;
-    if (tach_gate_first_reset) {
-        // GPIO controllers can report one startup transition immediately
-        // after the first reset is armed. Ignore that short initialization
-        // window and require a subsequent leave-and-approach cycle.
-        tach_gate_accept_after_ns += TACH_GATE_FIRST_RESET_GUARD_NS;
-        tach_gate_first_reset = 0;
-    }
-    tach_gate_accepting = 1;
-    // A3144 output is active-low. If a magnet is already present, wait for
-    // its rising edge (departure) before accepting another approach.
-    tach_gate_armed = (value == GPIOD_LINE_VALUE_ACTIVE);
+    tach_gate_armed = 0;
+    tach_gate_accepting = 0;
+    tach_gate_accept_after_ns = 0;
+    tach_gate_flushing = 1;
+    tach_gate_flush_after_ns = now_ns + TACH_GATE_FLUSH_QUIET_NS;
     pthread_mutex_unlock(&tach_gate_mutex);
-
-    if (value == GPIOD_LINE_VALUE_ERROR) {
-        fprintf(stderr, "Tach gate: failed to read level before reset\n");
-    }
 #endif
 }
 
@@ -519,6 +540,8 @@ int tach_gate_consume_signal(void)
         signal = 1;
         tach_gate_pending = 0;
         tach_gate_accepting = 0;
+        tach_gate_flushing = 0;
+        tach_gate_flush_after_ns = 0;
     }
     pthread_mutex_unlock(&tach_gate_mutex);
     return signal;
