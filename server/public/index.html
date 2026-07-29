@@ -1154,8 +1154,21 @@
         const machineKey = selectedMachine || 'L';
         if (!slots[machineKey][n]) return;
         singleShotSelected[machineKey] = (singleShotSelected[machineKey] === n) ? null : n;
-        activateSlot(machineKey, n);
+        if (singleShotSelected[machineKey] !== null) {
+          activateSlot(machineKey, n);
+          applySingleShotSet(machineKey, n);
+        }
         refreshSlots();
+      }
+
+      function applySingleShotSet(machine, n) {
+        if (!n || !slots[machine] || !slots[machine][n]) return;
+        const machineIndex = MACHINE_INDEX[machine];
+        if (machineIndex === undefined) {
+          console.error('Unknown machine key, cannot apply Single Shot set:', machine);
+          return;
+        }
+        emitMachine('setMachine', { machinePosition: machineIndex, setIndex: n - 1 });
       }
 
       // Actually apply the selected set slot to the machine and start feeding
@@ -1221,19 +1234,14 @@
 
       function startSingleShotPulsing() {
         const { machine, n } = runQueue[0];
-        const machineIndex = MACHINE_INDEX[machine];
-        if (machineIndex === undefined) {
-          stopRunSequence();
-          return;
-        }
 
         currentRunSlot = { machine, n };
         activateSlot(machine, n);
         refreshSlots();
 
-        // Apply the selected set and explicitly resume the flywheel before
-        // feeding balls. Single Shot uses discrete pulses, not hopper-on.
-        emitMachine('setMachine', { machinePosition: machineIndex, setIndex: n - 1 });
+        // The selected set was already applied on mode entry/slot selection.
+        // Start therefore resumes that configured machine directly, avoiding
+        // a race with the asynchronous setMachine worker.
         emitMachine('resumeMotors');
         emitMachine('hopper-pulse');
 
@@ -1612,6 +1620,11 @@
         if (mode === 'launch' || mode === 'single_shot') {
           syncLaunchSummary();
           disarmLaunchGesture();
+        }
+        if (mode === 'single_shot') {
+          const machineKey = selectedMachine || 'L';
+          const selectedSlot = singleShotSelected[machineKey];
+          applySingleShotSet(machineKey, selectedSlot);
         }
         window._activeMode = mode;
       }
