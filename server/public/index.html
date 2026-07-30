@@ -171,6 +171,10 @@
         machineSocket.on('set-machine-state', (state) => {
           if (state === 'APPLIED' && isRunning && window._activeMode === 'launch') {
             beginSequenceShot();
+          } else if (state === 'APPLIED' && isRunning && window._activeMode === 'single_shot') {
+            beginSingleShotPulse();
+          } else if (state === 'FAILED' && isRunning) {
+            stopRunSequence();
           }
         });
         machineSocket.on('machine-ready', (ready) => { machineReady = ready === true; });
@@ -1230,6 +1234,7 @@
           console.error('Unknown machine key, cannot fire set:', machine);
           return;
         }
+        emitMachine('resumeMotors');
         emitMachine('setMachine', { machinePosition: machineIndex, setIndex: n - 1 });
       }
 
@@ -1283,14 +1288,16 @@
         activateSlot(machine, n);
         refreshSlots();
 
-        // The selected set was already applied on mode entry/slot selection.
-        // Start therefore resumes that configured machine directly, avoiding
-        // a race with the asynchronous setMachine worker.
         emitMachine('resumeMotors');
-        emitMachine('hopper-pulse');
+        applySingleShotSet(machine, n);
 
         // hopper-pulse-complete is the completion flag: its handler stops the
         // motors after this one shot. No timer means extra presses cannot queue.
+      }
+
+      function beginSingleShotPulse() {
+        if (!isRunning || window._activeMode !== 'single_shot') return;
+        emitMachine('hopper-pulse');
       }
 
       // Nudge the user when Start is pressed with no set selected: reset the button
@@ -1329,7 +1336,6 @@
       // behind a still-moving tilt actuator.
       function beginSequenceShot() {
         if (!isRunning || window._activeMode !== 'launch' || !currentRunSlot) return;
-        emitMachine('resumeMotors');
         emitMachine('hopper-pulse');
       }
 

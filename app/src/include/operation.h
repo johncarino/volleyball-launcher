@@ -36,6 +36,7 @@ void tilt_signal(float angle);
 void yaw_signal(float angle);
 void speed_signal(float speed);
 void set_speed(float speed);
+void speed_with_feedback(float rpm);
 void set_raw_speed(float mv);
 void percentage_to_mv(float percentage);
 void set_machine(int machine_position, int set_index);
@@ -73,6 +74,10 @@ void operation_install_interrupt_handler(void);
 void operation_request_interrupt(void);
 int  operation_interrupt_pending(void);
 void operation_clear_interrupt(void);
+
+/* Feedback-sensor fault reporting for asynchronous native workers. */
+void operation_clear_feedback_fault(void);
+const char *operation_feedback_fault_message(void);
 
 #ifdef __cplusplus
 }

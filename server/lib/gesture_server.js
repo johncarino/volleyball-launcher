@@ -496,7 +496,7 @@ function handleCommand(socket) {
 			var accepted = operation.setMachine(machinePosition, setIndex, function(err) {
 				if (err) {
 					console.log('[operation] setMachine worker failed: ' + err.message);
-					socket.emit('machine-error', 'Failed to apply set machine.');
+					socket.emit('machine-error', err.message || 'Failed to apply set machine.');
 				}
 				socket.emit('machine-ready', true);
 				socket.emit('set-machine-state', err ? 'FAILED' : 'APPLIED');

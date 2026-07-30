@@ -32,7 +32,10 @@ public:
 
     // Executed on a worker thread -- safe to block here.
     void Execute() override {
+        operation_clear_feedback_fault();
         tilt_signal(angle_);
+        const char* fault = operation_feedback_fault_message();
+        if (fault != nullptr) SetError(fault);
     }
 
     // Back on the main thread once the tilt returns.
@@ -64,7 +67,10 @@ public:
     ~SetMachineWorker() override {}
 
     void Execute() override {
+        operation_clear_feedback_fault();
         set_machine(machinePosition_, setIndex_);
+        const char* fault = operation_feedback_fault_message();
+        if (fault != nullptr) SetError(fault);
     }
 
     void OnOK() override {

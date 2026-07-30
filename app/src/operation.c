@@ -27,6 +27,13 @@ volatile int launcher_running = 0;
 #define TILT_FINE_WINDOW_DEG 1.5
 #define TILT_MEDIUM_WINDOW_DEG 5.0
 #define TILT_COARSE_WINDOW_DEG 15.0
+#define TILT_STALL_EPSILON_DEG 0.05
+#define TILT_STALL_ADJUSTMENTS 30
+#define SPEED_STALL_EPSILON_RPM 5
+#define SPEED_STALL_ADJUSTMENTS 30
+#define SPEED_TOLERANCE_RPM 10
+#define SPEED_TOLERANCE_HOLD_COUNT 3
+#define SPEED_FEEDBACK_TIMEOUT_SEC 10
 
 #define HOPPER_PULSE_STEPS 2400
 #define HOPPER_PULSE_START_DELAY_US 1000
@@ -48,6 +55,21 @@ static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 static pthread_t hopper_thread;
 static volatile int hopper_thread_created = 0;
 static unsigned int hopper_pulse_count = 0;
+static volatile int feedback_sensor_fault = 0;
+
+void operation_clear_feedback_fault(void) {
+    feedback_sensor_fault = 0;
+}
+
+const char *operation_feedback_fault_message(void) {
+    if (feedback_sensor_fault == 1) {
+        return "Tilt sensor is not responding. Use Manual mode and check that the tilt sensor is connected.";
+    }
+    if (feedback_sensor_fault == 2) {
+        return "Speed sensor is not responding. Use Manual mode and check that the speed sensor is connected.";
+    }
+    return NULL;
+}
 
 #define LAUNCH_BEEP_COUNT 3
 #define LAUNCH_BEEP_FREQUENCY_HZ 880
@@ -511,6 +533,8 @@ void homing_sequence() {
 
 void tilt_signal(float angle) {
 
+    operation_clear_feedback_fault();
+
     if (angle > 87.0 || angle < INITIAL_TILT_ANGLE) {
         fprintf(stderr, "Invalid tilt angle: %.2f degrees (must be between %.2f and 87 degrees). Skipping tilt.\n", angle, INITIAL_TILT_ANGLE);
         return;
@@ -545,12 +569,15 @@ void tilt_signal(float angle) {
             }
         } else {
             tilt_with_feedback(angle);
+            if (feedback_sensor_fault) return;
         }
     } else {
         if (angle < 80.0) {
             tilt_with_feedback(angle);
+            if (feedback_sensor_fault) return;
         } else {
             tilt_with_feedback(80.0);
+            if (feedback_sensor_fault) return;
             usleep(100000); // Small delay to ensure the tilt operation completes
             duration_us = tilt_angle_to_time(80.0, angle);
             forward_ms(100, duration_us);
@@ -633,17 +660,24 @@ void set_machine(int machine_position, int set_index) {
     // Configure the launch speed target first so that once tilt_signal()
     // reaches the target angle it resumes the flywheel (if already running)
     // at the correct value for this set rather than the previous one.
-    //set_speed(spec->rpm_output);
+    set_speed(spec->rpm_output);
 
     // Blocking feedback-controlled tilt move to this set's angle.
-    //tilt_signal(spec->tilt_angle);
+    tilt_signal(spec->tilt_angle);
+    if (feedback_sensor_fault) return;
+
+    // The launch modes start the flywheel before applying a set. Refine the
+    // configured speed using tachometer feedback and return only once settled.
+    speed_with_feedback(spec->rpm_output);
 }
 
 void tilt_with_feedback(float angle) {
 
     const double target_angle = (double)angle;
     double current_angle = 0.0;
+    double previous_angle = NAN;
     int settled_reads = 0;
+    int unchanged_adjustments = 0;
 
     time_t start_time = time(NULL);
 
@@ -657,6 +691,7 @@ void tilt_with_feedback(float angle) {
 
         if (read_tilt_feedback_angle(&current_angle) != 0) {
             fprintf(stderr, "Failed to read from MPU6050\n");
+            feedback_sensor_fault = 1;
             bts_stop();
             return;
         }
@@ -680,6 +715,22 @@ void tilt_with_feedback(float angle) {
 
         settled_reads = 0;
 
+        if (!isnan(previous_angle) &&
+            fabs(current_angle - previous_angle) <= TILT_STALL_EPSILON_DEG) {
+            unchanged_adjustments++;
+        } else {
+            unchanged_adjustments = 0;
+        }
+        previous_angle = current_angle;
+
+        if (unchanged_adjustments >= TILT_STALL_ADJUSTMENTS) {
+            fprintf(stderr, "Tilt sensor did not change after %d motor adjustments; aborting.\n",
+                    TILT_STALL_ADJUSTMENTS);
+            feedback_sensor_fault = 1;
+            bts_stop();
+            return;
+        }
+
         int duty_cycle = get_tilt_duty_cycle(error);
 
         if (error > 0) {
@@ -701,6 +752,7 @@ void tilt_with_feedback(float angle) {
 }
 
 void speed_with_feedback(float rpm) {
+    operation_clear_feedback_fault();
     if (rpm > 1200.0) {
         fprintf(stderr, "Invalid RPM: %.2f (must be 1200 or less). Skipping speed.\n", rpm);
         return;
@@ -708,6 +760,10 @@ void speed_with_feedback(float rpm) {
     int mv = 0;
     //convert speed to mv
     mv = rpm_to_mv(rpm);
+    int previous_rpm = -1;
+    int unchanged_adjustments = 0;
+    int settled_reads = 0;
+    time_t start_time = time(NULL);
 
     while (launcher_running) {
         if (operation_interrupt_pending()) {
@@ -719,6 +775,36 @@ void speed_with_feedback(float rpm) {
 
         //tach reading
         int actual_rpm = get_tach_rpm();
+
+        if (abs(actual_rpm - (int)rpm) <= SPEED_TOLERANCE_RPM) {
+            settled_reads++;
+            if (settled_reads >= SPEED_TOLERANCE_HOLD_COUNT) {
+                fprintf(stderr, "Target speed reached within tolerance.\n");
+                break;
+            }
+        } else {
+            settled_reads = 0;
+        }
+
+        if (abs(actual_rpm - (int)rpm) > SPEED_STALL_EPSILON_RPM) {
+            if (previous_rpm >= 0 &&
+                abs(actual_rpm - previous_rpm) <= SPEED_STALL_EPSILON_RPM) {
+                unchanged_adjustments++;
+            } else {
+                unchanged_adjustments = 0;
+            }
+            if (unchanged_adjustments >= SPEED_STALL_ADJUSTMENTS) {
+                fprintf(stderr, "Speed sensor did not change after %d DAC adjustments; aborting.\n",
+                        SPEED_STALL_ADJUSTMENTS);
+                feedback_sensor_fault = 2;
+                mcp4725_set_raw(&dac1, 0);
+                launcher_running = 0;
+                break;
+            }
+        } else {
+            unchanged_adjustments = 0;
+        }
+        previous_rpm = actual_rpm;
 
         if (actual_rpm < rpm) {
             // Increase speed
@@ -732,9 +818,23 @@ void speed_with_feedback(float rpm) {
 
         mcp4725_set_mv(&dac1, (uint16_t)mv);
         usleep(100000); // Adjust every 100ms
+
+        if (difftime(time(NULL), start_time) >= SPEED_FEEDBACK_TIMEOUT_SEC) {
+            fprintf(stderr, "Speed feedback timed out after %d seconds.\n",
+                    SPEED_FEEDBACK_TIMEOUT_SEC);
+            mcp4725_set_raw(&dac1, 0);
+            launcher_running = 0;
+            feedback_sensor_fault = 2;
+            break;
+        }
     }
-    curr_speed = (float)mv;
-    curr_rpm = rpm;
+    if (feedback_sensor_fault == 2) {
+        curr_speed = 0.0f;
+        curr_rpm = 0;
+    } else {
+        curr_speed = (float)mv;
+        curr_rpm = rpm;
+    }
 }
 
 void toggle_hopper() {
