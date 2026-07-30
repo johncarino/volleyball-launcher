@@ -100,9 +100,9 @@ void arc_calc_params(
     /*
      * Machine positions in metres.
      */
-    machine_x[0] = 0.0f;
+    machine_x[0] = 0.84f;
     machine_x[1] = court_width / 2.0f;
-    machine_x[2] = court_width;
+    machine_x[2] = court_width - 0.84f;
 
     /*
      * Target positions in metres.
