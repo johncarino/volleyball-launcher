@@ -41,9 +41,8 @@ volatile int launcher_running = 0;
 #define SPEED_MIN_ADJUSTMENT_MV 5
 #define SPEED_MAX_ADJUSTMENT_MV 50
 #define MAX_LAUNCH_VOLTAGE_MV MCP4725_THROTTLE_MAX_MV
-#define RPM_MAP_BASE_MV 1380.0
-#define RPM_MAP_MV_SPAN 820.0
-#define RPM_MAP_RPM_SPAN 1300.0
+#define RPM_MAP_BASE_MV 1214.83
+#define RPM_MAP_MV_PER_RPM 0.55558
 
 #define HOPPER_PULSE_STEPS 2400
 #define HOPPER_PULSE_START_DELAY_US 1000
@@ -260,8 +259,8 @@ static void* hopper_step_thread(void *arg) {
 }
 
 static float clamp_rpm_to_voltage_limit(float rpm) {
-    const float max_rpm = (float)(((MAX_LAUNCH_VOLTAGE_MV - RPM_MAP_BASE_MV) /
-                                   RPM_MAP_MV_SPAN) * RPM_MAP_RPM_SPAN);
+    const float max_rpm = (float)((MAX_LAUNCH_VOLTAGE_MV - RPM_MAP_BASE_MV) /
+                                  RPM_MAP_MV_PER_RPM);
     if (rpm < 0.0f) return 0.0f;
     if (rpm > max_rpm) {
         fprintf(stderr,
@@ -274,8 +273,8 @@ static float clamp_rpm_to_voltage_limit(float rpm) {
 
 static uint16_t rpm_to_mv(float rpm) {
     rpm = clamp_rpm_to_voltage_limit(rpm);
-    // Linear mapping: 0 rpm -> 1380 mV, 1300 rpm -> 2200 mV
-    double value = (RPM_MAP_MV_SPAN / RPM_MAP_RPM_SPAN) * rpm + RPM_MAP_BASE_MV;
+    // Calibrated feed-forward mapping: V(r) = 0.55558r + 1214.83 mV.
+    double value = RPM_MAP_MV_PER_RPM * rpm + RPM_MAP_BASE_MV;
 
     if (value > MAX_LAUNCH_VOLTAGE_MV) value = MAX_LAUNCH_VOLTAGE_MV;
 
