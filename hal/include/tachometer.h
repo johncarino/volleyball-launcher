@@ -53,6 +53,10 @@
 #define TACH_GATE_BIAS GPIOD_LINE_BIAS_PULL_UP
 #endif
 
+// A magnet trigger must hold the active-low gate signal continuously for this
+// long. Shorter falling-edge pulses are treated as electrical noise.
+#define TACH_GATE_ACTIVE_HOLD_MS 30
+
 // Number of hall-effect magnets glued to the motor shaft per revolution.
 #ifndef TACH_PULSES_PER_REV
 #define TACH_PULSES_PER_REV 1

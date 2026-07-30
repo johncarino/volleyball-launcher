@@ -26,6 +26,7 @@ static int tach_gate_armed   = 1;
 static int tach_gate_pending = 0;
 static int tach_gate_accepting = 0;
 static uint64_t tach_gate_accept_after_ns = 0;
+static uint64_t tach_gate_candidate_since_ns = 0;
 
 static double tach_periods[TACH_AVG_WINDOW];
 static int    tach_period_count = 0;
@@ -185,14 +186,39 @@ static void *tach_gate_worker(void *arg)
             if (ev_type == GPIOD_EDGE_EVENT_FALLING_EDGE) {
                 if (tach_gate_accepting && tach_gate_armed &&
                     event_ns >= tach_gate_accept_after_ns) {
-                    tach_gate_pending = 1;
                     tach_gate_armed = 0;
+                    tach_gate_candidate_since_ns = event_ns;
                 }
             } else if (ev_type == GPIOD_EDGE_EVENT_RISING_EDGE) {
                 tach_gate_armed = 1;
+                tach_gate_candidate_since_ns = 0;
             }
             pthread_mutex_unlock(&tach_gate_mutex);
         }
+
+        // Qualify an active-low candidate by requiring it to remain LOW. This
+        // rejects brief falling edges caused by a floating wire or motor EMI.
+        pthread_mutex_lock(&tach_gate_mutex);
+        if (tach_gate_accepting && tach_gate_candidate_since_ns != 0) {
+            enum gpiod_line_value level = gpiod_line_request_get_value(
+                tach_gate_request, TACH_GATE_LINE);
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            uint64_t now_ns = (uint64_t)now.tv_sec * 1000000000ULL +
+                              (uint64_t)now.tv_nsec;
+            uint64_t hold_ns =
+                (uint64_t)TACH_GATE_ACTIVE_HOLD_MS * 1000000ULL;
+
+            if (level == GPIOD_LINE_VALUE_ACTIVE) {
+                tach_gate_candidate_since_ns = 0;
+                tach_gate_armed = 1;
+            } else if (level == GPIOD_LINE_VALUE_INACTIVE &&
+                       now_ns - tach_gate_candidate_since_ns >= hold_ns) {
+                tach_gate_pending = 1;
+                tach_gate_candidate_since_ns = 0;
+            }
+        }
+        pthread_mutex_unlock(&tach_gate_mutex);
     }
 
     return NULL;
@@ -391,6 +417,7 @@ int tach_init(void)
     tach_gate_pending = 0;
     tach_gate_accepting = 0;
     tach_gate_accept_after_ns = 0;
+    tach_gate_candidate_since_ns = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     tach_gate_running = 1;
@@ -441,6 +468,7 @@ void tach_cleanup(void)
     tach_gate_armed = 1;
     tach_gate_accepting = 0;
     tach_gate_accept_after_ns = 0;
+    tach_gate_candidate_since_ns = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     if (was_tach_running) {
@@ -486,10 +514,14 @@ void tach_gate_prepare_for_reset(void)
     tach_gate_armed = (value == GPIOD_LINE_VALUE_ACTIVE);
     tach_gate_accepting = (value != GPIOD_LINE_VALUE_ERROR);
     tach_gate_accept_after_ns = now_ns;
+    tach_gate_candidate_since_ns = 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     if (value == GPIOD_LINE_VALUE_ERROR) {
         fprintf(stderr, "Tach gate: failed to read level before reset\n");
+    } else if (value == GPIOD_LINE_VALUE_INACTIVE) {
+        fprintf(stderr,
+                "Tach gate: line is LOW before reset; waiting for it to release HIGH before accepting a magnet trigger.\n");
     }
 #endif
 }
