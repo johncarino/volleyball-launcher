@@ -1439,7 +1439,6 @@
           tempo: selectedTempo,
         };
         slotEnabled[selectedMachine][n] = true;
-        singleShotSelected[selectedMachine] = n; // add this line — newest save becomes the Single Shot selection
         slotSaved = true;
         if (selectedMachine === 'C') {
           lockedSide = zoneSide(selectedTarget);
@@ -1566,7 +1565,6 @@
           <div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
             <button class="modetab-header" role="tab" data-mode="single_shot">Single Shot</button>
             <button class="modetab-header" role="tab" data-mode="launch">Sequence</button>
-            <button class="modetab-header" role="tab" data-mode="gesture">Gesture</button>
           </div>`;
         attachModeTabListeners();
         setMode('single_shot');
@@ -1633,6 +1631,14 @@
             slotSaved = false;
             lockedSide = null;
           }
+        }
+
+        // Single Shot always starts with the uppermost populated slot. Do this
+        // before rendering so the correct slot is highlighted immediately.
+        if (mode === 'single_shot') {
+          const machineKey = selectedMachine || 'L';
+          singleShotSelected[machineKey] =
+            [1, 2, 3, 4].find(n => !!slots[machineKey][n]) || null;
         }
 
         const appEl = document.querySelector('.app');
