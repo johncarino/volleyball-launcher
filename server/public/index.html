@@ -1149,6 +1149,20 @@
       let runQueue = [];       // ordered list of { machine, n } to fire through
       let runIndex = 0;
       let currentRunSlot = null; // { machine, n } currently firing, for the "now playing" highlight
+      const START_DELAY_MS = 3000;
+
+      function runAfterInitialStartDelay(callback) {
+        const remaining = Math.max(0, (window._runStartReadyAt || 0) - Date.now());
+        clearTimeout(window._runStartDelayTimer);
+        if (remaining === 0) {
+          callback();
+          return;
+        }
+        window._runStartDelayTimer = setTimeout(() => {
+          window._runStartDelayTimer = null;
+          callback();
+        }, remaining);
+      }
 
       function slotsHTML(readonly = false, variant = 'sequence') {
         const machineKey = selectedMachine || 'L';
@@ -1274,6 +1288,9 @@
         }
         runIndex = 0;
         isRunning = true;
+        // Set/tilt/speed feedback runs during this window. The first hopper
+        // pulse starts when both feedback and this three-second delay finish.
+        window._runStartReadyAt = Date.now() + START_DELAY_MS;
         if (window._activeMode === 'single_shot') {
           startSingleShotPulsing();
           return;
@@ -1297,7 +1314,11 @@
 
       function beginSingleShotPulse() {
         if (!isRunning || window._activeMode !== 'single_shot') return;
-        emitMachine('hopper-pulse');
+        runAfterInitialStartDelay(() => {
+          if (isRunning && window._activeMode === 'single_shot') {
+            emitMachine('hopper-pulse');
+          }
+        });
       }
 
       // Nudge the user when Start is pressed with no set selected: reset the button
@@ -1336,7 +1357,11 @@
       // behind a still-moving tilt actuator.
       function beginSequenceShot() {
         if (!isRunning || window._activeMode !== 'launch' || !currentRunSlot) return;
-        emitMachine('hopper-pulse');
+        runAfterInitialStartDelay(() => {
+          if (isRunning && window._activeMode === 'launch' && currentRunSlot) {
+            emitMachine('hopper-pulse');
+          }
+        });
       }
 
       // Advance only when the backend confirms that this set's single hopper
@@ -1381,6 +1406,9 @@
         const wasRunning = isRunning;
         isRunning = false;
         clearTimeout(window._runTimer);
+        clearTimeout(window._runStartDelayTimer);
+        window._runStartDelayTimer = null;
+        window._runStartReadyAt = 0;
         clearInterval(window._singleShotPulseTimer);
         window._singleShotPulseTimer = null;
         if (wasRunning && currentRunSlot) {
@@ -1558,6 +1586,8 @@
           btn.classList.remove('stop'); btn.classList.add('start');
           btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
           clearInterval(window._telem);
+          clearTimeout(window._manualStartTimer);
+          window._manualStartTimer = null;
           if (window._activeMode === 'advanced') {
             emitMachine('stopMotors');
             // Stopping the launcher must also stop the hopper -- it must never
@@ -1577,7 +1607,15 @@
           btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
           startTelemetry();
           if (window._activeMode === 'advanced') {
-            emitMachine('resumeMotors');
+            clearTimeout(window._manualStartTimer);
+            window._manualStartTimer = setTimeout(() => {
+              window._manualStartTimer = null;
+              const currentBtn = document.getElementById('launch-main-btn');
+              if (window._activeMode === 'advanced' && currentBtn &&
+                  currentBtn.classList.contains('stop')) {
+                emitMachine('resumeMotors');
+              }
+            }, START_DELAY_MS);
           }
         }
       }
@@ -1632,8 +1670,20 @@
 
       function setMode(mode) {
         const previousMode = window._activeMode || 'configure';
+        const leavingLaunchModes =
+          (previousMode === 'launch' || previousMode === 'single_shot') &&
+          mode !== 'launch' && mode !== 'single_shot';
+        const leavingManual = previousMode === 'advanced' && mode !== 'advanced';
+
         if ((previousMode === 'launch' || previousMode === 'single_shot') && mode !== previousMode && isRunning) {
           stopRunSequence();
+        }
+        // Stop the active run first, then home while operation control is still
+        // initialized. Cleanup events are queued only after this request.
+        if (leavingLaunchModes || leavingManual) {
+          clearTimeout(window._manualStartTimer);
+          window._manualStartTimer = null;
+          emitMachine('homing-sequence');
         }
         if (previousMode === 'advanced' && mode !== 'advanced') {
           emitMachine('advanced-leave');
