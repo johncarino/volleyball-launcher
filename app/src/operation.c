@@ -31,15 +31,15 @@ volatile int launcher_running = 0;
 #define TILT_STALL_ADJUSTMENTS 30
 #define SPEED_STALL_EPSILON_RPM 5
 #define SPEED_STALL_ADJUSTMENTS 8
-#define SPEED_TOLERANCE_RPM 10
-#define SPEED_TOLERANCE_HOLD_COUNT 3
+#define SPEED_TOLERANCE_RPM 25
+#define SPEED_TOLERANCE_HOLD_COUNT 2
 #define SPEED_FEEDBACK_TIMEOUT_SEC 30
 #define SPEED_CONTROL_DELAY_US 250000
-#define SPEED_STABLE_DELTA_RPM 15
+#define SPEED_STABLE_DELTA_RPM 20
 #define SPEED_STABLE_READ_COUNT 2
-#define SPEED_PROPORTIONAL_GAIN 0.10
+#define SPEED_PROPORTIONAL_GAIN 0.05
 #define SPEED_MIN_ADJUSTMENT_MV 5
-#define SPEED_MAX_ADJUSTMENT_MV 50
+#define SPEED_MAX_ADJUSTMENT_MV 25
 #define SPEED_CACHE_RPM_EPSILON 0.5
 #define MAX_LAUNCH_VOLTAGE_MV MCP4725_THROTTLE_MAX_MV
 #define RPM_MAP_BASE_MV 1214.83
@@ -545,24 +545,45 @@ void operation_cleanup() {
 void homing_sequence() {
     printf("Homing sequence initiated. Moving to default position...\n");
 
-    // 1. Return the launcher to its mechanical starting angle.
-    tilt_signal(INITIAL_TILT_ANGLE);
-    curr_tilt_angle = INITIAL_TILT_ANGLE;
+    // Start from a known stopped state so tilt_signal() cannot restore a
+    // previously configured launch voltage after moving the tilt mechanism.
+    hopper_stop();
+    mcp4725_set_raw(&dac1, 0);
+    launcher_running = 0;
+    curr_speed = 0.0f;
+    curr_rpm = 0;
+    speed_cache_valid = 0;
 
-    // 2. Spin the flywheel slowly while the hopper finds its home sensor.
+    // 1. Return the launcher to its mechanical starting angle while the
+    // flywheel and hopper are stopped.
+    tilt_signal(INITIAL_TILT_ANGLE);
+    if (feedback_sensor_fault) {
+        fprintf(stderr, "Homing aborted: unable to reach the initial tilt position.\n");
+        goto homing_stop;
+    }
+
+    // 2. Run the flywheel at a dedicated low speed only while finding the
+    // hopper home sensor. This direct voltage estimate intentionally avoids
+    // waiting for normal launch-speed feedback during homing.
     printf("Homing: running flywheel at %.0f RPM.\n", HOMING_FLYWHEEL_RPM);
     speed_signal(HOMING_FLYWHEEL_RPM);
+    launcher_running = 1;
 
     // 3. Find and settle at the hopper home position.
     hopper_reset();
     hopper_pulse_count = 0;
 
-    // 4. Homing always leaves the machine fully stopped.
+homing_stop:
+    // 4. Homing always leaves the tilt, hopper, and flywheel motors stopped,
+    // including when tilt feedback or hopper reset aborts early.
+    bts_stop();
+    hopper_stop();
     mcp4725_set_raw(&dac1, 0);
-    curr_speed = 0.0;
+    curr_speed = 0.0f;
     curr_rpm = 0;
     launcher_running = 0;
-    printf("Homing sequence complete.\n");
+    speed_cache_valid = 0;
+    printf("Homing sequence finished with all motors stopped.\n");
 }
 
 void tilt_signal(float angle) {
@@ -838,7 +859,9 @@ void speed_with_feedback(float rpm) {
         if (abs(actual_rpm - (int)rpm) <= SPEED_TOLERANCE_RPM) {
             settled_reads++;
             if (settled_reads >= SPEED_TOLERANCE_HOLD_COUNT) {
-                fprintf(stderr, "Target speed reached within tolerance.\n");
+                fprintf(stderr,
+                        "Target speed reached within tolerance: actual=%d RPM, target=%.2f RPM, voltage=%d mV.\n",
+                        actual_rpm, rpm, mv);
                 feedback_completed = 1;
                 break;
             }
@@ -885,6 +908,9 @@ void speed_with_feedback(float rpm) {
             mv += adjustment;
             if (mv > MAX_LAUNCH_VOLTAGE_MV) mv = MAX_LAUNCH_VOLTAGE_MV;
             if (mv < 0) mv = 0;
+            fprintf(stderr,
+                    "Speed feedback correction: actual=%d RPM, target=%.2f RPM, adjustment=%d mV, voltage=%d mV.\n",
+                    actual_rpm, rpm, adjustment, mv);
             mcp4725_set_mv(&dac1, (uint16_t)mv);
             stable_reads = 0;
         }
@@ -931,11 +957,6 @@ void toggle_hopper() {
 static void hopper_start_internal(void) {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
-
-    if (!launcher_running) {
-        fprintf(stderr, "Cannot start hopper: machine is not running\n");
-        return;
-    }
 
     if (!motor.request) {
         fprintf(stderr, "Cannot start hopper: motor not initialized\n");
