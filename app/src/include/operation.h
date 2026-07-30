@@ -11,6 +11,7 @@
 #include "tb6600.h"
 #include "mpu6050.h"
 #include "tachometer.h"
+#include "hcsr04.h"
 
 #ifdef __cplusplus
 extern "C" {

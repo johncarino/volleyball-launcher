@@ -49,7 +49,8 @@
         "../hal/src/mpu6050.c",
         "../hal/src/tb6600.c",
         "../hal/src/pwm.c",
-        "../hal/src/tachometer.c"
+        "../hal/src/tachometer.c",
+        "../hal/src/hcsr04.c"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
