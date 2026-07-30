@@ -59,6 +59,10 @@
       let selectedTempo = null;
       let hoveredTempo = null;
       let hopperOn = false;
+      // False while set_machine or a hopper pulse is executing. Set-selection
+      // and Start presses are rejected during this window instead of queued.
+      let machineReady = true;
+      const TILT_DEBOUNCE_MS = 800;
       let tempoSelected = false; // Track if tempo has been selected
       let slotSaved = false; // whether the current machine/target/tempo combo has been saved to a slot
       let lockedSide = null; // 'left' | 'right' |
@@ -129,6 +133,8 @@
 
       function emitMachine(eventName, value) {
         if (!machineSocket) return;
+        if ((eventName === 'setMachine' || eventName === 'hopper-pulse') && !machineReady) return;
+        if (eventName === 'setMachine' || eventName === 'hopper-pulse') machineReady = false;
         machineSocket.emit(eventName, value);
       }
 
@@ -148,6 +154,17 @@
 
         // ---- Set-slot save confirmation from the backend ----
         machineSocket.on('set-save-state', (state) => { onSetSaveState(state); });
+        machineSocket.on('set-machine-state', (state) => {
+          if (state === 'APPLIED' && isRunning && window._activeMode === 'launch') {
+            beginSequenceShot();
+          }
+        });
+        machineSocket.on('machine-ready', (ready) => { machineReady = ready === true; });
+        machineSocket.on('hopper-pulse-complete', (completed) => {
+          if (completed && isRunning && window._activeMode === 'single_shot') {
+            stopRunSequence();
+          }
+        });
         machineSocket.on('machine-error', (message) => { onMachineError(message); });
         machineSocket.on('homing-complete', () => {
           resetManualVisuals();
@@ -186,7 +203,20 @@
       function onAdvancedAngleChange(value) {
         const val = parseInt(value, 10);
         document.getElementById('dev-ang-val').textContent = val + '°';
-        emitMachine('setAngle', val);
+        scheduleAdvancedAngle(val);
+      }
+
+      // Update the target immediately, but wait until rapid +/- input settles
+      // before commanding the tilt actuator. Each new press replaces the
+      // pending command instead of adding another command to a queue.
+      function scheduleAdvancedAngle(value) {
+        const val = parseInt(value, 10);
+        if (Number.isNaN(val)) return;
+        clearTimeout(window._advancedAngleDebounceTimer);
+        window._advancedAngleDebounceTimer = setTimeout(() => {
+          window._advancedAngleDebounceTimer = null;
+          if (window._activeMode === 'advanced') emitMachine('setAngle', val);
+        }, TILT_DEBOUNCE_MS);
       }
 
       function onAdvancedSpeedInput(value) {
@@ -649,6 +679,7 @@
       }
 
       function selectMachine(id) {
+        if (!machineReady || isRunning) return;
         const reselectingSame = (id === selectedMachine);
         selectedMachine = id;
 
@@ -1095,7 +1126,6 @@
       let runIndex = 0;
       let currentRunSlot = null; // { machine, n } currently firing, for the "now playing" highlight
       const SET_RUN_DURATION_MS = 6000; // assumed dwell time per set before advancing
-      const SINGLE_SHOT_PULSE_INTERVAL_MS = 4000;
 
       function slotsHTML(readonly = false, variant = 'sequence') {
         const machineKey = selectedMachine || 'L';
@@ -1143,6 +1173,7 @@
       // Tapping a slot in the Launch screen now enables/disables it for the run
       // queue, instead of immediately running it.
       function clickSlot(n) {
+        if (!machineReady || isRunning) return;
         const machineKey = selectedMachine || 'L';
         if (!slots[machineKey][n]) return; // nothing saved in this slot, nothing to toggle
         slotEnabled[machineKey][n] = !slotEnabled[machineKey][n];
@@ -1151,6 +1182,7 @@
       }
 
       function selectSingleShotSlot(n) {
+        if (!machineReady || isRunning) return;
         const machineKey = selectedMachine || 'L';
         if (!slots[machineKey][n]) return;
         singleShotSelected[machineKey] = (singleShotSelected[machineKey] === n) ? null : n;
@@ -1162,7 +1194,7 @@
       }
 
       function applySingleShotSet(machine, n) {
-        if (!n || !slots[machine] || !slots[machine][n]) return;
+        if (!machineReady || !n || !slots[machine] || !slots[machine][n]) return;
         const machineIndex = MACHINE_INDEX[machine];
         if (machineIndex === undefined) {
           console.error('Unknown machine key, cannot apply Single Shot set:', machine);
@@ -1185,8 +1217,6 @@
           return;
         }
         emitMachine('setMachine', { machinePosition: machineIndex, setIndex: n - 1 });
-        emitMachine('resumeMotors');
-        emitMachine('hopper-on');
       }
 
       function stopFiring(machine, n) {
@@ -1245,11 +1275,8 @@
         emitMachine('resumeMotors');
         emitMachine('hopper-pulse');
 
-        clearInterval(window._singleShotPulseTimer);
-        window._singleShotPulseTimer = setInterval(() => {
-          if (!isRunning || window._activeMode !== 'single_shot') return;
-          emitMachine('hopper-pulse');
-        }, SINGLE_SHOT_PULSE_INTERVAL_MS);
+        // hopper-pulse-complete is the completion flag: its handler stops the
+        // motors after this one shot. No timer means extra presses cannot queue.
       }
 
       // Nudge the user when Start is pressed with no set selected: reset the button
@@ -1281,6 +1308,16 @@
         activateSlot(machine, n);
         refreshSlots();
         fireSet(machine, n, slotData);
+      }
+
+      // Called only after the backend's asynchronous set_machine worker raises
+      // its APPLIED flag. This prevents motor/hopper commands from being queued
+      // behind a still-moving tilt actuator.
+      function beginSequenceShot() {
+        if (!isRunning || window._activeMode !== 'launch' || !currentRunSlot) return;
+        const { machine, n } = currentRunSlot;
+        emitMachine('resumeMotors');
+        emitMachine('hopper-on');
 
         clearTimeout(window._runTimer);
         window._runTimer = setTimeout(() => {
@@ -1485,6 +1522,7 @@
           if (isRunning) {
             stopRunSequence();
           } else {
+            if (!machineReady) return;
             btn.classList.remove('start'); btn.classList.add('stop');
             btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
             startRunSequence();
@@ -1636,7 +1674,7 @@
         document.getElementById(valId).textContent = input.value + suffix;
 
         if (rangeId === 'dev-ang-range') {
-          emitMachine('setAngle', parseInt(input.value, 10));
+          scheduleAdvancedAngle(input.value);
         }
         if (rangeId === 'dev-spd-range') {
           emitMachine('setSpeed', parseInt(input.value, 10));

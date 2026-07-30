@@ -96,7 +96,10 @@ var operation = (function() {
 			speedSignal: function(){},
 			getTachReading: function(){ return 0; },
 			syncSet: function(){},
-			setMachine: function(){},
+			setMachine: function(machinePosition, setIndex, callback){
+				setImmediate(function() { callback(null, true); });
+				return true;
+			},
 			hopperStart: function(){},
 			hopperStop: function(){},
 			hopperPulse: function(){},
@@ -462,7 +465,10 @@ function handleCommand(socket) {
 				throw new Error('setMachine is not available in the operation addon');
 			}
 
-			if (!ensureOperationReady(socket, 'setMachine')) return;
+			if (!ensureOperationReady(socket, 'setMachine')) {
+				socket.emit('machine-ready', true);
+				return;
+			}
 			
 			// Look up the saved set data
 			var key = machinePosition + '_' + setIndex;
@@ -484,11 +490,24 @@ function handleCommand(socket) {
 				setData.tempo
 			);
 			
-			// Now call setMachine to apply it
-			operation.setMachine(machinePosition, setIndex);
-			socket.emit('set-machine-state', 'APPLIED');
+			// The native operation is asynchronous. Keep the UI interlocked until
+			// its worker reports that tilt/speed configuration has really finished.
+			socket.emit('machine-ready', false);
+			var accepted = operation.setMachine(machinePosition, setIndex, function(err) {
+				if (err) {
+					console.log('[operation] setMachine worker failed: ' + err.message);
+					socket.emit('machine-error', 'Failed to apply set machine.');
+				}
+				socket.emit('set-machine-state', err ? 'FAILED' : 'APPLIED');
+				socket.emit('machine-ready', true);
+			});
+			if (accepted === false) {
+				socket.emit('machine-ready', true);
+				socket.emit('machine-error', 'Machine is still applying the previous set.');
+			}
 		} catch (e) {
 			console.log('[operation] setMachine failed: ' + e.message);
+			socket.emit('machine-ready', true);
 			socket.emit('machine-error', 'Failed to apply set machine.');
 		}
 	});
@@ -534,12 +553,18 @@ function handleCommand(socket) {
 	});
 
 	socket.on('hopper-pulse', function() {
-		if (!ensureOperationReady(socket, 'hopper-pulse')) return;
+		if (!ensureOperationReady(socket, 'hopper-pulse')) {
+			socket.emit('machine-ready', true);
+			return;
+		}
 		console.log("Got hopper-pulse command.");
+		socket.emit('machine-ready', false);
 		var pulsed = operation.hopperPulse();
 		if (pulsed === false) {
 			socket.emit('machine-error', 'Cannot pulse hopper: machine is not running.');
 		}
+		socket.emit('hopper-pulse-complete', pulsed !== false);
+		socket.emit('machine-ready', true);
 	});
 
 	socket.on('homing-sequence', function() {

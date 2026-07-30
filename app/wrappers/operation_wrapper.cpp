@@ -57,8 +57,8 @@ private:
 // responsive while the machine re-tilts between shots.
 class SetMachineWorker : public AsyncWorker {
 public:
-    SetMachineWorker(Napi::Env env, int machinePosition, int setIndex)
-        : AsyncWorker(env, "SetMachineWorker"),
+    SetMachineWorker(const Napi::Function& callback, int machinePosition, int setIndex)
+        : AsyncWorker(callback, "SetMachineWorker"),
           machinePosition_(machinePosition), setIndex_(setIndex) {}
 
     ~SetMachineWorker() override {}
@@ -71,11 +71,13 @@ public:
         std::cout << "[operation] set_machine complete: position=" << machinePosition_
                   << ", set=" << setIndex_ << std::endl;
         g_tiltInProgress.store(false);
+        Callback().Call({Env().Null(), Boolean::New(Env(), true)});
     }
 
     void OnError(const Error& e) override {
         std::cerr << "[operation] setMachine worker error: " << e.Message() << std::endl;
         g_tiltInProgress.store(false);
+        Callback().Call({Error::New(Env(), e.Message()).Value(), Boolean::New(Env(), false)});
     }
 
 private:
@@ -181,8 +183,8 @@ Value syncSet(const CallbackInfo& info) {
 
 Value setMachine(const CallbackInfo& info) {
     Env env = info.Env();
-    if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsNumber()) {
-        TypeError::New(env, "setMachine expects two numbers").ThrowAsJavaScriptException();
+    if (info.Length() < 3 || !info[0].IsNumber() || !info[1].IsNumber() || !info[2].IsFunction()) {
+        TypeError::New(env, "setMachine expects two numbers and a callback").ThrowAsJavaScriptException();
         return env.Null();
     }
     int machine_position = info[0].As<Number>().Int32Value();
@@ -196,15 +198,16 @@ Value setMachine(const CallbackInfo& info) {
     if (!g_tiltInProgress.compare_exchange_strong(expected, true)) {
         std::cout << "[operation] setMachine ignored (position=" << machine_position
                   << ", set=" << set_index << "): a tilt is already in progress." << std::endl;
-        return env.Undefined();
+        return Boolean::New(env, false);
     }
 
     std::cout << "[operation] setMachine received (position=" << machine_position
               << ", set=" << set_index << "); running asynchronously..." << std::endl;
 
-    SetMachineWorker* worker = new SetMachineWorker(env, machine_position, set_index);
+    SetMachineWorker* worker = new SetMachineWorker(
+        info[2].As<Function>(), machine_position, set_index);
     worker->Queue();
-    return env.Undefined();
+    return Boolean::New(env, true);
 }
 
 // --- resumeMachine() ---
