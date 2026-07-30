@@ -127,6 +127,20 @@
         return 'center'; // zone 3
       }
 
+      function isTargetAllowed(machine, zoneId) {
+        if (machine === 'L' && zoneId === '1') return false;
+        if (machine === 'R' && zoneId === '5') return false;
+        return true;
+      }
+
+      function isTempoAllowed(machine, zoneId, tempo) {
+        if (tempo !== 1) return true;
+        // Tempo 1 cannot reach the two zones furthest from a side position.
+        if (machine === 'L' && (zoneId === '4' || zoneId === '5')) return false;
+        if (machine === 'R' && (zoneId === '1' || zoneId === '2')) return false;
+        return true;
+      }
+
       function machineHasSavedSlot(machineKey) {
         return [1, 2, 3, 4].some(n => !!slots[machineKey] && !!slots[machineKey][n]);
       }
@@ -548,7 +562,8 @@
         const zSide = zoneSide(s.id);
         const centerDisabled = mSel === 'C' && s.id === '3';
         const sideLocked = mSel === 'C' && !!lockedSide && !active && zSide !== 'center' && zSide !== lockedSide;
-        const disabled = centerDisabled || sideLocked;
+        const positionDisabled = !isTargetAllowed(mSel, s.id);
+        const disabled = centerDisabled || sideLocked || positionDisabled;
         const clickable = isMachineSelected && !readonly && !disabled;
         const ringStroke = active ? '#185FA5' : (clickable ? '#185FA5' : 'transparent');
         const opacity = active ? 1 : (disabled ? 0 : (clickable ? 0.75 : 0));
@@ -577,18 +592,19 @@
 
           const highlightTempo = hoveredTempo || selectedTempo;
           tempoArcs = [1, 2, 3, 4].map(tempo => {
-            const active = tempo === highlightTempo;
+            const tempoDisabled = !isTempoAllowed(mSel, tSel, tempo);
+            const active = !tempoDisabled && tempo === highlightTempo;
             const isSelected = tempo === selectedTempo;
             const arcHeight = 16 + tempo * 50;
             const ctrlY = baseMidY - arcHeight;
             const stroke = active ? '#e08a1e' : '#c2b8ab';
             const strokeWidth = active ? 2.5 : 1;
-            const opacity = active ? 0.95 : 0.4;
-            const flashClass = (!readonly && !tempoSelected) ? 'selectable-flash' : '';
-            const hitProps = readonly
+            const opacity = tempoDisabled ? 0.08 : (active ? 0.95 : 0.4);
+            const flashClass = (!tempoDisabled && !readonly && !tempoSelected) ? 'selectable-flash' : '';
+            const hitProps = readonly || tempoDisabled
               ? ''
               : `onclick="selectTempo(${tempo})" onmouseenter="onTempoHover(${tempo})" onmouseleave="onTempoHover(null)" style="cursor:pointer"`;
-            const hitArea = readonly ? '' : `<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="transparent" stroke-width="14" ${hitProps}/>`;
+            const hitArea = readonly || tempoDisabled ? '' : `<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="transparent" stroke-width="14" ${hitProps}/>`;
             const labelT = 0.35; // 0 = at machine, 0.5 = arc midpoint, 1 = at target. Lower = closer to machine.
             const oneMinusT = 1 - labelT;
             const peakX = oneMinusT * oneMinusT * startX + 2 * labelT * oneMinusT * midX + labelT * labelT * endX;
@@ -713,7 +729,9 @@
       }
 
       function selectTarget(id) {
+        if (!isTargetAllowed(selectedMachine, id)) return;
         selectedTarget = id;
+        if (!isTempoAllowed(selectedMachine, id, selectedTempo)) selectedTempo = null;
         tempoSelected = selectedTempo !== null;
         if (selectedMachine === 'C') {
           const side = zoneSide(id);
@@ -1044,10 +1062,11 @@
 
       function tempoPillsHTML() {
         const flashClass = !tempoSelected ? ' selectable-flash' : '';
-        const pills = [1, 2, 3, 4].map(n =>
-          `<button class="tempo-pill${flashClass} ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
-      onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)">${n}</button>`
-        ).join('');
+        const pills = [1, 2, 3, 4].map(n => {
+          const disabled = !isTempoAllowed(selectedMachine, selectedTarget, n);
+          return `<button class="tempo-pill${disabled ? '' : flashClass} ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
+      onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)" ${disabled ? 'disabled' : ''}>${n}</button>`;
+        }).join('');
         return `
     <div class="tempo-row">
       <span class="tempo-label">Tempo</span>
@@ -1086,6 +1105,7 @@
       }
 
       function selectTempo(n) {
+        if (!isTempoAllowed(selectedMachine, selectedTarget, n)) return;
         selectedTempo = n;
         tempoSelected = true; // Mark that tempo has been selected
         refreshTempo();
@@ -1421,6 +1441,12 @@
         }
         if (!tempoSelected) {
           console.warn('No tempo selected, cannot save slot');
+          flashLegendAttention();
+          return;
+        }
+        if (!isTargetAllowed(selectedMachine, selectedTarget) ||
+            !isTempoAllowed(selectedMachine, selectedTarget, selectedTempo)) {
+          console.warn('Invalid machine, target, or tempo combination');
           flashLegendAttention();
           return;
         }
