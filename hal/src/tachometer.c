@@ -112,6 +112,12 @@ void *tach_worker(void *arg)
 
         double inst_rpm = (1.0 / delta_s) / TACH_PULSES_PER_REV * 60.0;
 
+        if (inst_rpm > TACH_MAX_VALID_RPM) {
+            fprintf(stderr, "Tachometer: rejected implausible pulse (%.1f RPM)\n",
+                    inst_rpm);
+            continue;
+        }
+
         pthread_mutex_lock(&tach_mutex);
         tach_periods[tach_period_idx] = delta_s;
         tach_period_idx = (tach_period_idx + 1) % TACH_AVG_WINDOW;

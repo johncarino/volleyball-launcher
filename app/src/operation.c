@@ -30,10 +30,20 @@ volatile int launcher_running = 0;
 #define TILT_STALL_EPSILON_DEG 0.05
 #define TILT_STALL_ADJUSTMENTS 30
 #define SPEED_STALL_EPSILON_RPM 5
-#define SPEED_STALL_ADJUSTMENTS 30
+#define SPEED_STALL_ADJUSTMENTS 8
 #define SPEED_TOLERANCE_RPM 10
 #define SPEED_TOLERANCE_HOLD_COUNT 3
-#define SPEED_FEEDBACK_TIMEOUT_SEC 10
+#define SPEED_FEEDBACK_TIMEOUT_SEC 30
+#define SPEED_CONTROL_DELAY_US 250000
+#define SPEED_STABLE_DELTA_RPM 15
+#define SPEED_STABLE_READ_COUNT 2
+#define SPEED_PROPORTIONAL_GAIN 0.10
+#define SPEED_MIN_ADJUSTMENT_MV 5
+#define SPEED_MAX_ADJUSTMENT_MV 50
+#define MAX_LAUNCH_VOLTAGE_MV MCP4725_THROTTLE_MAX_MV
+#define RPM_MAP_BASE_MV 1380.0
+#define RPM_MAP_MV_SPAN 820.0
+#define RPM_MAP_RPM_SPAN 1300.0
 
 #define HOPPER_PULSE_STEPS 2400
 #define HOPPER_PULSE_START_DELAY_US 1000
@@ -67,6 +77,9 @@ const char *operation_feedback_fault_message(void) {
     }
     if (feedback_sensor_fault == 2) {
         return "Speed sensor is not responding. Use Manual mode and check that the speed sensor is connected.";
+    }
+    if (feedback_sensor_fault == 3) {
+        return "Speed could not stabilize automatically. Use Manual mode to set the speed.";
     }
     return NULL;
 }
@@ -246,9 +259,25 @@ static void* hopper_step_thread(void *arg) {
     return NULL;
 }
 
+static float clamp_rpm_to_voltage_limit(float rpm) {
+    const float max_rpm = (float)(((MAX_LAUNCH_VOLTAGE_MV - RPM_MAP_BASE_MV) /
+                                   RPM_MAP_MV_SPAN) * RPM_MAP_RPM_SPAN);
+    if (rpm < 0.0f) return 0.0f;
+    if (rpm > max_rpm) {
+        fprintf(stderr,
+                "Requested %.2f RPM exceeds the %.1f RPM represented by the 4.2 V limit; clamping.\n",
+                rpm, max_rpm);
+        return max_rpm;
+    }
+    return rpm;
+}
+
 static uint16_t rpm_to_mv(float rpm) {
+    rpm = clamp_rpm_to_voltage_limit(rpm);
     // Linear mapping: 0 rpm -> 1380 mV, 1300 rpm -> 2200 mV
-    double value = (820.0 / 1300.0) * rpm + 1380.0;
+    double value = (RPM_MAP_MV_SPAN / RPM_MAP_RPM_SPAN) * rpm + RPM_MAP_BASE_MV;
+
+    if (value > MAX_LAUNCH_VOLTAGE_MV) value = MAX_LAUNCH_VOLTAGE_MV;
 
     return (uint16_t)value;
 }
@@ -593,10 +622,11 @@ void tilt_signal(float angle) {
 }
 
 void speed_signal(float speed) {
-    if (speed > 1200.0) {
-        fprintf(stderr, "Invalid RPM: %.2f (must be 1200 or less). Skipping speed.\n", speed);
+    if (speed < 0.0) {
+        fprintf(stderr, "Invalid RPM: %.2f (must not be negative). Skipping speed.\n", speed);
         return;
     }
+    speed = clamp_rpm_to_voltage_limit(speed);
     uint16_t mv = 0;
     //convert speed to mv
     mv = rpm_to_mv(speed);
@@ -608,10 +638,11 @@ void speed_signal(float speed) {
 }
 
 void set_speed(float speed) {
-    if (speed > 1200.0) {
-        fprintf(stderr, "Invalid RPM: %.2f (must be 1200 or less). Skipping speed.\n", speed);
+    if (speed < 0.0) {
+        fprintf(stderr, "Invalid RPM: %.2f (must not be negative). Skipping speed.\n", speed);
         return;
     }
+    speed = clamp_rpm_to_voltage_limit(speed);
     uint16_t mv = 0;
     //convert speed to mv
     mv = rpm_to_mv(speed);
@@ -630,7 +661,7 @@ void percentage_to_mv(float percentage) {
     // voltage offset only to non-zero Manual speed requests.
     float mv = percentage == 0.0
         ? 0.0
-        : 1350.0 + (percentage / 100.0) * (4095.0 - 1350.0);
+        : 1350.0 + (percentage / 100.0) * (MAX_LAUNCH_VOLTAGE_MV - 1350.0);
     printf("setting speed to %.2f mV\n", mv);
     
     if (launcher_running) {
@@ -753,16 +784,19 @@ void tilt_with_feedback(float angle) {
 
 void speed_with_feedback(float rpm) {
     operation_clear_feedback_fault();
-    if (rpm > 1200.0) {
-        fprintf(stderr, "Invalid RPM: %.2f (must be 1200 or less). Skipping speed.\n", rpm);
+    if (rpm < 0.0) {
+        fprintf(stderr, "Invalid RPM: %.2f (must not be negative). Skipping speed.\n", rpm);
         return;
     }
+    rpm = clamp_rpm_to_voltage_limit(rpm);
     int mv = 0;
     //convert speed to mv
     mv = rpm_to_mv(rpm);
     int previous_rpm = -1;
+    int previous_adjustment_rpm = -1;
     int unchanged_adjustments = 0;
     int settled_reads = 0;
+    int stable_reads = 0;
     time_t start_time = time(NULL);
 
     while (launcher_running) {
@@ -786,13 +820,26 @@ void speed_with_feedback(float rpm) {
             settled_reads = 0;
         }
 
-        if (abs(actual_rpm - (int)rpm) > SPEED_STALL_EPSILON_RPM) {
-            if (previous_rpm >= 0 &&
-                abs(actual_rpm - previous_rpm) <= SPEED_STALL_EPSILON_RPM) {
+        if (previous_rpm >= 0 &&
+            abs(actual_rpm - previous_rpm) <= SPEED_STABLE_DELTA_RPM) {
+            stable_reads++;
+        } else {
+            stable_reads = 0;
+        }
+        previous_rpm = actual_rpm;
+
+        // Let motor inertia settle before changing the DAC again. Once stable,
+        // make a bounded proportional correction instead of a fixed 10 mV step.
+        if (stable_reads >= SPEED_STABLE_READ_COUNT &&
+            abs(actual_rpm - (int)rpm) > SPEED_TOLERANCE_RPM) {
+            if (previous_adjustment_rpm >= 0 &&
+                abs(actual_rpm - previous_adjustment_rpm) <= SPEED_STALL_EPSILON_RPM) {
                 unchanged_adjustments++;
             } else {
                 unchanged_adjustments = 0;
             }
+            previous_adjustment_rpm = actual_rpm;
+
             if (unchanged_adjustments >= SPEED_STALL_ADJUSTMENTS) {
                 fprintf(stderr, "Speed sensor did not change after %d DAC adjustments; aborting.\n",
                         SPEED_STALL_ADJUSTMENTS);
@@ -801,34 +848,33 @@ void speed_with_feedback(float rpm) {
                 launcher_running = 0;
                 break;
             }
-        } else {
-            unchanged_adjustments = 0;
-        }
-        previous_rpm = actual_rpm;
 
-        if (actual_rpm < rpm) {
-            // Increase speed
-            mv += 10; // Increment by a small value
-            if (mv > 4095) mv = 4095; // Cap at max DAC value
-        } else if (actual_rpm > rpm) {
-            // Decrease speed
-            mv -= 10; // Decrement by a small value
-            if (mv < 0) mv = 0; // Cap at min DAC value
+            int adjustment = (int)lround(((double)rpm - actual_rpm) *
+                                         SPEED_PROPORTIONAL_GAIN);
+            if (adjustment > SPEED_MAX_ADJUSTMENT_MV) adjustment = SPEED_MAX_ADJUSTMENT_MV;
+            if (adjustment < -SPEED_MAX_ADJUSTMENT_MV) adjustment = -SPEED_MAX_ADJUSTMENT_MV;
+            if (adjustment > 0 && adjustment < SPEED_MIN_ADJUSTMENT_MV) adjustment = SPEED_MIN_ADJUSTMENT_MV;
+            if (adjustment < 0 && adjustment > -SPEED_MIN_ADJUSTMENT_MV) adjustment = -SPEED_MIN_ADJUSTMENT_MV;
+
+            mv += adjustment;
+            if (mv > MAX_LAUNCH_VOLTAGE_MV) mv = MAX_LAUNCH_VOLTAGE_MV;
+            if (mv < 0) mv = 0;
+            mcp4725_set_mv(&dac1, (uint16_t)mv);
+            stable_reads = 0;
         }
 
-        mcp4725_set_mv(&dac1, (uint16_t)mv);
-        usleep(100000); // Adjust every 100ms
+        usleep(SPEED_CONTROL_DELAY_US);
 
         if (difftime(time(NULL), start_time) >= SPEED_FEEDBACK_TIMEOUT_SEC) {
             fprintf(stderr, "Speed feedback timed out after %d seconds.\n",
                     SPEED_FEEDBACK_TIMEOUT_SEC);
             mcp4725_set_raw(&dac1, 0);
             launcher_running = 0;
-            feedback_sensor_fault = 2;
+            feedback_sensor_fault = 3;
             break;
         }
     }
-    if (feedback_sensor_fault == 2) {
+    if (feedback_sensor_fault == 2 || feedback_sensor_fault == 3) {
         curr_speed = 0.0f;
         curr_rpm = 0;
     } else {

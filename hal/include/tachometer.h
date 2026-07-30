@@ -86,6 +86,9 @@
 // Number of consecutive pulse periods to include in the rolling average.
 #define TACH_AVG_WINDOW 5
 
+// Reject electrical-noise pulses that imply a physically impossible speed.
+#define TACH_MAX_VALID_RPM 6000.0
+
 // ---------------------------------------------------------------------------
 // External state – owned by tachometer.c, exposed for callers that need
 // direct access (e.g. joining the thread from a signal handler).

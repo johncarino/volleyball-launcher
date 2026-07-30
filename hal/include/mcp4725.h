@@ -33,7 +33,7 @@
 #define MCP4725_VDD_MV 5000
 
 // Maximum throttle voltage the motor controller expects (mV)
-#define MCP4725_THROTTLE_MAX_MV 4300
+#define MCP4725_THROTTLE_MAX_MV 4200
 
 // Power-down mode selections (bits [2:1] of the command byte)
 typedef enum {
@@ -72,7 +72,7 @@ int mcp4725_set_mv(mcp4725_t *dac, uint16_t millivolts);
 
 // Set the throttle as a percentage (0–100).
 // 0 %  → 0 V output
-// 100% → MCP4725_THROTTLE_MAX_MV (4.3 V)
+// 100% → MCP4725_THROTTLE_MAX_MV (4.2 V)
 // Returns 0 on success, -1 on failure.
 int mcp4725_set_throttle(mcp4725_t *dac, int percent);
 

@@ -131,6 +131,9 @@ int mcp4725_set_mv(mcp4725_t *dac, uint16_t millivolts)
         fprintf(stderr, "MCP4725 HAL: not initialized\n");
         return -1;
     }
+    if (millivolts > MCP4725_THROTTLE_MAX_MV) {
+        millivolts = MCP4725_THROTTLE_MAX_MV;
+    }
     return fast_write(dac, mv_to_raw(millivolts), MCP4725_PD_NORMAL);
 }
 
