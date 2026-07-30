@@ -1,5 +1,6 @@
 PRIORITY
 - Fill in alignment modals
+- Add QR code button
 - Machine position appears after selecting set in center
 - Change court dimensions to reflect presets
 
