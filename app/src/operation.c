@@ -40,6 +40,7 @@ volatile int launcher_running = 0;
 #define SPEED_PROPORTIONAL_GAIN 0.10
 #define SPEED_MIN_ADJUSTMENT_MV 5
 #define SPEED_MAX_ADJUSTMENT_MV 50
+#define SPEED_CACHE_RPM_EPSILON 0.5
 #define MAX_LAUNCH_VOLTAGE_MV MCP4725_THROTTLE_MAX_MV
 #define RPM_MAP_BASE_MV 1214.83
 #define RPM_MAP_MV_PER_RPM 0.55558
@@ -65,6 +66,9 @@ static pthread_t hopper_thread;
 static volatile int hopper_thread_created = 0;
 static unsigned int hopper_pulse_count = 0;
 static volatile int feedback_sensor_fault = 0;
+static int speed_cache_valid = 0;
+static float speed_cache_rpm = 0.0f;
+static float speed_cache_mv = 0.0f;
 
 void operation_clear_feedback_fault(void) {
     feedback_sensor_fault = 0;
@@ -468,6 +472,7 @@ void operation_init() {
     //curr_tilt_angle = INITIAL_TILT_ANGLE;
     curr_speed = 0;
     curr_rpm = 0;
+    speed_cache_valid = 0;
 
     fprintf(stderr, "[operation] initializing tachometer\n");
     if (tach_init() != 0) {
@@ -534,6 +539,7 @@ void operation_cleanup() {
     bts_cleanup();
 
     operation_initialized = 0;
+    speed_cache_valid = 0;
 }
 
 void homing_sequence() {
@@ -585,6 +591,9 @@ void tilt_signal(float angle) {
 
     if (delta_angle == 0) {
         printf("No Change in tilt angle\n");
+        if (launcher_running) {
+            mcp4725_set_mv(&dac1, (uint16_t)curr_speed);
+        }
         return;
     }
 
@@ -626,6 +635,7 @@ void speed_signal(float speed) {
         return;
     }
     speed = clamp_rpm_to_voltage_limit(speed);
+    speed_cache_valid = 0;
     uint16_t mv = 0;
     //convert speed to mv
     mv = rpm_to_mv(speed);
@@ -655,6 +665,7 @@ void percentage_to_mv(float percentage) {
         fprintf(stderr, "Invalid percentage: %.2f (must be between 0 and 100). Skipping speed.\n", percentage);
         return;
     }
+    speed_cache_valid = 0;
 
     // Zero is an explicit motor-off command. Apply the minimum-running
     // voltage offset only to non-zero Manual speed requests.
@@ -687,10 +698,22 @@ void set_machine(int machine_position, int set_index) {
     printf("Tilt angle: %f, Speed (RPM): %f\n",
             spec->tilt_angle, spec->rpm_output);
 
+    const float target_rpm = clamp_rpm_to_voltage_limit(spec->rpm_output);
+    const int reuse_speed = speed_cache_valid &&
+        fabsf(target_rpm - speed_cache_rpm) <= SPEED_CACHE_RPM_EPSILON;
+
     // Configure the launch speed target first so that once tilt_signal()
     // reaches the target angle it resumes the flywheel (if already running)
     // at the correct value for this set rather than the previous one.
-    set_speed(spec->rpm_output);
+    if (reuse_speed) {
+        curr_speed = speed_cache_mv;
+        curr_rpm = (int)target_rpm;
+        printf("Reusing %.2f mV for consecutive %.2f RPM launch.\n",
+               speed_cache_mv, target_rpm);
+    } else {
+        speed_cache_valid = 0;
+        set_speed(target_rpm);
+    }
 
     // Blocking feedback-controlled tilt move to this set's angle.
     tilt_signal(spec->tilt_angle);
@@ -698,7 +721,9 @@ void set_machine(int machine_position, int set_index) {
 
     // The launch modes start the flywheel before applying a set. Refine the
     // configured speed using tachometer feedback and return only once settled.
-    speed_with_feedback(spec->rpm_output);
+    if (!reuse_speed) {
+        speed_with_feedback(target_rpm);
+    }
 }
 
 void tilt_with_feedback(float angle) {
@@ -796,6 +821,7 @@ void speed_with_feedback(float rpm) {
     int unchanged_adjustments = 0;
     int settled_reads = 0;
     int stable_reads = 0;
+    int feedback_completed = 0;
     time_t start_time = time(NULL);
 
     while (launcher_running) {
@@ -813,6 +839,7 @@ void speed_with_feedback(float rpm) {
             settled_reads++;
             if (settled_reads >= SPEED_TOLERANCE_HOLD_COUNT) {
                 fprintf(stderr, "Target speed reached within tolerance.\n");
+                feedback_completed = 1;
                 break;
             }
         } else {
@@ -879,6 +906,12 @@ void speed_with_feedback(float rpm) {
     } else {
         curr_speed = (float)mv;
         curr_rpm = rpm;
+        if (feedback_completed) {
+            speed_cache_valid = 1;
+            speed_cache_rpm = rpm;
+            speed_cache_mv = (float)mv;
+            printf("Cached %.2f mV for %.2f RPM.\n", speed_cache_mv, speed_cache_rpm);
+        }
     }
 }
 
