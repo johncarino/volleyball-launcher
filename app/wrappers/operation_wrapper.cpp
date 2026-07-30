@@ -222,10 +222,12 @@ Value pauseMachine(const CallbackInfo& info) {
 }
 
 // --- hopperStart() ---
+// Returns true if the hopper actually started, false if it was refused (e.g.
+// the launcher isn't running -- see hopper_start()'s gating in operation.c).
 Value hopperStart(const CallbackInfo& info) {
     Env env = info.Env();
-    hopper_start();
-    return env.Undefined();
+    int rc = hopper_start();
+    return Boolean::New(env, rc == 0);
 }
 
 // --- hopperStop() ---
@@ -236,10 +238,11 @@ Value hopperStop(const CallbackInfo& info) {
 }
 
 // --- hopperPulse() ---
+// Returns true if the pulse actually ran, false if it was refused.
 Value hopperPulse(const CallbackInfo& info) {
     Env env = info.Env();
-    hopper_pulse();
-    return env.Undefined();
+    int rc = hopper_pulse();
+    return Boolean::New(env, rc == 0);
 }
 
 // --- getTachReading() ---

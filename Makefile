@@ -16,6 +16,15 @@ SERVER    := $(ROOT)/server
 # Optional Bazel flags (left overridable for advanced use).
 BAZEL_CONFIG ?=
 
+# Palm detector SSD anchor min_scale (smaller = detects smaller/farther-away
+# hands; stock MediaPipe default is 0.1484375). Applied to the external
+# MediaPipe checkout by mediapipe_files/patch_palm_detection.sh before every
+# build. Override on the command line, e.g. `make m2demo PALM_MIN_SCALE=0.08`.
+PALM_MIN_SCALE ?= 0.05
+# Optional: also loosen the palm detector's confidence threshold (stock 0.5).
+# Leave empty to keep the stock threshold.
+PALM_MIN_SCORE_THRESH ?=
+
 # Where Bazel drops the recogniser.
 M2DEMO_BIN := $(MEDIAPIPE)/bazel-bin/mediapipe/mediapipe_files/m2demo
 
@@ -38,6 +47,8 @@ server:
 m2demo:
 	@echo ">> Syncing canonical mediapipe_files into the Bazel tree..."
 	cp $(ROOT)/mediapipe_files/* $(MEDIAPIPE)/mediapipe/mediapipe_files/
+	@echo ">> Patching palm detector min_scale=$(PALM_MIN_SCALE) for farther-away hand detection..."
+	$(ROOT)/mediapipe_files/patch_palm_detection.sh "$(MEDIAPIPE)" "$(PALM_MIN_SCALE)" "$(PALM_MIN_SCORE_THRESH)"
 	@echo ">> Building m2demo (Bazel)..."
 	cd $(MEDIAPIPE) && bazel build -c opt $(BAZEL_CONFIG) \
 		--define MEDIAPIPE_DISABLE_GPU=1 \

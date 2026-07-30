@@ -82,6 +82,7 @@
       const repeatIcons = ['ti-repeat', 'ti-repeat'];
 
       const machineNames = { L: 'Left', C: 'Center', R: 'Right' };
+      const MACHINE_INDEX = { L: 0, C: 1, R: 2 };
       const targetNames = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4', T5: 'Zone 5' };
 
       const alignImages = { L: 'images/left.png', C: 'images/front.png', R: 'images/right.png' };
@@ -139,18 +140,23 @@
         machineSocket.on('disconnect', () => { setConnStatus(false); });
 
         // ---- Gesture recogniser ----
-        machineSocket.on('gesture-update', (data) => { renderGesture(data); handleLaunchStartGesture(data); });
+        machineSocket.on('gesture-update', (data) => { handleLaunchGestureFrame(data); });
         machineSocket.on('gesture-frame', (data) => { renderPreviewFrame(data); });
-        machineSocket.on('gesture-set', (data) => { onGestureSet(data); });
-        machineSocket.on('gesture-control-state', (state) => { applyFeasibility(state && state.feasible); });
-        machineSocket.on('gesture-set-hand-state', (data) => { applySetHand(data && data.hand); });
         machineSocket.on('state-reply', (state) => { setGestureRunning(state === 'RUNNING'); });
-        machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); renderGesture(null); });
-        machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); });
+        machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); setLaunchPreviewVisible(false); });
+        machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); setLaunchPreviewVisible(false); });
 
         // ---- Set-slot save confirmation from the backend ----
         machineSocket.on('set-save-state', (state) => { onSetSaveState(state); });
         machineSocket.on('machine-error', (message) => { onMachineError(message); });
+        machineSocket.on('homing-complete', () => {
+          resetManualVisuals();
+          setHomingButtonState(false, 'Homing complete');
+        });
+        machineSocket.on('homing-error', (message) => {
+          setHomingButtonState(false, 'Home machine');
+          onMachineError(message);
+        });
 
         // ---- Court settings: existing saved sets recalculated after a calibration change ----
         machineSocket.on('sets-recalculated', (data) => { console.log('[calibration] Saved sets recalculated:', data); });
@@ -198,8 +204,81 @@
         emitMachine('hopper-' + action);
       }
 
+      function setHomingButtonState(running, label) {
+        const btn = document.getElementById('manual-home-btn');
+        if (!btn) return;
+        btn.disabled = running;
+        btn.innerHTML = `<i class="ti ti-home" aria-hidden="true"></i> ${label}`;
+        if (!running && label === 'Homing complete') {
+          setTimeout(() => setHomingButtonState(false, 'Home machine'), 1800);
+        }
+      }
+
+      function runHomingSequence() {
+        setHomingButtonState(true, 'Homing...');
+        emitMachine('homing-sequence');
+      }
+
+      function resetManualVisuals() {
+        const angle = document.getElementById('dev-ang-range');
+        const angleLabel = document.getElementById('dev-ang-val');
+        const speed = document.getElementById('dev-spd-range');
+        const speedLabel = document.getElementById('dev-spd-val');
+        const launch = document.getElementById('launch-main-btn');
+        const hopper = document.getElementById('hopper-toggle-btn');
+
+        if (angle) angle.value = '8';
+        if (angleLabel) angleLabel.textContent = '8°';
+        if (speed) speed.value = '0';
+        if (speedLabel) speedLabel.textContent = '0 %';
+        if (launch) {
+          launch.classList.remove('stop');
+          launch.classList.add('start');
+          launch.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+        }
+        hopperOn = false;
+        if (hopper) {
+          hopper.textContent = 'Hopper Off';
+          hopper.classList.remove('active');
+        }
+        clearInterval(window._telem);
+        renderTelemetry({ rpm: 0 });
+      }
+
+      // The hopper feeds balls into the flywheel, so it must never be started/
+      // pulsed while the Manual screen's launcher ("Start") is stopped -- the
+      // Launch button there is the same #launch-main-btn used by the other run
+      // modes, and only carries the 'stop' class while the flywheel is actually
+      // spinning (see toggleLaunch()).
+      function isManualMachineRunning() {
+        const btn = document.getElementById('launch-main-btn');
+        return !!btn && btn.classList.contains('stop');
+      }
+
+      // Briefly flash a hopper button red + shake it (reusing the same
+      // op-shake animation as the Launch button's "needs-set" hint) and swap in
+      // a warning label, instead of silently ignoring the click.
+      function flashHopperBlocked(btn) {
+        if (!btn) return;
+        const original = btn.dataset.origLabel || btn.textContent;
+        btn.dataset.origLabel = original;
+        btn.classList.remove('blocked');
+        void btn.offsetWidth; // restart animation on repeat clicks
+        btn.classList.add('blocked');
+        btn.textContent = 'Start machine first';
+        clearTimeout(btn._hopperBlockedTimer);
+        btn._hopperBlockedTimer = setTimeout(() => {
+          btn.classList.remove('blocked');
+          btn.textContent = btn.dataset.origLabel;
+        }, 1500);
+      }
+
       function pulseHopper(btn) {
         if (btn.disabled) return; // do nothing if already running
+        if (!isManualMachineRunning()) {
+          flashHopperBlocked(btn);
+          return;
+        }
         btn.disabled = true;
         btn.classList.add('active');
         onHopperControl('pulse');
@@ -211,8 +290,12 @@
       }
 
       function toggleHopper() {
-        hopperOn = !hopperOn;
         const btn = document.getElementById('hopper-toggle-btn');
+        if (!hopperOn && !isManualMachineRunning()) {
+          flashHopperBlocked(btn);
+          return;
+        }
+        hopperOn = !hopperOn;
         if (btn) {
           btn.textContent = hopperOn ? 'Hopper On' : 'Hopper Off';
           btn.classList.toggle('active', hopperOn);
@@ -220,83 +303,89 @@
         onHopperControl(hopperOn ? 'on' : 'off');
       }
 
-      // ---- Gesture recogniser controls -------------------------------------------
-      const FINGER_KEYS = ['thumb', 'index', 'middle', 'ring', 'pinky'];
-
-      function startGesture() {
-        emitMachine('start');
-      }
-
-      function stopGesture() {
-        emitMachine('stop');
-      }
-
-      function setGestureRunning(running) {
-        window._recognizerRunning = running;
-        const pill = document.getElementById('gesture-state-pill');
-        const startBtn = document.getElementById('gestureStartBtn');
-        const stopBtn = document.getElementById('gestureStopBtn');
-        if (pill) pill.textContent = running ? 'Running' : 'Idle';
-        if (startBtn) startBtn.disabled = running;
-        if (stopBtn) stopBtn.disabled = !running;
-        const previewSection = document.getElementById('gesture-preview-section');
-        if (previewSection) previewSection.style.display = running ? '' : 'none';
-        if (!running) {
-          const img = document.getElementById('gesture-preview');
-          if (img) img.removeAttribute('src');
-        }
-      }
-
-      // ---- Start the run sequence with an open-palm (5 finger) gesture -----------
-      // Armed once the user enters a run screen (Single Shot or Sequence). Requires
-      // the OPEN_PALM gesture held briefly to avoid firing on a momentary/false
-      // detection.
-      const LAUNCH_GESTURE_HOLD_MS = 600;
+      // ---- Gesture recogniser: open-hand start/stop for Single Shot/Sequence ----
+      // No gesture->set mapping: once armed (see armLaunchGesture) the camera
+      // watches for an open RIGHT hand to start the run and an open LEFT hand to
+      // stop it (Sequence mode finishes the current shot first, see
+      // requestSequenceStop).
+      const LAUNCH_GESTURE_HOLD_MS = 600;  // hold an open hand this long to confirm
+      const LAUNCH_BUFFER_SECONDS = 5;     // countdown before the camera turns on
 
       // How long the "Select a set first" warning stays on the Start button.
       const SELECT_SET_HINT_MS = 500;
 
+      function setGestureRunning(running) {
+        window._recognizerRunning = running;
+      }
+
+      function resetLaunchGestureHolds() {
+        window._launchHoldRight = { name: null, since: 0, fired: false };
+        window._launchHoldLeft = { name: null, since: 0, fired: false };
+      }
+      resetLaunchGestureHolds();
+
+      // Single Shot / Sequence: Confirm arms gesture control, but the camera
+      // doesn't turn on immediately — a short buffer (with a visible countdown
+      // on the button) gives the user time to get in frame first.
       function armLaunchGesture() {
         window._launchGestureArmed = true;
-        window._launchGestureHoldName = null;
-        window._launchGestureHoldSince = 0;
-        window._launchGestureFiredName = null;
+        window._launchGestureCameraReady = false;
         window._launchGestureAutoStarted = false;
-        if (!window._recognizerRunning) {
-          window._launchGestureAutoStarted = true;
-          emitMachine('start');
-        }
+        window._stopRequested = false;
+        resetLaunchGestureHolds();
+
+        const btn = document.getElementById('launch-main-btn');
+        if (btn) btn.disabled = true;
+        let remaining = LAUNCH_BUFFER_SECONDS;
+        const showCountdown = () => {
+          if (btn) btn.innerHTML = `<i class="ti ti-hourglass" aria-hidden="true"></i> Starting camera in ${remaining}s`;
+        };
+        showCountdown();
+        clearInterval(window._launchBufferTimer);
+        window._launchBufferTimer = setInterval(() => {
+          remaining--;
+          if (remaining > 0) { showCountdown(); return; }
+
+          clearInterval(window._launchBufferTimer);
+          window._launchBufferTimer = null;
+          if (!window._recognizerRunning) {
+            window._launchGestureAutoStarted = true;
+            emitMachine('start');
+          }
+          window._launchGestureCameraReady = true;
+          setLaunchPreviewVisible(true);
+          if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('confirm');
+            btn.classList.add('start');
+            btn.setAttribute('onclick', 'toggleLaunch(this)');
+            btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+          }
+        }, 1000);
       }
 
       function disarmLaunchGesture() {
         window._launchGestureArmed = false;
+        window._launchGestureCameraReady = false;
+        window._stopRequested = false;
+        clearInterval(window._launchBufferTimer);
+        window._launchBufferTimer = null;
+        setLaunchPreviewVisible(false);
         if (window._launchGestureAutoStarted) {
           emitMachine('stop');
           window._launchGestureAutoStarted = false;
         }
       }
 
-      function handleLaunchStartGesture(data) {
-        if (!window._launchGestureArmed) return;
-
-        const name = (data && data.name) || 'NONE';
-        const now = Date.now();
-
-        if (name !== window._launchGestureHoldName) {
-          window._launchGestureHoldName = name;
-          window._launchGestureHoldSince = now;
-          window._launchGestureFiredName = null;
+      // Small camera preview shown once the camera is actually looking for
+      // hands (after the countdown buffer completes); hidden while idle/armed.
+      function setLaunchPreviewVisible(visible) {
+        const section = document.getElementById('gesture-preview-section');
+        if (section) section.style.display = visible ? '' : 'none';
+        if (!visible) {
+          const img = document.getElementById('gesture-preview');
+          if (img) img.removeAttribute('src');
         }
-
-        if (name !== 'OPEN_PALM') return;
-        if (now - window._launchGestureHoldSince < LAUNCH_GESTURE_HOLD_MS) return;
-        if (window._launchGestureFiredName === 'OPEN_PALM') return;
-
-        window._launchGestureFiredName = 'OPEN_PALM';
-        const btn = document.getElementById('launch-main-btn');
-        if (!btn || btn.classList.contains('stop')) return;
-        console.log('[gesture] OPEN_PALM held — starting the run sequence');
-        toggleLaunch(btn);
       }
 
       let _previewUrl = null;
@@ -317,48 +406,32 @@
         _previewUrl = url;
       }
 
-      let _setHand = 'right';
-      function toggleSetHand() {
-        _setHand = (_setHand === 'right') ? 'left' : 'right';
-        emitMachine('gesture-set-hand', { hand: _setHand });
-      }
+      // data is { left, right }, one gesture summary per hand (see
+      // gesture_server.js). Right hand open = start; left hand open = stop.
+      function handleLaunchGestureFrame(data) {
+        if (!window._launchGestureArmed || !window._launchGestureCameraReady) return;
+        const now = Date.now();
 
-      function applySetHand(hand) {
-        _setHand = (hand === 'left') ? 'left' : 'right';
-        const btn = document.getElementById('set-hand-toggle');
-        if (btn) btn.textContent = (_setHand === 'right') ? 'Right' : 'Left';
-        const hint = document.getElementById('gesture-control-hint');
-        if (hint) {
-          const other = (_setHand === 'right') ? 'Left' : 'Right';
-          hint.innerHTML = other + ' hand: thumbs up = start feed &middot; hold open palm = stop';
-        }
-      }
-
-      function renderGesture(data) {
-        const nameEl = document.getElementById('gesture-name');
-        if (!nameEl) return;
-        const countEl = document.getElementById('gesture-count');
-
-        if (!data) {
-          nameEl.textContent = 'NONE';
-          if (countEl) countEl.textContent = '0 fingers';
-          FINGER_KEYS.forEach((k) => setFingerChip(k, false));
-          return;
+        const rightName = (data && data.right && data.right.name) || 'NONE';
+        const rst = window._launchHoldRight;
+        if (rightName !== rst.name) { rst.name = rightName; rst.since = now; rst.fired = false; }
+        if (rightName === 'OPEN_PALM' && !rst.fired && now - rst.since >= LAUNCH_GESTURE_HOLD_MS) {
+          rst.fired = true;
+          const btn = document.getElementById('launch-main-btn');
+          if (btn && !btn.disabled && !btn.classList.contains('stop')) {
+            console.log('[gesture] open right hand held — starting the run');
+            toggleLaunch(btn);
+          }
         }
 
-        nameEl.textContent = data.name || 'UNKNOWN';
-        if (countEl) countEl.textContent = (data.count != null ? data.count : 0) + ' fingers';
-        const fingers = data.fingers || {};
-        FINGER_KEYS.forEach((k) => setFingerChip(k, !!fingers[k]));
-      }
-
-      function setFingerChip(key, up) {
-        const chip = document.getElementById('finger-' + key);
-        if (!chip) return;
-        chip.classList.toggle('up', up);
-        chip.classList.toggle('down', !up);
-        const state = chip.querySelector('.finger-state');
-        if (state) state.textContent = up ? 'UP' : 'down';
+        const leftName = (data && data.left && data.left.name) || 'NONE';
+        const lst = window._launchHoldLeft;
+        if (leftName !== lst.name) { lst.name = leftName; lst.since = now; lst.fired = false; }
+        if (leftName === 'OPEN_PALM' && !lst.fired && now - lst.since >= LAUNCH_GESTURE_HOLD_MS) {
+          lst.fired = true;
+          console.log('[gesture] open left hand held — stopping after the current shot');
+          requestSequenceStop();
+        }
       }
 
       function showGestureError(message) {
@@ -369,87 +442,6 @@
         box.style.display = 'block';
         clearTimeout(window._gestureErrTimer);
         window._gestureErrTimer = setTimeout(() => { box.style.display = 'none'; }, 5000);
-      }
-
-      // ---- Gesture-control mode --------------------------------------------------
-      const MACHINE_INDEX = { L: 0, C: 1, R: 2 };
-      const MACHINE_LABEL = { L: 'Left', C: 'Center', R: 'Right' };
-      let gestureControlOn = false;
-
-      const GESTURE_LEGEND = [
-        { set: '1', gesture: 'POINT', hint: 'Index up' },
-        { set: '2', gesture: 'PEACE', hint: 'Index + middle' },
-        { set: '3/Shoot', gesture: 'GUN', hint: 'Thumb + index' },
-        { set: '4', gesture: 'FOUR', hint: 'Four fingers' },
-        { set: '5', gesture: 'OPEN_PALM', hint: 'Open hand' },
-        { set: 'Red', gesture: 'FIST', hint: 'Closed fist' },
-        { set: 'Slide', gesture: 'CALL_ME', hint: 'Shaka' }
-      ];
-
-      function setSlug(s) { return s.replace(/[^a-z0-9]+/gi, '').toLowerCase(); }
-
-      function gestureLegendHTML() {
-        return GESTURE_LEGEND.map(e =>
-          `<div class="set-legend-item" id="setleg-${setSlug(e.set)}" data-set="${e.set}">
-            <span class="set-legend-name">${e.set}</span>
-            <span class="set-legend-gesture">${e.gesture}</span>
-            <span class="set-legend-hint">${e.hint}</span>
-          </div>`).join('');
-      }
-
-      function currentMachineIndex() {
-        const key = selectedMachine || 'C';
-        return MACHINE_INDEX[key] != null ? MACHINE_INDEX[key] : 1;
-      }
-
-      function toggleGestureControl() {
-        gestureControlOn = !gestureControlOn;
-        const btn = document.getElementById('gesture-control-toggle');
-        if (btn) { btn.classList.toggle('active', gestureControlOn); btn.textContent = gestureControlOn ? 'On' : 'Off'; }
-        const mpLabel = document.getElementById('gesture-mp-label');
-        if (mpLabel) mpLabel.textContent = MACHINE_LABEL[selectedMachine || 'C'] || 'Center';
-        if (!gestureControlOn) highlightRecognisedSet(null);
-        emitMachine('gesture-control-enable', {
-          enabled: gestureControlOn,
-          machinePosition: currentMachineIndex()
-        });
-      }
-
-      function applyFeasibility(feasibleSets) {
-        const allowed = feasibleSets || [];
-        GESTURE_LEGEND.forEach(e => {
-          const el = document.getElementById('setleg-' + setSlug(e.set));
-          if (el) el.classList.toggle('infeasible', allowed.indexOf(e.set) === -1);
-        });
-      }
-
-      function highlightRecognisedSet(set) {
-        document.querySelectorAll('.set-legend-item.recognised')
-          .forEach(el => el.classList.remove('recognised'));
-        if (!set) return;
-        const el = document.getElementById('setleg-' + setSlug(set));
-        if (el) {
-          el.classList.add('recognised');
-          clearTimeout(window._setHighlightTimer);
-          window._setHighlightTimer = setTimeout(() => el.classList.remove('recognised'), 2500);
-        }
-      }
-
-      function onGestureSet(data) {
-        if (!data) return;
-        const label = document.getElementById('gesture-set-label');
-        if (label) label.textContent = data.set + (data.feasible ? '' : ' (unavailable)');
-        highlightRecognisedSet(data.feasible ? data.set : null);
-      }
-
-      function syncGestureControlUI() {
-        const btn = document.getElementById('gesture-control-toggle');
-        if (btn) { btn.classList.toggle('active', gestureControlOn); btn.textContent = gestureControlOn ? 'On' : 'Off'; }
-        const mpLabel = document.getElementById('gesture-mp-label');
-        if (mpLabel) mpLabel.textContent = MACHINE_LABEL[selectedMachine || 'C'] || 'Center';
-        if (gestureControlOn) {
-          emitMachine('gesture-control-enable', { enabled: true, machinePosition: currentMachineIndex() });
-        }
       }
 
       function powerOff() {
@@ -554,7 +546,7 @@
           const baseMidY = (startY + endY) / 2;
 
           const highlightTempo = hoveredTempo || selectedTempo;
-          tempoArcs = [1, 2, 3, 4, 5].map(tempo => {
+          tempoArcs = [1, 2, 3, 4].map(tempo => {
             const active = tempo === highlightTempo;
             const isSelected = tempo === selectedTempo;
             const arcHeight = 16 + tempo * 50;
@@ -829,14 +821,14 @@
               <div class="vert-sliders">
                 <div class="vert-slider-col">
                   <span class="vert-slider-label">Angle</span>
-                  <span class="vert-slider-val" id="dev-ang-val">5°</span>
+                  <span class="vert-slider-val" id="dev-ang-val">8°</span>
                   <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
                   <div class="vert-slider-track">
-                    <input type="range" id="dev-ang-range" class="vertical" min="5" max="85" value="5" step="1"
+                    <input type="range" id="dev-ang-range" class="vertical" min="8" max="85" value="8" step="1"
                       oninput="onAdvancedAngleInput(this.value)" onchange="onAdvancedAngleChange(this.value)">
                   </div>
                   <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
-                  <span style="font-size:11px;color:var(--text-tertiary)">5° – 85°</span>
+                  <span style="font-size:11px;color:var(--text-tertiary)">8° – 85°</span>
                 </div>
                 <div class="vert-slider-col">
                   <span class="vert-slider-label">Speed</span>
@@ -868,72 +860,10 @@
           <div class="section">
             <div class="section-label">Launch</div>
             <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+            <div class="manual-utility-actions">
+              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and hopper to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
+            </div>
           </div>`,
-
-        gesture: () => `
-            <div class="section" style="margin-top:8px">
-              <div class="section-label">Recogniser</div>
-              <div class="card">
-                <div class="field-row">
-                  <span class="field-label"><i class="ti ti-hand-stop" aria-hidden="true"></i> Status</span>
-                  <span class="field-value" id="gesture-state-pill">Idle</span>
-                </div>
-              </div>
-              <div class="gesture-buttons">
-                <button class="op-btn start" id="gestureStartBtn" onclick="startGesture()"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
-                <button class="op-btn stop" id="gestureStopBtn" onclick="stopGesture()" disabled><i class="ti ti-player-stop" aria-hidden="true"></i> Stop</button>
-              </div>
-            </div>
-            <div class="section" id="gesture-preview-section" style="display:none">
-              <div class="section-label">Live preview</div>
-              <div class="card" style="padding:0;overflow:hidden">
-                <img id="gesture-preview" alt="Live camera preview"
-                    style="display:block;width:100%;height:auto;background:#000" />
-              </div>
-            </div>
-            <div class="section">
-              <div class="section-label">Live gesture</div>
-              <div class="card gesture-readout">
-                <div class="gesture-name" id="gesture-name">NONE</div>
-                <div class="gesture-count" id="gesture-count">0 fingers</div>
-                <div class="finger-chips">
-                  <div class="finger-chip down" id="finger-thumb"><span>Thumb</span><span class="finger-state">down</span></div>
-                  <div class="finger-chip down" id="finger-index"><span>Index</span><span class="finger-state">down</span></div>
-                  <div class="finger-chip down" id="finger-middle"><span>Middle</span><span class="finger-state">down</span></div>
-                  <div class="finger-chip down" id="finger-ring"><span>Ring</span><span class="finger-state">down</span></div>
-                  <div class="finger-chip down" id="finger-pinky"><span>Pinky</span><span class="finger-state">down</span></div>
-                </div>
-              </div>
-            </div>
-            <div class="section">
-              <div class="section-label">Gesture control</div>
-              <div class="card">
-                <div class="field-row">
-                  <span class="field-label"><i class="ti ti-hand-finger" aria-hidden="true"></i> Control mode</span>
-                  <button class="gc-toggle-btn" id="gesture-control-toggle" onclick="toggleGestureControl()">Off</button>
-                </div>
-                <div class="field-row">
-                  <span class="field-label"><i class="ti ti-hand-three-fingers" aria-hidden="true"></i> Set-sign hand</span>
-                  <button class="gc-toggle-btn" id="set-hand-toggle" onclick="toggleSetHand()">Right</button>
-                </div>
-                <div class="field-row">
-                  <span class="field-label">Machine position</span>
-                  <span class="field-value" id="gesture-mp-label">-</span>
-                </div>
-                <div class="field-row">
-                  <span class="field-label">Recognised set</span>
-                  <span class="field-value" id="gesture-set-label">-</span>
-                </div>
-                <div class="gesture-control-hint" id="gesture-control-hint">Left hand: thumbs up = start feed &middot; hold open palm = stop</div>
-              </div>
-            </div>
-            <div class="section">
-              <div class="section-label">Sets &middot; grey = not reachable here</div>
-              <div class="set-legend" id="set-legend">${gestureLegendHTML()}</div>
-            </div>
-            <div class="section" id="gesture-error-box" style="display:none">
-              <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
-            </div>`,
 
         launch: () => `
           <div class="section" style="margin-top:8px">
@@ -955,6 +885,16 @@
           <div class="section">
             <div class="section-label">Launch</div>
             <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
+            <div class="gesture-hint">Confirm arms the camera: open your right hand to start, open your left hand to stop.</div>
+          </div>
+          <div class="section" id="gesture-preview-section" style="display:none">
+            <div class="section-label">Camera</div>
+            <div class="gesture-preview-wrap">
+              <img id="gesture-preview" alt="Camera view" />
+            </div>
+          </div>
+          <div class="section" id="gesture-error-box" style="display:none">
+            <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
           </div>`,
 
         single_shot: () => `
@@ -974,6 +914,16 @@
           <div class="section">
             <div class="section-label">Launch</div>
             <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
+            <div class="gesture-hint">Confirm arms the camera: open your right hand to start, open your left hand to stop.</div>
+          </div>
+          <div class="section" id="gesture-preview-section" style="display:none">
+            <div class="section-label">Camera</div>
+            <div class="gesture-preview-wrap">
+              <img id="gesture-preview" alt="Camera view" />
+            </div>
+          </div>
+          <div class="section" id="gesture-error-box" style="display:none">
+            <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
           </div>`
       };
 
@@ -1063,7 +1013,7 @@
 
       function tempoPillsHTML() {
         const flashClass = !tempoSelected ? ' selectable-flash' : '';
-        const pills = [1, 2, 3, 4, 5].map(n =>
+        const pills = [1, 2, 3, 4].map(n =>
           `<button class="tempo-pill${flashClass} ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
       onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)">${n}</button>`
         ).join('');
@@ -1077,7 +1027,7 @@
       function onTempoHover(n) {
         hoveredTempo = n;
         const highlightTempo = hoveredTempo || selectedTempo;
-        for (let tempo = 1; tempo <= 5; tempo++) {
+        for (let tempo = 1; tempo <= 4; tempo++) {
           const line = document.getElementById('tempo-line-' + tempo);
           if (!line) continue;
           const active = tempo === highlightTempo;
@@ -1145,6 +1095,7 @@
       let runIndex = 0;
       let currentRunSlot = null; // { machine, n } currently firing, for the "now playing" highlight
       const SET_RUN_DURATION_MS = 6000; // assumed dwell time per set before advancing
+      const SINGLE_SHOT_PULSE_INTERVAL_MS = 4000;
 
       function slotsHTML(readonly = false, variant = 'sequence') {
         const machineKey = selectedMachine || 'L';
@@ -1203,8 +1154,21 @@
         const machineKey = selectedMachine || 'L';
         if (!slots[machineKey][n]) return;
         singleShotSelected[machineKey] = (singleShotSelected[machineKey] === n) ? null : n;
-        activateSlot(machineKey, n);
+        if (singleShotSelected[machineKey] !== null) {
+          activateSlot(machineKey, n);
+          applySingleShotSet(machineKey, n);
+        }
         refreshSlots();
+      }
+
+      function applySingleShotSet(machine, n) {
+        if (!n || !slots[machine] || !slots[machine][n]) return;
+        const machineIndex = MACHINE_INDEX[machine];
+        if (machineIndex === undefined) {
+          console.error('Unknown machine key, cannot apply Single Shot set:', machine);
+          return;
+        }
+        emitMachine('setMachine', { machinePosition: machineIndex, setIndex: n - 1 });
       }
 
       // Actually apply the selected set slot to the machine and start feeding
@@ -1261,7 +1225,31 @@
         }
         runIndex = 0;
         isRunning = true;
+        if (window._activeMode === 'single_shot') {
+          startSingleShotPulsing();
+          return;
+        }
         runNextInQueue();
+      }
+
+      function startSingleShotPulsing() {
+        const { machine, n } = runQueue[0];
+
+        currentRunSlot = { machine, n };
+        activateSlot(machine, n);
+        refreshSlots();
+
+        // The selected set was already applied on mode entry/slot selection.
+        // Start therefore resumes that configured machine directly, avoiding
+        // a race with the asynchronous setMachine worker.
+        emitMachine('resumeMotors');
+        emitMachine('hopper-pulse');
+
+        clearInterval(window._singleShotPulseTimer);
+        window._singleShotPulseTimer = setInterval(() => {
+          if (!isRunning || window._activeMode !== 'single_shot') return;
+          emitMachine('hopper-pulse');
+        }, SINGLE_SHOT_PULSE_INTERVAL_MS);
       }
 
       // Nudge the user when Start is pressed with no set selected: reset the button
@@ -1298,6 +1286,14 @@
         window._runTimer = setTimeout(() => {
           stopFiring(machine, n);
 
+          // A gesture-triggered stop request lets the current shot finish (above)
+          // instead of aborting mid-fire; apply it now that the shot is done.
+          if (window._stopRequested) {
+            window._stopRequested = false;
+            stopRunSequence();
+            return;
+          }
+
           runIndex++;
           if (runIndex >= runQueue.length) {
             if (window._activeMode === 'launch' && repeatState === 1) {
@@ -1313,10 +1309,25 @@
         }, SET_RUN_DURATION_MS);
       }
 
+      // Gesture-triggered stop (open left hand): if a sequence is actively
+      // firing, let the current shot finish rather than aborting it (see the
+      // check in runNextInQueue above). No-op if nothing is running.
+      function requestSequenceStop() {
+        if (!isRunning) return;
+        if (window._activeMode === 'single_shot') {
+          stopRunSequence();
+          return;
+        }
+        window._stopRequested = true;
+      }
+
       function stopRunSequence() {
+        window._stopRequested = false;
         const wasRunning = isRunning;
         isRunning = false;
         clearTimeout(window._runTimer);
+        clearInterval(window._singleShotPulseTimer);
+        window._singleShotPulseTimer = null;
         if (wasRunning && currentRunSlot) {
           stopFiring(currentRunSlot.machine, currentRunSlot.n);
         }
@@ -1461,15 +1472,12 @@
         refreshCourtPicker();
       }
 
-      // Single Shot / Sequence: first press confirms the selection and turns the
-      // camera on to watch for the start gesture; the button then becomes the normal
-      // Start/Stop toggle (also triggerable by the open-palm start gesture).
+      // Single Shot / Sequence: first press confirms the selection and arms
+      // gesture control. The camera doesn't turn on immediately — armLaunchGesture
+      // runs a short countdown on the button first, then turns the button into the
+      // normal Start/Stop toggle (also triggerable by the open-hand gestures).
       function confirmRun(btn) {
         armLaunchGesture();
-        btn.classList.remove('confirm');
-        btn.classList.add('start');
-        btn.setAttribute('onclick', 'toggleLaunch(this)');
-        btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
       }
 
       function toggleLaunch(btn) {
@@ -1491,6 +1499,17 @@
           clearInterval(window._telem);
           if (window._activeMode === 'advanced') {
             emitMachine('stopMotors');
+            // Stopping the launcher must also stop the hopper -- it must never
+            // keep feeding balls into a flywheel that's no longer spinning.
+            if (hopperOn) {
+              hopperOn = false;
+              const hopperBtn = document.getElementById('hopper-toggle-btn');
+              if (hopperBtn) {
+                hopperBtn.textContent = 'Hopper Off';
+                hopperBtn.classList.remove('active');
+              }
+              onHopperControl('off');
+            }
           }
         } else {
           btn.classList.remove('start'); btn.classList.add('stop');
@@ -1518,8 +1537,8 @@
       function homeTabsHTML() {
         return `<div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
             <button class="modetab-header" role="tab" data-mode="configure">Configure</button>
-            <button class="modetab-header" role="tab" data-mode="court_settings">Court Settings</button>
             <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
+            <button class="modetab-header" role="tab" data-mode="court_settings">Court Settings</button>
           </div>`;
       }
 
@@ -1549,6 +1568,8 @@
         if (courtEl && lenVal && widVal) courtEl.textContent = `${lenVal.textContent} × ${widVal.textContent}`;
       }
 
+      const OPERATION_MODES = ['launch', 'single_shot', 'gesture'];
+
       function setMode(mode) {
         const previousMode = window._activeMode || 'configure';
         if ((previousMode === 'launch' || previousMode === 'single_shot') && mode !== previousMode && isRunning) {
@@ -1556,6 +1577,9 @@
         }
         if (previousMode === 'advanced' && mode !== 'advanced') {
           emitMachine('advanced-leave');
+        }
+        if (OPERATION_MODES.includes(previousMode) && !OPERATION_MODES.includes(mode)) {
+          emitMachine('operation-leave');
         }
         if (previousMode === 'court_settings' && mode !== 'court_settings') {
           updateCourtBtn();
@@ -1590,12 +1614,17 @@
           emitMachine('advanced-enter');
           startTelemetry();
         }
+        if (OPERATION_MODES.includes(mode) && !OPERATION_MODES.includes(previousMode)) {
+          emitMachine('operation-enter');
+        }
         if (mode === 'launch' || mode === 'single_shot') {
           syncLaunchSummary();
           disarmLaunchGesture();
         }
-        if (mode === 'gesture') {
-          syncGestureControlUI();
+        if (mode === 'single_shot') {
+          const machineKey = selectedMachine || 'L';
+          const selectedSlot = singleShotSelected[machineKey];
+          applySingleShotSet(machineKey, selectedSlot);
         }
         window._activeMode = mode;
       }

@@ -291,46 +291,16 @@ body {
 }
 .quit-btn:hover { background: var(--bg-danger); }
 
-.gesture-buttons { display: flex; gap: 10px; }
-.gesture-buttons .op-btn { flex: 1; padding: 16px 0; }
+.gesture-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 8px; text-align: center; }
 
-.gesture-readout { text-align: center; }
-.gesture-name { font-size: 22px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
-.gesture-count { font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px; }
-
-.finger-chips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
-.finger-chip {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 6px 10px; border-radius: var(--radius-md);
-  border: 0.5px solid var(--border-secondary);
-  font-size: 11px; color: var(--text-secondary); min-width: 48px;
+.gesture-preview-wrap {
+  width: 160px; max-width: 100%; margin: 0 auto;
+  border-radius: var(--radius-md); overflow: hidden;
+  background: #000; aspect-ratio: 4 / 3;
 }
-.finger-chip.up { background: var(--green); border-color: var(--green); color: #fff; }
-.finger-chip .finger-state { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
-
-.gesture-control-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 8px; }
-.gc-toggle-btn {
-  padding: 6px 14px; border-radius: 20px;
-  border: 0.5px solid var(--border-secondary);
-  background: transparent; font-size: 12px; color: var(--text-secondary);
-  cursor: pointer; font-family: inherit;
+.gesture-preview-wrap img {
+  display: block; width: 100%; height: 100%; object-fit: cover;
 }
-.gc-toggle-btn.active { background: var(--green); border-color: var(--green); color: #fff; }
-
-.set-legend { display: flex; flex-direction: column; gap: 6px; }
-.set-legend-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px; border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  border: 0.5px solid var(--border-secondary);
-}
-.set-legend-item.recognised { border-color: var(--green); background: var(--green); color: #fff; }
-.set-legend-item.infeasible { opacity: 0.4; }
-.set-legend-name { font-size: 14px; font-weight: 600; min-width: 56px; }
-.set-legend-gesture { font-size: 12px; color: var(--text-secondary); min-width: 84px; }
-.set-legend-item.recognised .set-legend-gesture,
-.set-legend-item.recognised .set-legend-hint { color: #fff; }
-.set-legend-hint { font-size: 11px; color: var(--text-tertiary); margin-left: auto; }
 
 .shutdown-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.65);
@@ -370,6 +340,13 @@ body {
   background: var(--green);
   border-color: var(--green);
   color: #fff;
+}
+
+.hopper-btn.blocked {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  animation: op-shake 0.4s ease-in-out;
 }
 
 .save-slots {
@@ -649,45 +626,21 @@ input[type=range] { accent-color: var(--blue); }
   line-height: 1.5;
 }
 
-.gesture-buttons { display: flex; gap: 8px; margin-top: 10px; }
-.gesture-buttons .op-btn { padding: 14px 0; }
-
-.gesture-readout { text-align: center; }
-.gesture-name { font-size: 22px; font-weight: 600; color: var(--text-primary); }
-.gesture-count { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
-
-.finger-chips { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
-.finger-chip {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 6px 10px; border-radius: var(--radius-md);
-  border: 0.5px solid var(--border-secondary);
-  font-size: 11px; color: var(--text-secondary);
+.manual-utility-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
-.finger-chip.up { border-color: var(--green); color: var(--green); }
-.finger-chip .finger-state { font-size: 10px; font-weight: 600; }
 
-.gc-toggle-btn {
-  border: 0.5px solid var(--border-secondary);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border-radius: 14px;
-  padding: 4px 12px;
-  font-size: 12px; font-weight: 500;
-  cursor: pointer; font-family: inherit;
+.manual-home-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  padding: 4px 6px;
+  font: 500 10px/1.2 inherit;
+  cursor: pointer;
+  opacity: 0.8;
 }
-.gc-toggle-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 
-.gesture-control-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 8px; }
-
-.set-legend { display: flex; flex-direction: column; gap: 6px; }
-.set-legend-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 8px 10px; border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  font-size: 12px; transition: background 0.2s;
-}
-.set-legend-name { font-weight: 500; color: var(--text-primary); flex-shrink: 0; }
-.set-legend-gesture { color: var(--text-secondary); }
-.set-legend-hint { color: var(--text-tertiary); font-size: 11px; margin-left: auto; }
-.set-legend-item.infeasible { opacity: 0.35; }
-.set-legend-item.recognised { background: rgba(26,122,58,0.15); }
+.manual-home-btn:hover { opacity: 1; }
+.manual-home-btn:disabled { cursor: wait; opacity: 0.5; }

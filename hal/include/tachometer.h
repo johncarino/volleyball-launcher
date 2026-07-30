@@ -114,6 +114,10 @@ void tach_cleanup(void);
 // Returns 0.0 if the motor is stopped or tach_init() has not been called.
 float get_tach_rpm(void);
 
+// Clear old gate state and accept only sensor edges occurring after this call.
+// Call immediately before starting hopper reset motion.
+void tach_gate_prepare_for_reset(void);
+
 // Returns 1 exactly once per magnet approach on TACH_GATE_LINE, then resets
 // to 0 until the magnet leaves (rising edge) and approaches again.
 // Returns 0 when no new one-shot trigger is pending.

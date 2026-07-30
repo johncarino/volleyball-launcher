@@ -3,6 +3,8 @@
 #include <pthread.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 float curr_tilt_angle = 0.0;
 float curr_speed = 0;
@@ -32,6 +34,12 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_ACCEL_STEPS 400
 #define HOPPER_CONTINUOUS_DELAY_US 500
 #define HOPPER_RESET_INTERVAL_PULSES 4
+#define HOPPER_SENSOR_RUN_ON_US 1000000
+#define HOPPER_SENSOR_RUN_ON_SLICE_US 10000
+#define HOPPER_RESET_MIN_RUN_US 250000
+#define HOMING_FLYWHEEL_RPM 300.0f
+#define HOPPER_RESET_TIMEOUT_SEC 30
+#define HOPPER_RESET_POLL_DELAY_US 10000
 
 volatile float tilt_angle_w = 0;
 
@@ -40,6 +48,125 @@ static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 static pthread_t hopper_thread;
 static volatile int hopper_thread_created = 0;
 static unsigned int hopper_pulse_count = 0;
+
+#define LAUNCH_BEEP_COUNT 3
+#define LAUNCH_BEEP_FREQUENCY_HZ 880
+#define LAUNCH_BEEP_DURATION_MS 600
+#define LAUNCH_BEEP_GAP_MS 200
+#define LAUNCH_BEEP_SAMPLE_RATE 48000
+
+typedef struct {
+    char riff[4];
+    uint32_t file_size;
+    char wave[4];
+    char fmt[4];
+    uint32_t fmt_size;
+    uint16_t audio_format;
+    uint16_t channel_count;
+    uint32_t sample_rate;
+    uint32_t byte_rate;
+    uint16_t block_align;
+    uint16_t bits_per_sample;
+    char data[4];
+    uint32_t data_size;
+} wav_header_t;
+
+static int play_launch_warning(void) {
+    const int beep_frames =
+        LAUNCH_BEEP_SAMPLE_RATE * LAUNCH_BEEP_DURATION_MS / 1000;
+    const int gap_frames =
+        LAUNCH_BEEP_SAMPLE_RATE * LAUNCH_BEEP_GAP_MS / 1000;
+    const int total_frames = LAUNCH_BEEP_COUNT * beep_frames +
+        (LAUNCH_BEEP_COUNT - 1) * gap_frames;
+    const uint32_t data_size = (uint32_t)total_frames * sizeof(int16_t);
+    char path[] = "/tmp/volleyball-launch-warning-XXXXXX";
+
+    int fd = mkstemp(path);
+    if (fd < 0) {
+        perror("Launch warning: unable to create temporary audio file");
+        return -1;
+    }
+
+    FILE *audio = fdopen(fd, "wb");
+    if (!audio) {
+        perror("Launch warning: fdopen failed");
+        close(fd);
+        unlink(path);
+        return -1;
+    }
+
+    wav_header_t header = {
+        .riff = {'R', 'I', 'F', 'F'},
+        .file_size = 36 + data_size,
+        .wave = {'W', 'A', 'V', 'E'},
+        .fmt = {'f', 'm', 't', ' '},
+        .fmt_size = 16,
+        .audio_format = 1,
+        .channel_count = 1,
+        .sample_rate = LAUNCH_BEEP_SAMPLE_RATE,
+        .byte_rate = LAUNCH_BEEP_SAMPLE_RATE * sizeof(int16_t),
+        .block_align = sizeof(int16_t),
+        .bits_per_sample = 16,
+        .data = {'d', 'a', 't', 'a'},
+        .data_size = data_size
+    };
+
+    int write_failed = fwrite(&header, sizeof(header), 1, audio) != 1;
+    for (int frame = 0; frame < total_frames && !write_failed; frame++) {
+        int segment_frames = beep_frames + gap_frames;
+        int position = frame % segment_frames;
+        int16_t sample = 0;
+
+        if (position < beep_frames) {
+            double phase = 2.0 * M_PI * LAUNCH_BEEP_FREQUENCY_HZ *
+                position / LAUNCH_BEEP_SAMPLE_RATE;
+            sample = (int16_t)(sin(phase) * 8192.0);
+        }
+
+        write_failed = fwrite(&sample, sizeof(sample), 1, audio) != 1;
+    }
+
+    if (fclose(audio) != 0 || write_failed) {
+        fprintf(stderr, "Launch warning: failed to write audio data\n");
+        unlink(path);
+        return -1;
+    }
+
+    const char *audio_device = getenv("VOLLEYBALL_AUDIO_DEVICE");
+    pid_t child = fork();
+    if (child < 0) {
+        perror("Launch warning: fork failed");
+        unlink(path);
+        return -1;
+    }
+    if (child == 0) {
+        if (audio_device && audio_device[0] != '\0') {
+            execlp("aplay", "aplay", "-q", "-D", audio_device,
+                   "-t", "wav", path, (char *)NULL);
+        } else {
+            execlp("aplay", "aplay", "-q", "-t", "wav", path,
+                   (char *)NULL);
+        }
+        _exit(127);
+    }
+
+    int status = 0;
+    int wait_result = waitpid(child, &status, 0);
+    unlink(path);
+    if (wait_result < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr,
+                "Launch warning: aplay failed; continuing without beeps\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+static void *play_launch_warning_thread(void *arg) {
+    (void)arg;
+    play_launch_warning();
+    return NULL;
+}
 
 /*
  * Software interrupt (emergency abort) support.
@@ -207,7 +334,7 @@ static long tilt_angle_to_time(float i_angle, float f_angle) {
             i_angle = 75.0;
         }
 
-        if (i_angle <= 85.0) {
+        if (i_angle <= 87.0) {
             d_angle = f_angle - i_angle;
             c_duration += d_angle * FTC_75_85;
             return c_duration;
@@ -328,6 +455,11 @@ void operation_init() {
         return;
     }
 
+    if (mcp4725_write_eeprom(&dac1, 0) != 0) {
+        fprintf(stderr, "Failed to write MCP4725 EEPROM power-on default\n");
+        return;
+    }
+
     operation_initialized = 1;
     
     //homing_sequence();
@@ -356,19 +488,25 @@ void operation_cleanup() {
 
 void homing_sequence() {
     printf("Homing sequence initiated. Moving to default position...\n");
-    // Move to default tilt angle
+
+    // 1. Return the launcher to its mechanical starting angle.
     tilt_signal(INITIAL_TILT_ANGLE);
     curr_tilt_angle = INITIAL_TILT_ANGLE;
 
-    // Run the motor at a low speed
-    mcp4725_set_raw(&dac1, 1600);
+    // 2. Spin the flywheel slowly while the hopper finds its home sensor.
+    printf("Homing: running flywheel at %.0f RPM.\n", HOMING_FLYWHEEL_RPM);
+    speed_signal(HOMING_FLYWHEEL_RPM);
 
-    // Reset the hopper position
+    // 3. Find and settle at the hopper home position.
     hopper_reset();
     hopper_pulse_count = 0;
 
-    // Stop the motor after homing
+    // 4. Homing always leaves the machine fully stopped.
     mcp4725_set_raw(&dac1, 0);
+    curr_speed = 0.0;
+    curr_rpm = 0;
+    launcher_running = 0;
+    printf("Homing sequence complete.\n");
 }
 
 void tilt_signal(float angle) {
@@ -456,11 +594,16 @@ void set_speed(float speed) {
 }
 
 void percentage_to_mv(float percentage) {
-    if (percentage > 100.0) {
-        fprintf(stderr, "Invalid percentage: %.2f (must be 100 or less). Skipping speed.\n", percentage);
+    if (percentage < 0.0 || percentage > 100.0) {
+        fprintf(stderr, "Invalid percentage: %.2f (must be between 0 and 100). Skipping speed.\n", percentage);
         return;
     }
-    float mv = 1350.0 + (percentage / 100.0) * (4095.0 - 1350.0);
+
+    // Zero is an explicit motor-off command. Apply the minimum-running
+    // voltage offset only to non-zero Manual speed requests.
+    float mv = percentage == 0.0
+        ? 0.0
+        : 1350.0 + (percentage / 100.0) * (4095.0 - 1350.0);
     printf("setting speed to %.2f mV\n", mv);
     
     if (launcher_running) {
@@ -602,9 +745,19 @@ void toggle_hopper() {
     }
 }
 
-void hopper_start() {
+// Actual hopper-start implementation, deliberately NOT gated on
+// launcher_running: hopper_reset() (and therefore homing_sequence()) must be
+// able to spin the hopper stepper to find its home sensor regardless of
+// whether the launcher flywheel happens to be running. Only reachable via
+// hopper_start() (gated, below) or hopper_reset()/homing_sequence().
+static void hopper_start_internal(void) {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
+
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot start hopper: machine is not running\n");
+        return;
+    }
 
     if (!motor.request) {
         fprintf(stderr, "Cannot start hopper: motor not initialized\n");
@@ -635,6 +788,20 @@ void hopper_start() {
     //speed_signal(curr_rpm);
 }
 
+// Public, user/gesture-facing entry point: the hopper must never feed balls
+// into a flywheel that isn't spinning, so refuse to start unless the launcher
+// is running (see resume_machine()/pause_machine()). Returns 0 on success,
+// -1 if refused (or if the underlying start attempt otherwise failed).
+int hopper_start(void) {
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot start hopper: machine is not running. Start the launcher before starting the hopper.\n");
+        return -1;
+    }
+
+    hopper_start_internal();
+    return hopper_running ? 0 : -1;
+}
+
 void hopper_stop() {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
@@ -656,19 +823,32 @@ void hopper_stop() {
     //speed_signal(curr_rpm);
 }
 
-void hopper_pulse() {
+// Returns 0 on success, -1 if refused (motor not initialized, machine not
+// running, or an interrupt was pending).
+int hopper_pulse(void) {
     //set rpm to 0
     //mcp4725_set_raw(&dac1, 0);
 
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot pulse hopper: machine is not running\n");
+        return -1;
+    }
+
     if (!motor.request) {
         fprintf(stderr, "Cannot pulse hopper: motor not initialized\n");
-        return;
+        return -1;
+    }
+
+    // The hopper must never feed balls into a flywheel that isn't spinning.
+    if (!launcher_running) {
+        fprintf(stderr, "Cannot pulse hopper: machine is not running. Start the launcher before pulsing the hopper.\n");
+        return -1;
     }
 
     if (operation_interrupt_pending()) {
         fprintf(stderr, "Hopper pulse aborted before start due to pending interrupt.\n");
         operation_clear_interrupt();
-        return;
+        return -1;
     }
 
     //turn hopper off if it is running
@@ -682,19 +862,42 @@ void hopper_pulse() {
         printf("Hopper pulse #%d: running reset instead of pulse.\n",
                HOPPER_RESET_INTERVAL_PULSES);
         hopper_reset();
-        return;
+        return 0;
     }
 
-    printf("Pulsing hopper...\n");
+    // aplay blocks until the warning finishes, so run it alongside the pulse.
+    pthread_t warning_thread;
+    int warning_thread_started =
+        pthread_create(&warning_thread, NULL, play_launch_warning_thread, NULL) == 0;
+    if (!warning_thread_started) {
+        fprintf(stderr, "Launch warning: unable to start audio thread; continuing without beeps\n");
+    }
+
+    if (operation_interrupt_pending()) {
+        fprintf(stderr, "Hopper pulse aborted before movement.\n");
+        operation_clear_interrupt();
+        if (warning_thread_started) {
+            pthread_join(warning_thread, NULL);
+        }
+        return -1;
+    }
+
+    printf("Pulsing hopper while sounding %d warning beeps...\n",
+           LAUNCH_BEEP_COUNT);
 
     
     tb6600_enable(&motor, 1);
     tb6600_step_accel(&motor, HOPPER_PULSE_STEPS, HOPPER_PULSE_START_DELAY_US, HOPPER_PULSE_END_DELAY_US, HOPPER_PULSE_ACCEL_STEPS);
     tb6600_enable(&motor, 0);
+
+    if (warning_thread_started) {
+        pthread_join(warning_thread, NULL);
+    }
     
     printf("Hopper pulse complete.\n");
 
     //speed_signal(curr_rpm);
+    return 0;
 }
 
 void hopper_reset() {
@@ -718,13 +921,21 @@ void hopper_reset() {
         hopper_stop();
     }
 
+    tach_gate_prepare_for_reset();
+
     printf("Resetting hopper: stepping until sensor trigger...\n");
-    hopper_start();
+    // Ungated: a reset (e.g. from homing_sequence()) must be able to run the
+    // hopper stepper even if the launcher flywheel isn't running.
+    hopper_start_internal();
 
     if (!hopper_running) {
         fprintf(stderr, "Hopper reset failed: unable to start hopper\n");
         return;
     }
+
+    time_t start_time = time(NULL);
+    struct timespec reset_started;
+    clock_gettime(CLOCK_MONOTONIC, &reset_started);
 
     while (hopper_running) {
         if (operation_interrupt_pending()) {
@@ -734,11 +945,43 @@ void hopper_reset() {
         }
 
         if (tach_gate_consume_signal()) {
-            printf("Hopper reset sensor triggered.\n");
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            long elapsed_us = (now.tv_sec - reset_started.tv_sec) * 1000000L +
+                (now.tv_nsec - reset_started.tv_nsec) / 1000L;
+            if (elapsed_us < HOPPER_RESET_MIN_RUN_US) {
+                fprintf(stderr,
+                        "Hopper reset: ignored immediate sensor trigger after %ld us.\n",
+                        elapsed_us);
+                tach_gate_prepare_for_reset();
+                continue;
+            }
+
+            printf("Hopper reset sensor triggered; stopping in 1 second.\n");
+
+            int run_on_elapsed_us = 0;
+            while (hopper_running &&
+                   run_on_elapsed_us < HOPPER_SENSOR_RUN_ON_US) {
+                if (operation_interrupt_pending()) {
+                    fprintf(stderr,
+                            "Hopper reset interrupted during sensor run-on.\n");
+                    operation_clear_interrupt();
+                    break;
+                }
+
+                usleep(HOPPER_SENSOR_RUN_ON_SLICE_US);
+                run_on_elapsed_us += HOPPER_SENSOR_RUN_ON_SLICE_US;
+            }
             break;
         }
 
-        usleep(1000);
+        if (difftime(time(NULL), start_time) >= HOPPER_RESET_TIMEOUT_SEC) {
+            fprintf(stderr, "Hopper reset timed out after %d seconds waiting for sensor trigger -- stopping hopper.\n",
+                    HOPPER_RESET_TIMEOUT_SEC);
+            break;
+        }
+
+        usleep(HOPPER_RESET_POLL_DELAY_US);
     }
 
     hopper_stop();
@@ -763,6 +1006,7 @@ void pause_machine() {
     mcp4725_set_raw(&dac1, 0);
 
     launcher_running = 0;
+    hopper_stop();
 
     return;
 }

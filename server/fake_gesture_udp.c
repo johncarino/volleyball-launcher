@@ -2,14 +2,21 @@
 //
 // Hardware-free test source for the BeagleY-AI gesture-control backend.
 // Pretends to be the MediaPipe recogniser (m2demo): it PUSHES fake gesture
-// summaries to the Node server's UDP listener at ~10 Hz, cycling through a
-// handful of named gestures so you can verify the web UI without a camera.
+// summaries to the Node server's UDP listener at ~1 Hz, cycling through an
+// open RIGHT hand (start), idle, an open LEFT hand (stop), idle, so you can
+// verify the Single Shot / Sequence open-hand start/stop flow without a
+// camera.
 //
 // Wire protocol (matches m2demo / gesture_server.js):
 //   "hands <n>" then, per hand, " <label> <count> <t> <i> <m> <r> <p> <NAME>"
-// where <label> is R/L/U (right/left/unknown). This tool emits a single
-// unknown-handed gesture per frame, which the backend treats as the signing
-// hand so the web UI updates without a camera.
+// where <label> is R/L/U (right/left/unknown). Frames labelled 'U' are
+// treated as "no hand" by the backend (only L/R are wired to start/stop).
+//
+// NOTE: gesture_server.js's parseHandsLine swaps R<->L on the way in (m2demo's
+// raw labels come out mirrored relative to the physical camera on real
+// hardware), so the labels below are intentionally the opposite of the
+// physical hand they simulate -- 'L' below yields the backend's 'right' hand,
+// and vice versa.
 //
 // Build:  gcc -O2 -Wall -Wextra -o fake_gesture_udp fake_gesture_udp.c
 // Run:    ./fake_gesture_udp        (sends to 127.0.0.1:12345)
@@ -25,23 +32,27 @@
 #include <unistd.h>
 
 typedef struct {
+    const char *label;  // "R", "L", or "U" (no hand)
     int count;
     int fingers[5];  // thumb, index, middle, ring, pinky
     const char *name;
-} Gesture;
+} Frame;
 
-static const Gesture kGestures[] = {
-    {0, {0, 0, 0, 0, 0}, "FIST"},
-    {1, {0, 1, 0, 0, 0}, "POINT"},
-    {2, {0, 1, 1, 0, 0}, "PEACE"},
-    {1, {1, 0, 0, 0, 0}, "THUMBS_UP"},
-    {4, {0, 1, 1, 1, 1}, "FOUR"},
-    {5, {1, 1, 1, 1, 1}, "OPEN_PALM"},
-    {2, {1, 0, 0, 0, 1}, "CALL_ME"},
-    {2, {1, 1, 0, 0, 0}, "GUN"},
-    {0, {0, 0, 0, 0, 0}, "NONE"},
+// Two consecutive identical-gesture frames are enough to satisfy the web UI's
+// ~600ms hold threshold at the default 1000ms send interval.
+static const Frame kFrames[] = {
+    {"L", 5, {1, 1, 1, 1, 1}, "OPEN_PALM"},  // -> backend 'right' hand: start
+    {"L", 5, {1, 1, 1, 1, 1}, "OPEN_PALM"},
+    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
+    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
+    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
+    {"R", 5, {1, 1, 1, 1, 1}, "OPEN_PALM"},  // -> backend 'left' hand: stop
+    {"R", 5, {1, 1, 1, 1, 1}, "OPEN_PALM"},
+    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
+    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
+    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
 };
-static const int kNumGestures = (int)(sizeof(kGestures) / sizeof(kGestures[0]));
+static const int kNumFrames = (int)(sizeof(kFrames) / sizeof(kFrames[0]));
 
 int main(int argc, char **argv) {
     const char *HOST = "127.0.0.1";
@@ -73,11 +84,11 @@ int main(int argc, char **argv) {
 
     int idx = 0;
     for (;;) {
-        const Gesture *g = &kGestures[idx];
+        const Frame *f = &kFrames[idx];
         char msg[128];
-        snprintf(msg, sizeof(msg), "hands 1 U %d %d %d %d %d %d %s",
-                 g->count, g->fingers[0], g->fingers[1], g->fingers[2],
-                 g->fingers[3], g->fingers[4], g->name);
+        snprintf(msg, sizeof(msg), "hands 1 %s %d %d %d %d %d %d %s",
+                 f->label, f->count, f->fingers[0], f->fingers[1], f->fingers[2],
+                 f->fingers[3], f->fingers[4], f->name);
 
         if (sendto(sock, msg, strlen(msg), 0,
                    (struct sockaddr *)&dest, sizeof(dest)) < 0) {
@@ -86,7 +97,7 @@ int main(int argc, char **argv) {
             printf("TX: \"%s\"\n", msg);
         }
 
-        idx = (idx + 1) % kNumGestures;
+        idx = (idx + 1) % kNumFrames;
         nanosleep(&ts, NULL);
     }
 

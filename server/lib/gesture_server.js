@@ -6,12 +6,18 @@
  *   1. Control:  browser --socket.io--> here.  On "start" we spawn the MediaPipe
  *      recogniser (m2demo); on "stop" we kill it.
  *   2. Data:     m2demo --UDP 127.0.0.1:12345--> here.  Each datagram is a
- *      gesture summary line which we parse and broadcast to every browser as a
- *      "gesture-update" event.
+ *      per-hand gesture summary line which we parse and broadcast to every
+ *      browser as a "gesture-update" event shaped { left, right }, one entry
+ *      per hand (or a NONE placeholder if that hand isn't visible). There is
+ *      no gesture->set mapping here; the browser itself watches for an open
+ *      right hand (start) / open left hand (stop) to drive the Single Shot /
+ *      Sequence run (see armLaunchGesture/handleLaunchGestureFrame in
+ *      public/index.html).
  *
  * UDP wire protocol (one line per datagram, ASCII):
- *   "gesture <count> <thumb> <index> <middle> <ring> <pinky> <NAME>"
- *   e.g. "gesture 2 0 1 1 0 0 PEACE"
+ *   "hands <n> [<label> <count> <thumb> <index> <middle> <ring> <pinky> <NAME>]..."
+ *   where <label> is R/L/U (right/left/unknown), e.g.
+ *   "hands 1 R 5 1 1 1 1 1 OPEN_PALM"
  */
 
 var socketio = require('socket.io');
@@ -45,11 +51,6 @@ var CAMERA_NAME   = process.env.GESTURE_CAMERA_NAME || '';
 // upright). Override with GESTURE_CAMERA_KIND=csi to use the IMX219.
 var CAMERA_KIND   = (process.env.GESTURE_CAMERA_KIND || 'usb').toLowerCase();
 var USB_FOCUS     = process.env.GESTURE_USB_FOCUS || '-1';
-// Which hand signs sets; the other hand starts/stops the feed. Toggleable live
-// from the web UI (also corrects MediaPipe handedness if it labels your hands
-// the opposite way). 'right' (default) or 'left'.
-var SET_HAND      = (process.env.GESTURE_SET_HAND || 'right').toLowerCase();
-if (SET_HAND !== 'left') SET_HAND = 'right';
 // Live preview: m2demo JPEG-encodes throttled frames and sends them to this
 // local UDP port; we relay each frame to the browser over socket.io. Disabled
 // when GESTURE_PREVIEW=0 or the port is 0. Kept modest (fps/quality) so it
@@ -156,6 +157,14 @@ exports.listen = function(server) {
 			cleanupOperation(socket, 'advanced-leave');
 		});
 
+		socket.on('operation-enter', function() {
+			initOperation(socket, 'operation-enter');
+		});
+
+		socket.on('operation-leave', function() {
+			cleanupOperation(socket, 'operation-leave');
+		});
+
 		socket.on('disconnect', function() {
 			stopTelemetry(socket);
 		});
@@ -260,38 +269,6 @@ function handleCommand(socket) {
 		console.log("Got stop command.");
 		stopRecognizer(socket);
 	});
-
-	// Opt-in gesture-control mode: while enabled, recognised gestures drive the
-	// launcher (set selection + start/stop) instead of only updating the display.
-	socket.on('gesture-control-enable', function(payload) {
-		gestureControl.enabled = !!(payload && payload.enabled);
-		if (payload && payload.machinePosition != null) {
-			var mp = parseInt(payload.machinePosition, 10);
-			if (!Number.isNaN(mp)) gestureControl.machinePosition = mp;
-		}
-		// Reset debounce state whenever the mode or position changes.
-		resetGestureHolds();
-		console.log('[gesture] control ' + (gestureControl.enabled ? 'ENABLED' : 'disabled') +
-				' (machinePosition=' + gestureControl.machinePosition + ')');
-		socket.emit('gesture-control-state', {
-			enabled: gestureControl.enabled,
-			machinePosition: gestureControl.machinePosition,
-			feasible: FEASIBILITY[gestureControl.machinePosition] || []
-		});
-	});
-
-	// Choose which hand signs sets ('right'/'left'); the other hand starts/stops.
-	// Applied live (no recogniser restart) and echoed back so every browser stays
-	// in sync.
-	socket.on('gesture-set-hand', function(payload) {
-		SET_HAND = (payload && payload.hand === 'left') ? 'left' : 'right';
-		resetGestureHolds();
-		console.log('[gesture] set-sign hand = ' + SET_HAND);
-		if (io) io.sockets.emit('gesture-set-hand-state', { hand: SET_HAND });
-	});
-
-	// Tell the newly-connected browser the current signing-hand choice.
-	socket.emit('gesture-set-hand-state', { hand: SET_HAND });
 
 	// Software interrupt (emergency abort): asks any in-progress blocking
 	// operation (tilt/speed feedback loops, hopper stepping, etc.) to abort
@@ -544,7 +521,10 @@ function handleCommand(socket) {
 	socket.on('hopper-on', function() {
 		if (!ensureOperationReady(socket, 'hopper-on')) return;
 		console.log("Got hopper-on command.");
-		operation.hopperStart();
+		var started = operation.hopperStart();
+		if (started === false) {
+			socket.emit('machine-error', 'Cannot start hopper: machine is not running.');
+		}
 	});
 
 	socket.on('hopper-off', function() {
@@ -556,7 +536,25 @@ function handleCommand(socket) {
 	socket.on('hopper-pulse', function() {
 		if (!ensureOperationReady(socket, 'hopper-pulse')) return;
 		console.log("Got hopper-pulse command.");
-		operation.hopperPulse();
+		var pulsed = operation.hopperPulse();
+		if (pulsed === false) {
+			socket.emit('machine-error', 'Cannot pulse hopper: machine is not running.');
+		}
+	});
+
+	socket.on('homing-sequence', function() {
+		if (!ensureOperationReady(socket, 'homing-sequence')) {
+			socket.emit('homing-error', 'Machine control is not ready.');
+			return;
+		}
+		console.log("Got homing-sequence command.");
+		try {
+			operation.homingSequence();
+			socket.emit('homing-complete');
+		} catch (e) {
+			console.error('[operation] Homing sequence failed: ' + e.message);
+			socket.emit('homing-error', 'Homing sequence failed.');
+		}
 	});
 
 	socket.on('requestTelemetry', function() {
@@ -738,11 +736,15 @@ function startUdpReceiver() {
 	receiver.on('message', function(msg) {
 		var hands = parseHandsLine(msg.toString('utf8').trim());
 		if (!hands || !io) return;
-		var roles = assignHandRoles(hands);
-		var signData = roles.sign || NONE_HAND;
-		io.sockets.emit('gesture-update', signData);
-		handleSignFrame(signData);
-		handleControlFrame(roles.control || NONE_HAND);
+		// Base case: no set-sign mapping. Just relay each hand's raw gesture by
+		// its own left/right label so the browser can watch for an open right
+		// hand (start) / open left hand (stop) itself.
+		var left = null, right = null;
+		for (var i = 0; i < hands.length; i++) {
+			if (hands[i].hand === 'left' && !left) left = hands[i];
+			else if (hands[i].hand === 'right' && !right) right = hands[i];
+		}
+		io.sockets.emit('gesture-update', { left: left || NONE_HAND, right: right || NONE_HAND });
 	});
 
 	receiver.on('error', function(err) {
@@ -781,7 +783,7 @@ function startPreviewReceiver() {
 	receiver.bind(PREVIEW_PORT, UDP_HOST);
 }
 
-// A "no hand in this role" placeholder matching the gesture-update shape.
+// A "no hand seen" placeholder matching the gesture-update shape.
 var NONE_HAND = {
 	count: 0,
 	fingers: { thumb: false, index: false, middle: false, ring: false, pinky: false },
@@ -790,7 +792,11 @@ var NONE_HAND = {
 };
 
 // "hands <n> [<label> <count> <t> <i> <m> <r> <p> <NAME>]..." -> array of hand
-// objects, or null. <label> is R/L/U (right/left/unknown).
+// objects, or null. <label> is R/L/U (right/left/unknown) as reported by
+// MediaPipe/m2demo. In practice that comes out mirrored relative to the
+// physical camera setup (confirmed on hardware), so we swap it here rather
+// than in m2demo.cpp -- much cheaper to tweak/redeploy than the Bazel binary.
+// If a future camera/mirror change fixes it upstream, flip this back.
 function parseHandsLine(line) {
 	var parts = line.split(/\s+/);
 	if (parts[0] !== 'hands') return null;
@@ -802,7 +808,7 @@ function parseHandsLine(line) {
 		if (idx + 8 > parts.length) break;  // malformed / truncated
 		var label = parts[idx];
 		hands.push({
-			hand: label === 'R' ? 'right' : (label === 'L' ? 'left' : 'unknown'),
+			hand: label === 'R' ? 'left' : (label === 'L' ? 'right' : 'unknown'),
 			count: parseInt(parts[idx + 1], 10) || 0,
 			fingers: {
 				thumb:  parts[idx + 2] === '1',
@@ -816,155 +822,6 @@ function parseHandsLine(line) {
 		idx += 8;
 	}
 	return hands;
-}
-
-// Split the visible hands into the set-signing hand and the start/stop control
-// hand according to the SET_HAND preference. Falls back to treating a lone
-// unlabelled hand as the signing hand so single-hand use still works.
-function assignHandRoles(hands) {
-	var signWant = SET_HAND;
-	var ctrlWant = (SET_HAND === 'right') ? 'left' : 'right';
-	var sign = null, control = null;
-	for (var i = 0; i < hands.length; i++) {
-		if (hands[i].hand === signWant && !sign) sign = hands[i];
-		else if (hands[i].hand === ctrlWant && !control) control = hands[i];
-	}
-	if (!sign && hands.length === 1 && hands[0].hand === 'unknown') {
-		sign = hands[0];
-	}
-	return { sign: sign, control: control };
-}
-
-// ---- Gesture -> launcher intent mapping (gesture-control mode) -------------
-// The detector emits generic hand-shape names; here we translate the ones we
-// care about into volleyball set labels. THUMBS_UP is a control gesture, and
-// OPEN_PALM is dual-purpose (brief hold = the "5" set, long hold = STOP).
-var GESTURE_SET_MAP = {
-	POINT:     '1',
-	PEACE:     '2',
-	FOUR:      '4',
-	OPEN_PALM: '5',
-	FIST:      'Red',
-	CALL_ME:   'Slide',
-	GUN:       '3/Shoot'
-};
-
-// Which sets are reachable from each machine position (0=Left,1=Center,2=Right).
-// PLACEHOLDER: until the RPM/angle model exists these are best-guess
-// reachability lists; edit freely. A set not listed is shown greyed-out and its
-// gesture is ignored.
-var FEASIBILITY = {
-	0: ['1', '2', '4', 'Slide', '3/Shoot'],              // Left
-	1: ['1', '2', '4', '5', 'Red', 'Slide', '3/Shoot'], // Center
-	2: ['1', '2', '5', 'Red', 'Slide']                  // Right
-};
-
-// Debounce / hold thresholds (ms).
-var GESTURE_HOLD_MS   = 700;   // hold a signal this long to confirm a set
-var OPEN_PALM_STOP_MS = 1500;  // continuous OPEN_PALM this long = STOP
-
-// Gesture-control runtime state (opt-in via 'gesture-control-enable'). The
-// signing hand and the control hand are tracked independently so a set sign on
-// one hand and a start/stop gesture on the other don't clobber each other.
-var gestureControl = {
-	enabled: false,
-	machinePosition: 1,  // default Center
-	sign:    { lastName: null, holdSince: 0, firedName: null },
-	control: { lastName: null, holdSince: 0, firedName: null }
-};
-
-function resetGestureHolds() {
-	gestureControl.sign =    { lastName: null, holdSince: 0, firedName: null };
-	gestureControl.control = { lastName: null, holdSince: 0, firedName: null };
-}
-
-// Apply set-selection logic to the signing hand. Only acts when the browser has
-// enabled gesture control; otherwise gestures are display-only. Start/stop is
-// handled separately by the control hand (see handleControlFrame).
-function handleSignFrame(data) {
-	if (!gestureControl.enabled) return;
-
-	var st = gestureControl.sign;
-	var name = (data && data.name) ? data.name : 'NONE';
-	var now = Date.now();
-
-	if (name !== st.lastName) {
-		st.lastName = name;
-		st.holdSince = now;
-		st.firedName = null;
-	}
-	var heldMs = now - st.holdSince;
-
-	if (name === 'NONE' || name === 'UNKNOWN') return;
-	if (heldMs < GESTURE_HOLD_MS) return;          // not held long enough yet
-	if (st.firedName === name) return;             // already acted on this hold
-
-	var set = GESTURE_SET_MAP[name];
-	if (!set) return;  // not a mapped set gesture
-
-	st.firedName = name;
-	var allowed = FEASIBILITY[gestureControl.machinePosition] || [];
-	var feasible = allowed.indexOf(set) !== -1;
-	if (io) io.sockets.emit('gesture-set', { name: name, set: set, feasible: feasible });
-	console.log('[gesture] set ' + set + ' (' + name + ') feasible=' + feasible +
-			' mp=' + gestureControl.machinePosition);
-	// NOTE: motor set-actuation (operation.setMachine) is intentionally NOT wired
-	// yet -- the RPM/angle mapping is not implemented. Display only for now.
-}
-
-// Apply start/stop logic to the control hand (the one not signing sets):
-// THUMBS_UP = start the feed, a long OPEN_PALM hold = stop.
-function handleControlFrame(data) {
-	if (!gestureControl.enabled) return;
-
-	var st = gestureControl.control;
-	var name = (data && data.name) ? data.name : 'NONE';
-	var now = Date.now();
-
-	if (name !== st.lastName) {
-		st.lastName = name;
-		st.holdSince = now;
-		st.firedName = null;
-	}
-	var heldMs = now - st.holdSince;
-
-	if (name === 'NONE' || name === 'UNKNOWN') return;
-
-	// OPEN_PALM long continuous hold escalates to STOP (checked before the
-	// once-per-hold guard).
-	if (name === 'OPEN_PALM' && heldMs >= OPEN_PALM_STOP_MS) {
-		if (st.firedName !== 'STOP') {
-			st.firedName = 'STOP';
-			triggerControl('stop');
-		}
-		return;
-	}
-
-	if (heldMs < GESTURE_HOLD_MS) return;          // not held long enough yet
-	if (st.firedName === name) return;             // already acted on this hold
-
-	// THUMBS_UP is the start control gesture.
-	if (name === 'THUMBS_UP') {
-		st.firedName = name;
-		triggerControl('start');
-	}
-}
-
-// Start/stop the ball feed from a control gesture. Wired to the existing hopper
-// controls; guarded so it no-ops if operation mode can't initialise.
-function triggerControl(action) {
-	try {
-		if (action === 'start') {
-			if (!ensureOperationReady(null, 'gesture-start')) return;
-			operation.hopperStart();
-		} else {
-			operation.hopperStop();
-		}
-		if (io) io.sockets.emit('gesture-control-action', { action: action });
-		console.log('[gesture] control action: ' + action);
-	} catch (e) {
-		console.log('[gesture] control action failed: ' + e.message);
-	}
 }
 
 // ---- Clean up the child process when the server stops ----------------------
