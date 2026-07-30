@@ -498,8 +498,8 @@ function handleCommand(socket) {
 					console.log('[operation] setMachine worker failed: ' + err.message);
 					socket.emit('machine-error', 'Failed to apply set machine.');
 				}
-				socket.emit('set-machine-state', err ? 'FAILED' : 'APPLIED');
 				socket.emit('machine-ready', true);
+				socket.emit('set-machine-state', err ? 'FAILED' : 'APPLIED');
 			});
 			if (accepted === false) {
 				socket.emit('machine-ready', true);
@@ -563,8 +563,8 @@ function handleCommand(socket) {
 		if (pulsed === false) {
 			socket.emit('machine-error', 'Cannot pulse hopper: machine is not running.');
 		}
-		socket.emit('hopper-pulse-complete', pulsed !== false);
 		socket.emit('machine-ready', true);
+		socket.emit('hopper-pulse-complete', pulsed !== false);
 	});
 
 	socket.on('homing-sequence', function() {

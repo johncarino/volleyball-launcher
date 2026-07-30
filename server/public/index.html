@@ -175,9 +175,9 @@
         });
         machineSocket.on('machine-ready', (ready) => { machineReady = ready === true; });
         machineSocket.on('hopper-pulse-complete', (completed) => {
-          if (completed && isRunning && window._activeMode === 'single_shot') {
-            stopRunSequence();
-          }
+          if (!isRunning) return;
+          if (!completed || window._activeMode === 'single_shot') stopRunSequence();
+          else if (window._activeMode === 'launch') completeSequenceShot();
         });
         machineSocket.on('machine-error', (message) => { onMachineError(message); });
         machineSocket.on('homing-complete', () => {
@@ -1145,7 +1145,6 @@
       let runQueue = [];       // ordered list of { machine, n } to fire through
       let runIndex = 0;
       let currentRunSlot = null; // { machine, n } currently firing, for the "now playing" highlight
-      const SET_RUN_DURATION_MS = 6000; // assumed dwell time per set before advancing
 
       function slotsHTML(readonly = false, variant = 'sequence') {
         const machineKey = selectedMachine || 'L';
@@ -1223,13 +1222,8 @@
         emitMachine('setMachine', { machinePosition: machineIndex, setIndex: n - 1 });
       }
 
-      // Actually apply the selected set slot to the machine and start feeding
-      // balls for it. setMachine syncs the saved set data natively and drives
-      // the tilt/speed actuators (see gesture_server.js's 'setMachine' handler
-      // and operation.c's set_machine()); resumeMotors spins the flywheel up
-      // to the newly-configured speed, and hopper-on starts continuously
-      // feeding balls through it. Used by both the Single Shot and Sequence
-      // (Launch) run modes whenever a set slot is selected/enabled and run.
+      // Apply the selected set asynchronously. Sequence feeding begins only
+      // after set-machine-state reports APPLIED, and consists of one pulse.
       function fireSet(machine, n, slotData) {
         const machineIndex = MACHINE_INDEX[machine];
         if (machineIndex === undefined) {
@@ -1335,35 +1329,33 @@
       // behind a still-moving tilt actuator.
       function beginSequenceShot() {
         if (!isRunning || window._activeMode !== 'launch' || !currentRunSlot) return;
-        const { machine, n } = currentRunSlot;
         emitMachine('resumeMotors');
-        emitMachine('hopper-on');
+        emitMachine('hopper-pulse');
+      }
 
-        clearTimeout(window._runTimer);
-        window._runTimer = setTimeout(() => {
-          stopFiring(machine, n);
+      // Advance only when the backend confirms that this set's single hopper
+      // pulse has completed; there is no duration estimate or timer involved.
+      function completeSequenceShot() {
+        if (!isRunning || window._activeMode !== 'launch') return;
 
-          // A gesture-triggered stop request lets the current shot finish (above)
-          // instead of aborting mid-fire; apply it now that the shot is done.
-          if (window._stopRequested) {
-            window._stopRequested = false;
+        if (window._stopRequested) {
+          window._stopRequested = false;
+          stopRunSequence();
+          return;
+        }
+
+        runIndex++;
+        if (runIndex >= runQueue.length) {
+          if (repeatState === 1) {
+            runQueue = buildRunQueue();
+            runIndex = 0;
+            if (runQueue.length === 0) { stopRunSequence(); return; }
+          } else {
             stopRunSequence();
             return;
           }
-
-          runIndex++;
-          if (runIndex >= runQueue.length) {
-            if (window._activeMode === 'launch' && repeatState === 1) {
-              runQueue = buildRunQueue();
-              runIndex = 0;
-              if (runQueue.length === 0) { stopRunSequence(); return; }
-            } else {
-              stopRunSequence();
-              return;
-            }
-          }
-          runNextInQueue();
-        }, SET_RUN_DURATION_MS);
+        }
+        runNextInQueue();
       }
 
       // Gesture-triggered stop (open left hand): if a sequence is actively
