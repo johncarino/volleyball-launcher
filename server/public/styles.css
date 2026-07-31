@@ -412,6 +412,16 @@ body {
 .dev-bar-wrap { flex: 1; height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; }
 .dev-bar { height: 100%; border-radius: 4px; background: var(--blue); transition: width 0.4s; }
 .dev-val { font-size: 12px; font-weight: 500; color: var(--text-primary); width: 60px; text-align: right; }
+.dev-mode-toggle { display:flex; align-items:center; justify-content:space-between; padding:14px; border-radius:var(--radius-md); background:var(--card-bg); cursor:pointer; }
+.dev-mode-toggle span { display:flex; flex-direction:column; gap:3px; }
+.dev-mode-toggle strong { font-size:14px; font-weight:600; }
+.dev-mode-toggle small { color:var(--text-secondary); }
+.dev-mode-toggle input { width:20px; height:20px; accent-color:var(--blue); }
+.dev-adjust-grid { display:grid; gap:16px; }
+.dev-adjust-grid label { display:grid; grid-template-columns:1fr auto; gap:8px; font-size:13px; color:var(--text-secondary); }
+.dev-adjust-grid label strong { color:var(--text-primary); }
+.dev-adjust-grid input { grid-column:1 / -1; width:100%; }
+.controls-disabled { opacity:.5; }
 
 .vert-sliders { display: flex; justify-content: center; }
 .vert-slider-col { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; }

@@ -95,6 +95,9 @@ var operation = (function() {
 			tiltSignal: function(){},
 			speedSignal: function(){},
 			getTachReading: function(){ return 0; },
+			getTiltAngle: function(){ return 8; },
+			getTargetRpm: function(){ return 0; },
+			rpmSignal: function(rpm, callback){ setImmediate(function(){ callback(null, true); }); return true; },
 			syncSet: function(){},
 			setMachine: function(machinePosition, setIndex, callback){
 				setImmediate(function() { callback(null, true); });
@@ -162,9 +165,11 @@ exports.listen = function(server) {
 
 		socket.on('operation-enter', function() {
 			initOperation(socket, 'operation-enter');
+			startTelemetry(socket);
 		});
 
 		socket.on('operation-leave', function() {
+			stopTelemetry(socket);
 			cleanupOperation(socket, 'operation-leave');
 		});
 
@@ -183,7 +188,11 @@ function startTelemetry(socket) {
 		if (!operationReady) return;
 		try {
 			var rpm = operation.getTachReading();
-			socket.emit('telemetry', { rpm: rpm });
+			socket.emit('telemetry', {
+				rpm: rpm,
+				tilt: operation.getTiltAngle(),
+				targetRpm: operation.getTargetRpm()
+			});
 		} catch (e) {
 			// Transient read errors are ignored; next tick will retry.
 		}
@@ -523,6 +532,24 @@ function handleCommand(socket) {
 		console.log("Got setAngle command: " + value);
 		console.log('[operation] forwarding setAngle to native tiltSignal.');
 		operation.tiltSignal(value);
+	});
+
+	socket.on('setRpm', function(value) {
+		if (!ensureOperationReady(socket, 'setRpm')) return;
+		var rpm = parseFloat(value);
+		if (!Number.isFinite(rpm) || rpm < 0 || rpm > 3700) {
+			socket.emit('machine-error', 'RPM must be between 0 and 3700.');
+			return;
+		}
+		socket.emit('machine-ready', false);
+		var accepted = operation.rpmSignal(rpm, function(err) {
+			socket.emit('machine-ready', true);
+			if (err) socket.emit('machine-error', err.message || 'Failed to adjust RPM.');
+		});
+		if (accepted === false) {
+			socket.emit('machine-ready', true);
+			socket.emit('machine-error', 'An RPM adjustment is already in progress.');
+		}
 	});
 
 	socket.on('stopMotors', function() {

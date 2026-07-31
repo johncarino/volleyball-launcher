@@ -19,6 +19,33 @@ using namespace Napi;
 // hardware state (DAC, motor driver, curr_tilt_angle), so only one tilt may
 // run at a time. Set true when a TiltWorker is queued, cleared when it finishes.
 static std::atomic<bool> g_tiltInProgress(false);
+static std::atomic<bool> g_speedInProgress(false);
+
+class SpeedWorker : public AsyncWorker {
+public:
+    SpeedWorker(const Napi::Function& callback, float rpm)
+        : AsyncWorker(callback, "SpeedWorker"), rpm_(rpm) {}
+
+    void Execute() override {
+        operation_clear_feedback_fault();
+        speed_with_feedback(rpm_);
+        const char* fault = operation_feedback_fault_message();
+        if (fault != nullptr) SetError(fault);
+    }
+
+    void OnOK() override {
+        g_speedInProgress.store(false);
+        Callback().Call({Env().Null(), Boolean::New(Env(), true)});
+    }
+
+    void OnError(const Error& e) override {
+        g_speedInProgress.store(false);
+        Callback().Call({Error::New(Env(), e.Message()).Value(), Boolean::New(Env(), false)});
+    }
+
+private:
+    float rpm_;
+};
 
 // Runs the blocking tilt_signal() feedback loop on a libuv worker thread so it
 // no longer freezes Node's event loop (telemetry and other socket handlers
@@ -151,6 +178,32 @@ Value speedSignal(const CallbackInfo& info) {
     percentage_to_mv(info[0].As<Number>().FloatValue());
     std::cout << "[operation] speed signal sent: " << info[0].As<Number>().FloatValue() << std::endl;
     return env.Undefined();
+}
+
+// --- rpmSignal(rpm, callback) ---
+// Applies an absolute RPM target using tachometer feedback without blocking
+// Node's event loop.
+Value rpmSignal(const CallbackInfo& info) {
+    Env env = info.Env();
+    if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsFunction()) {
+        TypeError::New(env, "rpmSignal expects a number and a callback").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    float rpm = info[0].As<Number>().FloatValue();
+    bool expected = false;
+    if (!g_speedInProgress.compare_exchange_strong(expected, true)) {
+        return Boolean::New(env, false);
+    }
+    (new SpeedWorker(info[1].As<Function>(), rpm))->Queue();
+    return Boolean::New(env, true);
+}
+
+Value getTiltAngle(const CallbackInfo& info) {
+    return Number::New(info.Env(), get_tilt_angle());
+}
+
+Value getTargetRpm(const CallbackInfo& info) {
+    return Number::New(info.Env(), get_rpm());
 }
 
 // --- syncSet(machinePosition, setIndex, launchSpeed, tiltAngle, yawAngle, rpmOutput, targetLocation, tempo) ---
@@ -293,7 +346,10 @@ Object Init(Env env, Object exports) {
     exports.Set("homingSequence", Function::New(env, homingSequence));
     exports.Set("tiltSignal", Function::New(env, tiltSignal));
     exports.Set("speedSignal", Function::New(env, speedSignal));
+    exports.Set("rpmSignal", Function::New(env, rpmSignal));
     exports.Set("getTachReading", Function::New(env, getTachReading));
+    exports.Set("getTiltAngle", Function::New(env, getTiltAngle));
+    exports.Set("getTargetRpm", Function::New(env, getTargetRpm));
     exports.Set("syncSet", Function::New(env, syncSet));
     exports.Set("setMachine", Function::New(env, setMachine));
     exports.Set("resumeMachine", Function::New(env, resumeMachine));
