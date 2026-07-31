@@ -1073,13 +1073,22 @@ int hopper_pulse(void) {
     }
 
     int attempt;
-    int fed_ball = 0;
+    int stopped_early = 0;
 
     for (attempt = 1; attempt <= HOPPER_PULSE_MAX_ATTEMPTS; attempt++) {
         if (operation_interrupt_pending()) {
             fprintf(stderr, "Hopper pulse aborted before movement.\n");
             operation_clear_interrupt();
             return -1;
+        }
+
+        int ball_present_before = hcsr04_ball_present();
+        if (ball_present_before) {
+            printf("Ball detected before pulse attempt %d/%d; this will be the final pulse.\n",
+                   attempt, HOPPER_PULSE_MAX_ATTEMPTS);
+        } else {
+            fprintf(stderr, "No ball detected before pulse attempt %d/%d.\n",
+                    attempt, HOPPER_PULSE_MAX_ATTEMPTS);
         }
 
         // aplay blocks until the warning finishes, so run it alongside the pulse.
@@ -1103,17 +1112,14 @@ int hopper_pulse(void) {
 
         printf("Hopper pulse complete.\n");
 
-        if (hcsr04_ball_present()) {
-            printf("Ball detected on attempt %d/%d.\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
-            fed_ball = 1;
+        if (ball_present_before) {
+            stopped_early = 1;
             break;
         }
-
-        fprintf(stderr, "No ball detected after pulse attempt %d/%d.\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
     }
 
-    if (!fed_ball) {
-        fprintf(stderr, "Hopper pulse: no ball detected after %d attempts.\n", HOPPER_PULSE_MAX_ATTEMPTS);
+    if (!stopped_early) {
+        fprintf(stderr, "Hopper pulse: no ball detected before any of %d attempts.\n", HOPPER_PULSE_MAX_ATTEMPTS);
     }
 
     return 0;
