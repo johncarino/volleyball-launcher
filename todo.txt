@@ -7,6 +7,8 @@ PRIORITY
 - Change court dimensions to reflect presets
 - Change Hopper Pulse to Single Ball
 - Change Hopper off to Feeder off
+- Highlight the next step
+- Add homing overlay
 
 AESTHETIC
 - Change background colours to be better
