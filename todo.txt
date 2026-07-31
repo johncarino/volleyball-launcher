@@ -5,6 +5,8 @@ PRIORITY
 - Change instructions to be blue
 - Machine position appears after selecting set in center
 - Change court dimensions to reflect presets
+- Change Hopper Pulse to Single Ball
+- Change Hopper off to Feeder off
 
 AESTHETIC
 - Change background colours to be better
