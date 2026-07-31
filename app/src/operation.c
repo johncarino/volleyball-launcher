@@ -49,6 +49,7 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_START_DELAY_US 1000
 #define HOPPER_PULSE_END_DELAY_US 500
 #define HOPPER_PULSE_ACCEL_STEPS 400
+#define HOPPER_PULSE_MAX_ATTEMPTS 3 // How many tries when no ball is detected after a pulse
 #define HOPPER_CONTINUOUS_DELAY_US 500
 #define HOPPER_RESET_INTERVAL_PULSES 4
 #define HOPPER_SENSOR_RUN_ON_US 1000000
@@ -1071,7 +1072,6 @@ int hopper_pulse(void) {
         return 0;
     }
 
-    // aplay blocks until the warning finishes, so run it alongside the pulse.
     int attempt;
     int fed_ball = 0;
 
