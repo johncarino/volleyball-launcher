@@ -536,7 +536,7 @@ void operation_cleanup() {
 
     hopper_stop();
 
-    ball_sensor_cleanup();
+    hcsr04_cleanup();
     tach_cleanup();
     mpu6050_close();
     mcp4725_set_raw(&dac1, 0);
@@ -1103,7 +1103,7 @@ int hopper_pulse(void) {
 
         printf("Hopper pulse complete.\n");
 
-        if (ball_present()) {
+        if (hcsr04_ball_present()) {
             fed_ball = 1;
             break;
         }
