@@ -13,7 +13,7 @@
 #define HCSR04_ECHO_TIMEOUT_US  30000U
 #define HCSR04_CM_PER_US_ROUNDTRIP 0.01715f /* 0.0343 / 2 */
 #define HCSR04_TRIG_PULSE_US    10U
-#define BALL_PRESENT_MAX_DISTANCE_CM 5.0f   /* ultrasonic sensing distance in cm*/
+#define BALL_PRESENT_MAX_DISTANCE_CM 12.0f   /* ultrasonic sensing distance in cm*/
 
 static struct gpiod_chip *chip;
 static struct gpiod_line_request *trig_req;
