@@ -89,9 +89,12 @@ const char *operation_feedback_fault_message(void) {
 
 #define LAUNCH_BEEP_COUNT 3
 #define LAUNCH_BEEP_FREQUENCY_HZ 880
-#define LAUNCH_BEEP_DURATION_MS 600
+// Three 700 ms tones separated by two 200 ms gaps finish exactly 2.5 seconds
+// after hopper motion begins.
+#define LAUNCH_BEEP_DURATION_MS 700
 #define LAUNCH_BEEP_GAP_MS 200
 #define LAUNCH_BEEP_SAMPLE_RATE 48000
+#define LAUNCH_BEEP_AMPLITUDE 30000.0
 
 typedef struct {
     char riff[4];
@@ -158,7 +161,9 @@ static int play_launch_warning(void) {
         if (position < beep_frames) {
             double phase = 2.0 * M_PI * LAUNCH_BEEP_FREQUENCY_HZ *
                 position / LAUNCH_BEEP_SAMPLE_RATE;
-            sample = (int16_t)(sin(phase) * 8192.0);
+            // Near-full-scale PCM makes the warning substantially louder while
+            // leaving a little headroom to avoid digital clipping.
+            sample = (int16_t)(sin(phase) * LAUNCH_BEEP_AMPLITUDE);
         }
 
         write_failed = fwrite(&sample, sizeof(sample), 1, audio) != 1;
