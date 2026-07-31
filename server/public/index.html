@@ -1016,11 +1016,14 @@
             </div>
           </div>
           <div class="section">
-            <div class="section-label">Set Slots</div>
+            <div class="section-heading-row">
+              <div class="section-label">Set Slots</div>
+              <label class="dev-mode-toggle${singleShotDevMode ? ' active' : ''}" title="Fine-tune the selected set">
+                <input type="checkbox" ${singleShotDevMode ? 'checked' : ''} onchange="toggleSingleShotDevMode(this.checked)">
+                <span>Dev</span>
+              </label>
+            </div>
             <div class="save-slots">${slotsHTML(true, 'single_shot')}</div>
-          </div>
-          <div class="section">
-            <label class="dev-mode-toggle"><span><strong>Dev mode</strong><small>Fine-tune the selected set</small></span><input type="checkbox" ${singleShotDevMode ? 'checked' : ''} onchange="toggleSingleShotDevMode(this.checked)"></label>
           </div>
           ${singleShotDevMode ? `
           <div class="section" id="single-shot-dev-controls">
