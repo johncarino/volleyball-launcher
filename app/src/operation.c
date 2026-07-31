@@ -89,12 +89,12 @@ const char *operation_feedback_fault_message(void) {
 
 #define LAUNCH_BEEP_COUNT 3
 #define LAUNCH_BEEP_FREQUENCY_HZ 880
-// Three 700 ms tones separated by two 200 ms gaps finish exactly 2.5 seconds
-// after hopper motion begins.
+// Three 700 ms tones separated by two 200 ms gaps span exactly 2.5 seconds.
 #define LAUNCH_BEEP_DURATION_MS 700
 #define LAUNCH_BEEP_GAP_MS 200
 #define LAUNCH_BEEP_SAMPLE_RATE 48000
 #define LAUNCH_BEEP_AMPLITUDE 30000.0
+#define LAUNCH_BEEP_PREROLL_MS 1000
 
 typedef struct {
     char riff[4];
@@ -1075,6 +1075,10 @@ int hopper_pulse(void) {
         pthread_create(&warning_thread, NULL, play_launch_warning_thread, NULL) == 0;
     if (!warning_thread_started) {
         fprintf(stderr, "Launch warning: unable to start audio thread; continuing without beeps\n");
+    } else {
+        // The warning lasts 2.5 seconds. Start hopper motion 1 second into it
+        // so the final beep ends 1.5 seconds after the pulse begins.
+        usleep(LAUNCH_BEEP_PREROLL_MS * 1000);
     }
 
     if (operation_interrupt_pending()) {
