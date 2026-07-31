@@ -23,4 +23,12 @@ float hcsr04_get_distance_cm(void);
 /* Convenience check: true if something is within ball-detection range. */
 bool hcsr04_ball_present(void);
 
+/*
+ * Debounced version of hcsr04_ball_present(): takes several samples with
+ * a short delay between them and only reports true if every sample agrees
+ * a ball is present. Use this instead of hcsr04_ball_present() for any
+ * decision that changes control flow (e.g. whether to keep pulsing).
+ */
+bool hcsr04_ball_present_debounced(void);
+
 #endif /* HCSR04_H */

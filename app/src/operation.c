@@ -1082,7 +1082,9 @@ int hopper_pulse(void) {
             return -1;
         }
 
-        int ball_present_before = hcsr04_ball_present();
+        int ball_present_before = hcsr04_ball_present_debounced();
+        float d = hcsr04_get_distance_cm();
+        fprintf(stderr, "  distance: %.2f cm\n", d);
         if (ball_present_before) {
             printf("Ball detected before pulse attempt %d/%d; this will be the final pulse.\n",
                    attempt, HOPPER_PULSE_MAX_ATTEMPTS);

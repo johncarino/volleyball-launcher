@@ -13,7 +13,9 @@
 #define HCSR04_ECHO_TIMEOUT_US  30000U
 #define HCSR04_CM_PER_US_ROUNDTRIP 0.01715f /* 0.0343 / 2 */
 #define HCSR04_TRIG_PULSE_US    10U
-#define BALL_PRESENT_MAX_DISTANCE_CM 12.0f   /* ultrasonic sensing distance in cm*/
+#define BALL_PRESENT_MAX_DISTANCE_CM 8.0f   /* ultrasonic sensing distance in cm*/
+#define BALL_PRESENT_SAMPLE_COUNT 3         /* samples required to agree */
+#define BALL_PRESENT_SAMPLE_DELAY_US 15000  /* delay between samples */
 
 static struct gpiod_chip *chip;
 static struct gpiod_line_request *trig_req;
@@ -173,4 +175,17 @@ bool hcsr04_ball_present(void)
         return false;
     }
     return distance_cm <= BALL_PRESENT_MAX_DISTANCE_CM;
+}
+
+bool hcsr04_ball_present_debounced(void)
+{
+    for (int i = 0; i < BALL_PRESENT_SAMPLE_COUNT; i++) {
+        if (!hcsr04_ball_present()) {
+            return false; /* bail on the first disagreeing sample */
+        }
+        if (i + 1 < BALL_PRESENT_SAMPLE_COUNT) {
+            delay_us(BALL_PRESENT_SAMPLE_DELAY_US);
+        }
+    }
+    return true;
 }
