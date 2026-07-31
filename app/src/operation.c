@@ -49,7 +49,7 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_START_DELAY_US 1000
 #define HOPPER_PULSE_END_DELAY_US 500
 #define HOPPER_PULSE_ACCEL_STEPS 400
-#define HOPPER_PULSE_MAX_ATTEMPTS 3 // How many tries when no ball is detected after a pulse
+#define HOPPER_PULSE_MAX_ATTEMPTS 4 // How many tries when no ball is detected after a pulse
 #define HOPPER_CONTINUOUS_DELAY_US 500
 #define HOPPER_RESET_INTERVAL_PULSES 4
 #define HOPPER_SENSOR_RUN_ON_US 1000000
@@ -1073,24 +1073,13 @@ int hopper_pulse(void) {
     }
 
     int attempt;
-    int stopped_early = 0;
+    int fed_ball = 0;
 
     for (attempt = 1; attempt <= HOPPER_PULSE_MAX_ATTEMPTS; attempt++) {
         if (operation_interrupt_pending()) {
             fprintf(stderr, "Hopper pulse aborted before movement.\n");
             operation_clear_interrupt();
             return -1;
-        }
-
-        int ball_present_before = hcsr04_ball_present_debounced();
-        float d = hcsr04_get_distance_cm();
-        fprintf(stderr, "  distance: %.2f cm\n", d);
-        if (ball_present_before) {
-            printf("Ball detected before pulse attempt %d/%d; this will be the final pulse.\n",
-                   attempt, HOPPER_PULSE_MAX_ATTEMPTS);
-        } else {
-            fprintf(stderr, "No ball detected before pulse attempt %d/%d.\n",
-                    attempt, HOPPER_PULSE_MAX_ATTEMPTS);
         }
 
         // aplay blocks until the warning finishes, so run it alongside the pulse.
@@ -1114,14 +1103,19 @@ int hopper_pulse(void) {
 
         printf("Hopper pulse complete.\n");
 
-        if (ball_present_before) {
-            stopped_early = 1;
+        float d = hcsr04_get_distance_cm();
+        fprintf(stderr, "  distance: %.2f cm\n", d);
+        if (hcsr04_ball_present_debounced()) {
+            printf("Ball detected after pulse attempt %d/%d.\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
+            fed_ball = 1;
             break;
         }
+
+        fprintf(stderr, "No ball detected after pulse attempt %d/%d.\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
     }
 
-    if (!stopped_early) {
-        fprintf(stderr, "Hopper pulse: no ball detected before any of %d attempts.\n", HOPPER_PULSE_MAX_ATTEMPTS);
+    if (!fed_ball) {
+        fprintf(stderr, "Hopper pulse: no ball detected after %d attempts.\n", HOPPER_PULSE_MAX_ATTEMPTS);
     }
 
     return 0;
