@@ -1104,6 +1104,7 @@ int hopper_pulse(void) {
         printf("Hopper pulse complete.\n");
 
         if (hcsr04_ball_present()) {
+            printf("Ball detected on attempt %d/%d.\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
             fed_ball = 1;
             break;
         }
