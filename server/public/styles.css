@@ -419,9 +419,13 @@ body {
 .dev-mode-toggle.active { color:var(--blue); border-color:var(--border); background:var(--card-bg); opacity:1; }
 .dev-mode-toggle input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
 .dev-adjust-grid { display:grid; gap:16px; }
-.dev-adjust-grid label { display:grid; grid-template-columns:1fr auto; gap:8px; font-size:13px; color:var(--text-secondary); }
-.dev-adjust-grid label strong { color:var(--text-primary); }
-.dev-adjust-grid input { grid-column:1 / -1; width:100%; }
+.dev-adjust-control { display:grid; gap:8px; }
+.dev-adjust-heading { display:flex; justify-content:space-between; gap:8px; font-size:13px; color:var(--text-secondary); }
+.dev-adjust-heading strong { color:var(--text-primary); }
+.dev-adjust-inputs { display:flex; align-items:center; gap:10px; }
+.dev-adjust-inputs input { flex:1; min-width:0; }
+.dev-adjust-inputs .slider-step-btn { width:28px; height:28px; font-size:12px; }
+.single-shot-pulse-btn { width:100%; margin-top:8px; }
 .controls-disabled { opacity:.5; }
 
 .vert-sliders { display: flex; justify-content: center; }

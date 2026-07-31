@@ -173,7 +173,11 @@
           if (state === 'APPLIED' && isRunning && window._activeMode === 'launch') {
             beginSequenceShot();
           } else if (state === 'APPLIED' && isRunning && window._activeMode === 'single_shot') {
-            beginSingleShotPulse();
+            if (!singleShotDevMode) beginSingleShotPulse();
+          } else if (state === 'APPLIED' && singleShotDevMode && window._activeMode === 'single_shot') {
+            // Dev-mode selection briefly runs the flywheel so set_machine can
+            // settle RPM with feedback, then returns to a stopped/ready state.
+            emitMachine('stopMotors');
           } else if (state === 'FAILED' && isRunning) {
             stopRunSequence();
           }
@@ -289,6 +293,8 @@
         if (panel) panel.classList.toggle('controls-disabled', !data || !machineReady);
         document.querySelectorAll('#single-shot-dev-controls input, #single-shot-dev-controls button')
           .forEach(el => { el.disabled = !data || !machineReady; });
+        const pulse = document.getElementById('single-shot-hopper-pulse');
+        if (pulse) pulse.disabled = !data || !machineReady || !isRunning;
       }
 
       function adjustSingleShotAngle(value) {
@@ -304,7 +310,37 @@
         const label = document.getElementById('ss-rpm-target');
         if (label) label.textContent = val + ' rpm';
         clearTimeout(window._singleShotRpmTimer);
-        window._singleShotRpmTimer = setTimeout(() => emitMachine('setRpm', val), 300);
+        window._singleShotRpmTimer = setTimeout(() => {
+          if (!isRunning) emitMachine('resumeMotors');
+          emitMachine('setRpm', { rpm: val, pauseAfter: !isRunning });
+        }, 300);
+      }
+
+      function stepSingleShotControl(inputId, delta) {
+        const input = document.getElementById(inputId);
+        if (!input || input.disabled) return;
+        const next = Math.min(Number(input.max), Math.max(Number(input.min), Number(input.value) + delta));
+        input.value = String(next);
+        if (inputId === 'ss-angle-input') adjustSingleShotAngle(next);
+        else adjustSingleShotRpm(next);
+      }
+
+      function toggleSingleShotDevMotor(btn) {
+        if (isRunning) {
+          stopRunSequence();
+          refreshSingleShotDevControls();
+          return;
+        }
+        if (!machineReady || !selectedSingleShotData()) {
+          flashSelectSetNeeded();
+          return;
+        }
+        isRunning = true;
+        btn.classList.remove('start');
+        btn.classList.add('stop');
+        btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+        emitMachine('resumeMotors');
+        refreshSingleShotDevControls();
       }
 
       function setHomingButtonState(running, label) {
@@ -1029,8 +1065,22 @@
           <div class="section" id="single-shot-dev-controls">
             <div class="section-label">Set adjustments</div>
             <div class="card dev-adjust-grid">
-              <label>Tilt target <strong id="ss-angle-target">8°</strong><input type="range" min="8" max="85" step="1" value="8" oninput="adjustSingleShotAngle(this.value)"></label>
-              <label>RPM target <strong id="ss-rpm-target">0 rpm</strong><input type="range" min="0" max="3700" step="25" value="0" oninput="adjustSingleShotRpm(this.value)"></label>
+              <div class="dev-adjust-control">
+                <div class="dev-adjust-heading"><span>Tilt target</span><strong id="ss-angle-target">8°</strong></div>
+                <div class="dev-adjust-inputs">
+                  <button type="button" class="slider-step-btn" onclick="stepSingleShotControl('ss-angle-input', -1)" aria-label="Decrease tilt"><i class="ti ti-minus" aria-hidden="true"></i></button>
+                  <input id="ss-angle-input" type="range" min="8" max="85" step="1" value="8" oninput="adjustSingleShotAngle(this.value)">
+                  <button type="button" class="slider-step-btn" onclick="stepSingleShotControl('ss-angle-input', 1)" aria-label="Increase tilt"><i class="ti ti-plus" aria-hidden="true"></i></button>
+                </div>
+              </div>
+              <div class="dev-adjust-control">
+                <div class="dev-adjust-heading"><span>RPM target</span><strong id="ss-rpm-target">0 rpm</strong></div>
+                <div class="dev-adjust-inputs">
+                  <button type="button" class="slider-step-btn" onclick="stepSingleShotControl('ss-rpm-input', -25)" aria-label="Decrease RPM"><i class="ti ti-minus" aria-hidden="true"></i></button>
+                  <input id="ss-rpm-input" type="range" min="0" max="3700" step="25" value="0" oninput="adjustSingleShotRpm(this.value)">
+                  <button type="button" class="slider-step-btn" onclick="stepSingleShotControl('ss-rpm-input', 25)" aria-label="Increase RPM"><i class="ti ti-plus" aria-hidden="true"></i></button>
+                </div>
+              </div>
             </div>
             <div class="section-label" style="margin-top:12px">Current feedback</div>
             <div class="card">
@@ -1041,7 +1091,9 @@
           <div class="section">
             <div class="section-label">Launch</div>
             ${singleShotDevMode
-              ? `<button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button><div class="gesture-hint">Start pulses the hopper once and keeps the flywheel running. Stop turns the motor off.</div>`
+              ? `<button class="op-btn start" id="launch-main-btn" onclick="toggleSingleShotDevMotor(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start Motor</button>
+                 <button class="hopper-btn single-shot-pulse-btn" id="single-shot-hopper-pulse" onclick="pulseHopper(this)" disabled>Hopper Pulse</button>
+                 <div class="gesture-hint">Start and Stop control the flywheel. Hopper Pulse feeds one ball while it is running.</div>`
               : `<button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button><div class="gesture-hint">Confirm arms the camera: open your right hand to start, open your left hand to stop.</div>`}
           </div>
           <div class="section" id="gesture-preview-section" style="display:none">
@@ -1497,7 +1549,7 @@
         const btn = document.getElementById('launch-main-btn');
         if (btn) {
           btn.classList.remove('stop'); btn.classList.add('start');
-          btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+          btn.innerHTML = `<i class="ti ti-player-play" aria-hidden="true"></i> ${singleShotDevMode && window._activeMode === 'single_shot' ? 'Start Motor' : 'Start'}`;
         }
       }
 
@@ -1854,13 +1906,13 @@
         if (tilt && Number.isFinite(Number(data.tilt))) tilt.textContent = Number(data.tilt).toFixed(1) + '°';
         if (singleShotDevMode && Number.isFinite(Number(data.targetRpm))) {
           const target = document.getElementById('ss-rpm-target');
-          const rpmInput = document.querySelector('#single-shot-dev-controls input[max="3700"]');
+          const rpmInput = document.getElementById('ss-rpm-input');
           if (target && document.activeElement !== rpmInput) {
             const targetRpm = Math.round(Number(data.targetRpm));
             target.textContent = targetRpm + ' rpm';
             if (rpmInput) rpmInput.value = String(targetRpm);
           }
-          const angleInput = document.querySelector('#single-shot-dev-controls input[max="85"]');
+          const angleInput = document.getElementById('ss-angle-input');
           const angleTarget = document.getElementById('ss-angle-target');
           if (angleInput && angleTarget && document.activeElement !== angleInput && Number.isFinite(Number(data.tilt))) {
             angleInput.value = String(Math.round(Number(data.tilt)));

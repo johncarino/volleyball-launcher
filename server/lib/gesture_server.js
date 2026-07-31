@@ -536,13 +536,16 @@ function handleCommand(socket) {
 
 	socket.on('setRpm', function(value) {
 		if (!ensureOperationReady(socket, 'setRpm')) return;
-		var rpm = parseFloat(value);
+		var payload = value && typeof value === 'object' ? value : { rpm: value, pauseAfter: false };
+		var rpm = parseFloat(payload.rpm);
+		var pauseAfter = payload.pauseAfter === true;
 		if (!Number.isFinite(rpm) || rpm < 0 || rpm > 3700) {
 			socket.emit('machine-error', 'RPM must be between 0 and 3700.');
 			return;
 		}
 		socket.emit('machine-ready', false);
 		var accepted = operation.rpmSignal(rpm, function(err) {
+			if (pauseAfter) operation.pauseMachine();
 			socket.emit('machine-ready', true);
 			if (err) socket.emit('machine-error', err.message || 'Failed to adjust RPM.');
 		});
