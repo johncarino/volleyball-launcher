@@ -49,6 +49,7 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_START_DELAY_US 1000
 #define HOPPER_PULSE_END_DELAY_US 500
 #define HOPPER_PULSE_ACCEL_STEPS 400
+#define HOPPER_PULSE_MAX_ATTEMPTS 4 // How many tries when no ball is detected after a pulse
 #define HOPPER_CONTINUOUS_DELAY_US 500
 #define HOPPER_RESET_INTERVAL_PULSES 4
 #define HOPPER_SENSOR_RUN_ON_US 1000000
@@ -520,6 +521,12 @@ void operation_init() {
         return;
     }
 
+    fprintf(stderr, "[operation] initializing ball presence sensor (HC-SR04)\n");
+    if (hcsr04_init() != 0) {
+        fprintf(stderr, "Failed to initialize HC-SR04 ball sensor\n");
+        return;
+    }
+
     operation_initialized = 1;
     
     //homing_sequence();
@@ -535,6 +542,7 @@ void operation_cleanup() {
 
     hopper_stop();
 
+    hcsr04_cleanup();
     tach_cleanup();
     mpu6050_close();
     mcp4725_set_raw(&dac1, 0);
