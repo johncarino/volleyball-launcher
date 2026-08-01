@@ -6,6 +6,7 @@ PRIORITY
 - Change court dimensions to reflect presets
 - Highlight the next step
 - Add homing overlay with prompt
+- Fix invalidated sets in UI
 
 AESTHETIC
 - Change background colours to be better
