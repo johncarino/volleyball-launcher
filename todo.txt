@@ -9,6 +9,8 @@ PRIORITY
 - Arc shouldnt reset after modals
 - Fix scrolling
 - Fix center image inverted
+- Fix being able to change the machine_control
+- Change target zone names based off side
 
 AESTHETIC
 - Change background colours to be better
@@ -20,6 +22,7 @@ CONSIDERATION
 - 2nd stop button?
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Shot variance variable
+- Change tabs to sync?
 
 CLEANUP
 - Remove any unused code
