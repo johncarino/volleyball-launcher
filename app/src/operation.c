@@ -1063,15 +1063,6 @@ int hopper_pulse(void) {
         hopper_stop();
     }
 
-    hopper_pulse_count++;
-    if (hopper_pulse_count >= HOPPER_RESET_INTERVAL_PULSES) {
-        hopper_pulse_count = 0;
-        printf("Hopper pulse #%d: running reset instead of pulse.\n",
-               HOPPER_RESET_INTERVAL_PULSES);
-        hopper_reset();
-        return 0;
-    }
-
     int attempt;
     int fed_ball = 0;
 
