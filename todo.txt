@@ -1,10 +1,8 @@
 PRIORITY
 - Fill in alignment modals
 - Add QR code button
-- Fix icons on linux
 - Machine position appears after selecting set in center
 - Change court dimensions to reflect presets
-- Highlight the next step
 - Add homing overlay with prompt
 - Fix invalidated sets in UI
 
@@ -12,7 +10,9 @@ AESTHETIC
 - Change background colours to be better
 
 CONSIDERATION
-- Confirm button
+- Ready icon?
+- Connected components?
+- Shots until re-home?
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Shot variance variable
 
