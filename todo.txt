@@ -6,6 +6,9 @@ PRIORITY
 - Add homing overlay with prompt
 - Fix invalidated sets in UI
 - Fix hidden plus minux buttons in manual mode
+- Arc shouldnt reset after modals
+- Fix scrolling
+- Fix center image inverted
 
 AESTHETIC
 - Change background colours to be better
