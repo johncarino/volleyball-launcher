@@ -8,7 +8,7 @@ PRIORITY
 - Change Hopper Pulse to Single Ball
 - Change Hopper off to Feeder off
 - Highlight the next step
-- Add homing overlay
+- Add homing overlay with prompt
 
 AESTHETIC
 - Change background colours to be better
