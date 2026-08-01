@@ -13,6 +13,7 @@ CONSIDERATION
 - Ready icon?
 - Connected components?
 - Shots until re-home?
+- 2nd stop button?
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Shot variance variable
 
