@@ -1060,51 +1060,84 @@ int hopper_pulse(void) {
         hopper_stop();
     }
 
-    hopper_pulse_count++;
-    if (hopper_pulse_count >= HOPPER_RESET_INTERVAL_PULSES) {
-        hopper_pulse_count = 0;
-        printf("Hopper pulse #%d: running reset instead of pulse.\n",
-               HOPPER_RESET_INTERVAL_PULSES);
-        hopper_reset();
-        return 0;
-    }
+    int attempt;
+    int fed_ball = 0;
 
-    // aplay blocks until the warning finishes, so run it alongside the pulse.
-    pthread_t warning_thread;
-    int warning_thread_started =
-        pthread_create(&warning_thread, NULL, play_launch_warning_thread, NULL) == 0;
-    if (!warning_thread_started) {
-        fprintf(stderr, "Launch warning: unable to start audio thread; continuing without beeps\n");
-    } else {
-        // The warning lasts 2.5 seconds. Start hopper motion 1 second into it
-        // so the final beep ends 1.5 seconds after the pulse begins.
-        usleep(LAUNCH_BEEP_PREROLL_MS * 1000);
-    }
+    for (attempt = 1; attempt <= HOPPER_PULSE_MAX_ATTEMPTS; attempt++) {
+        if (operation_interrupt_pending()) {
+            fprintf(stderr, "Hopper pulse aborted before movement.\n");
+            operation_clear_interrupt();
+            return -1;
+        }
 
-    if (operation_interrupt_pending()) {
-        fprintf(stderr, "Hopper pulse aborted before movement.\n");
-        operation_clear_interrupt();
+        hopper_pulse_count++;
+        if (hopper_pulse_count >= HOPPER_RESET_INTERVAL_PULSES) {
+            hopper_pulse_count = 0;
+            printf("Hopper pulse #%d: running reset instead of pulse.\n",
+                   HOPPER_RESET_INTERVAL_PULSES);
+
+            // aplay blocks until the warning finishes, so run it alongside the reset.
+            pthread_t warning_thread;
+            int warning_thread_started =
+                pthread_create(&warning_thread, NULL, play_launch_warning_thread, NULL) == 0;
+            if (!warning_thread_started) {
+                fprintf(stderr, "Launch warning: unable to start audio thread; continuing without beeps\n");
+            }
+
+            hopper_reset();
+
+            if (warning_thread_started) {
+                pthread_join(warning_thread, NULL);
+            }
+
+            float d = hcsr04_get_distance_cm();
+            fprintf(stderr, "  distance: %.2f cm\n", d);
+            if (hcsr04_ball_present_debounced()) {
+                printf("Ball detected after reset (attempt %d/%d).\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
+                fed_ball = 1;
+                break;
+            }
+
+            fprintf(stderr, "No ball detected after reset (attempt %d/%d).\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
+            continue;
+        }
+
+        // aplay blocks until the warning finishes, so run it alongside the pulse.
+        pthread_t warning_thread;
+        int warning_thread_started =
+            pthread_create(&warning_thread, NULL, play_launch_warning_thread, NULL) == 0;
+        if (!warning_thread_started) {
+            fprintf(stderr, "Launch warning: unable to start audio thread; continuing without beeps\n");
+        }
+
+        printf("Pulsing hopper (attempt %d/%d) while sounding %d warning beeps...\n",
+               attempt, HOPPER_PULSE_MAX_ATTEMPTS, LAUNCH_BEEP_COUNT);
+
+        tb6600_enable(&motor, 1);
+        tb6600_step_accel(&motor, HOPPER_PULSE_STEPS, HOPPER_PULSE_START_DELAY_US, HOPPER_PULSE_END_DELAY_US, HOPPER_PULSE_ACCEL_STEPS);
+        tb6600_enable(&motor, 0);
+
         if (warning_thread_started) {
             pthread_join(warning_thread, NULL);
         }
-        return -1;
+
+        printf("Hopper pulse complete.\n");
+
+        float d = hcsr04_get_distance_cm();
+        fprintf(stderr, "  distance: %.2f cm\n", d);
+        if (hcsr04_ball_present_debounced()) {
+            printf("Ball detected after pulse attempt %d/%d.\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
+            fed_ball = 1;
+            break;
+        }
+
+        fprintf(stderr, "No ball detected after pulse attempt %d/%d.\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
     }
 
-    printf("Pulsing hopper while sounding %d warning beeps...\n",
-           LAUNCH_BEEP_COUNT);
-
-    
-    tb6600_enable(&motor, 1);
-    tb6600_step_accel(&motor, HOPPER_PULSE_STEPS, HOPPER_PULSE_START_DELAY_US, HOPPER_PULSE_END_DELAY_US, HOPPER_PULSE_ACCEL_STEPS);
-    tb6600_enable(&motor, 0);
-
-    if (warning_thread_started) {
-        pthread_join(warning_thread, NULL);
+    if (!fed_ball) {
+        fprintf(stderr, "Hopper pulse: no ball detected after %d attempts.\n", HOPPER_PULSE_MAX_ATTEMPTS);
     }
-    
-    printf("Hopper pulse complete.\n");
 
-    //speed_signal(curr_rpm);
     return 0;
 }
 
