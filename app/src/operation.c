@@ -102,8 +102,8 @@ const char *operation_feedback_fault_message(void) {
 /* libgpiod v2 API */
 #define BUZZER_GPIO_CHIP_PATH "/dev/gpiochip1"
 #define BUZZER_GPIO_OFFSET 33
-#define BUZZER_FREQUENCY_HZ 2000
-#define BUZZER_HALF_PERIOD_US (500000 / BUZZER_FREQUENCY_HZ) // 250 us at 2 kHz
+#define BUZZER_FREQUENCY_HZ 2500
+#define BUZZER_HALF_PERIOD_US (500000 / BUZZER_FREQUENCY_HZ) // 200 us at 2.5 kHz
 
 static struct gpiod_chip *buzzer_chip = NULL;
 static struct gpiod_line_request *buzzer_request = NULL;
