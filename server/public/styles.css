@@ -582,7 +582,7 @@ input[type=range] { accent-color: var(--blue); }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
 .legend-text-select {
   font-weight: 600 !important;
-  color: var(--text-primary) !important;
+  color: var(--blue) !important;
   opacity: 0.85;
 }
 .legend-attention,

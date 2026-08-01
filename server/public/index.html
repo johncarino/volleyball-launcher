@@ -286,7 +286,7 @@
         }
         hopperOn = false;
         if (hopper) {
-          hopper.textContent = 'Hopper Off';
+          hopper.textContent = 'Feeder Off';
           hopper.classList.remove('active');
         }
         clearInterval(window._telem);
@@ -345,7 +345,7 @@
         }
         hopperOn = !hopperOn;
         if (btn) {
-          btn.textContent = hopperOn ? 'Hopper On' : 'Hopper Off';
+          btn.textContent = hopperOn ? 'Feeder On' : 'Feeder Off';
           btn.classList.toggle('active', hopperOn);
         }
         onHopperControl(hopperOn ? 'on' : 'off');
@@ -900,8 +900,8 @@
           <div class="section">
             <div class="section-label">Hopper</div>
             <div class="hopper-controls">
-              <button class="hopper-btn" id="hopper-toggle-btn" onclick="toggleHopper()">Hopper Off</button>
-              <button class="hopper-btn" id="hopper-pulse-btn" onclick="pulseHopper(this)">Hopper Pulse</button>
+              <button class="hopper-btn" id="hopper-toggle-btn" onclick="toggleHopper()">Feeder Off</button>
+              <button class="hopper-btn" id="hopper-pulse-btn" onclick="pulseHopper(this)">Single Ball</button>
             </div>
           </div>
           <div class="section">

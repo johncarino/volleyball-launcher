@@ -2,11 +2,8 @@ PRIORITY
 - Fill in alignment modals
 - Add QR code button
 - Fix icons on linux
-- Change instructions to be blue
 - Machine position appears after selecting set in center
 - Change court dimensions to reflect presets
-- Change Hopper Pulse to Single Ball
-- Change Hopper off to Feeder off
 - Highlight the next step
 - Add homing overlay with prompt
 
