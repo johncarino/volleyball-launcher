@@ -3,10 +3,10 @@ PRIORITY
 - Add QR code button
 - Machine position appears after selecting set in center
 - Add homing overlay with prompt
+    - Add "Busy" overlay instead of "Ready" icon
+    - User confirms homing machine before automatic homing
 - Fix scrolling on linux
 - Fix being able to change the machine (backend issue)
-- Change target zone names based off side
-- Make court graphic smaller
 
 AESTHETIC
 - Change background colours to be better
@@ -19,6 +19,7 @@ CONSIDERATION
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Shot variance variable
 - Change tabs to sync?
+- Change target zone names based off side
 
 CLEANUP
 - Remove any unused code

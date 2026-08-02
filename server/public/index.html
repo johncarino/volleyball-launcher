@@ -58,8 +58,32 @@
       </div>
     </div>
 
+    <div class="modal-overlay" id="qr-modal" onclick="handleQrOverlayClick(event)">
+      <div class="qr-modal-sheet">
+        <button class="modal-close qr-modal-close" onclick="closeQrModal()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+        <ol class="qr-modal-instructions">
+          <li>Connect to the "DimeTime" Wi-Fi network on your mobile device</li>
+          <li>Scan the QR code or go to <span class="qr-modal-url">http://192.168.8.1:8088</span></li>
+        </ol>
+        <img src="images/qr.png" alt="QR code" class="qr-modal-img">
+      </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
+      
+      function isLinuxDevice() {
+        const ua = navigator.userAgent || '';
+        // Android reports "Linux" in its UA too, so it must be excluded explicitly.
+        return /Linux/.test(ua) && !/Android/.test(ua);
+      }
+      const SHOW_QR_ON_START = isLinuxDevice(); // set to true/false to force this on any device
+      window.addEventListener('load', () => {
+        if (SHOW_QR_ON_START) {
+          requestAnimationFrame(() => requestAnimationFrame(openQrModal));
+        }
+      });
+
       // Persistent state
       let randomOn = false;
       let repeatState = 0;
@@ -134,6 +158,18 @@
 
       function handleAlignOverlayClick(e) {
         if (e.target === document.getElementById('align-modal')) closeAlignModal();
+      }
+
+      function openQrModal() {
+        document.getElementById('qr-modal').classList.add('open');
+      }
+
+      function closeQrModal() {
+        document.getElementById('qr-modal').classList.remove('open');
+      }
+
+      function handleQrOverlayClick(e) {
+        if (e.target === document.getElementById('qr-modal')) closeQrModal();
       }
 
       function zoneSide(zoneId) {
