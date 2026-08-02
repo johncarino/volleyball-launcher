@@ -52,8 +52,14 @@
         </div>
         <div class="modal-body">
           <div class="align-modal-img-row" id="align-modal-img-row">
-            <img id="align-modal-img2" src="" alt="Net alignment reference" class="align-modal-img">
-            <img id="align-modal-img" src="" alt="Line alignment reference" class="align-modal-img">
+            <div class="align-modal-img-col">
+              <span id="align-modal-label2" class="align-modal-img-label"></span>
+              <img id="align-modal-img2" src="" alt="Net alignment reference" class="align-modal-img">
+            </div>
+            <div class="align-modal-img-col">
+              <span id="align-modal-label" class="align-modal-img-label"></span>
+              <img id="align-modal-img" src="" alt="Line alignment reference" class="align-modal-img">
+            </div>
           </div>
           <p id="align-modal-text" class="align-modal-text"></p>
         </div>
@@ -127,12 +133,12 @@
 
       const alignImages = {
         L: { line: 'images/linealignleft.jpg', net: 'images/netalignleft.jpg' },
-        C: { line: 'images/front.png', net: null },
+        C: { line: 'images/centerright.jpg', net: 'images/centerleft.jpg' },
         R: { line: 'images/linealignright.jpg', net: 'images/netalignright.jpg' },
       };
       const alignInstructions = {
         L: 'Place the machine on the left side of the court, near the net. Align the back wheels to the edge line of the court.',
-        C: 'Placeholder instructions for aligning the machine at the CENTER position.',
+        C: 'Place the machine at the center of the court near the net, facing the desired direction.',
         R: 'Place the machine on the right side of the court, near the net. Align the back wheels to the edge line of the court.',
       };
 
@@ -152,19 +158,26 @@
       function openAlignModal(id) {
         const img = document.getElementById('align-modal-img');
         const img2 = document.getElementById('align-modal-img2');
+        const label = document.getElementById('align-modal-label');
+        const label2 = document.getElementById('align-modal-label2');
         const text = document.getElementById('align-modal-text');
         const title = document.getElementById('align-modal-title');
         const images = alignImages[id] || {};
-        if (img) img.src = images.line || '';
+        const altText = id === 'C' ? 'Center alignment reference' : 'Line alignment reference';
+        const altText2 = id === 'C' ? 'Center alignment reference' : 'Net alignment reference';
+        if (img) { img.src = images.line || ''; img.alt = altText; }
         if (img2) {
           if (images.net) {
             img2.src = images.net;
+            img2.alt = altText2;
             img2.style.display = '';
           } else {
             img2.removeAttribute('src');
             img2.style.display = 'none';
           }
         }
+        if (label) label.textContent = id === 'C' ? 'Facing RIGHT' : '';
+        if (label2) label2.textContent = id === 'C' ? 'Facing LEFT' : '';
         if (text) text.textContent = alignInstructions[id] || '';
         if (title) title.textContent = `${machineNames[id] || id} machine alignment`;
         document.getElementById('align-modal').classList.add('open');

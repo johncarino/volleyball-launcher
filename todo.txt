@@ -1,7 +1,5 @@
 PRIORITY
-- Fill in alignment modals
 - Add QR code button
-- Machine position appears after selecting set in center
 - Add homing overlay with prompt
     - Add "Busy" overlay instead of "Ready" icon
     - User confirms homing machine before automatic homing
@@ -20,6 +18,7 @@ CONSIDERATION
 - Shot variance variable
 - Change tabs to sync?
 - Change target zone names based off side
+- Machine position appears after selecting set in center
 
 CLEANUP
 - Remove any unused code
