@@ -58,6 +58,8 @@ volatile int launcher_running = 0;
 #define HOMING_FLYWHEEL_RPM 300.0f
 #define HOPPER_RESET_TIMEOUT_SEC 30
 #define HOPPER_RESET_POLL_DELAY_US 10000
+#define HOPPER_PRELAUNCH_DELAY_US 5000000 // settle time before each push so players can get into position
+#define HOPPER_PRELAUNCH_SLICE_US 50000   // poll interval so an interrupt aborts the wait promptly
 
 volatile float tilt_angle_w = 0;
 
@@ -66,6 +68,7 @@ static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 static pthread_t hopper_thread;
 static volatile int hopper_thread_created = 0;
 static unsigned int hopper_pulse_count = 0;
+static volatile unsigned int component_status_mask = 0;
 static volatile int feedback_sensor_fault = 0;
 static int speed_cache_valid = 0;
 static float speed_cache_rpm = 0.0f;
@@ -479,18 +482,21 @@ void operation_init() {
     curr_speed = 0;
     curr_rpm = 0;
     speed_cache_valid = 0;
+    component_status_mask = 0;
 
     fprintf(stderr, "[operation] initializing tachometer\n");
     if (tach_init() != 0) {
         fprintf(stderr, "Failed to initialize tachometer\n");
         return;
     }
+    component_status_mask |= COMPONENT_TACHOMETER;
 
     fprintf(stderr, "[operation] initializing MPU6050 IMU\n");
     if (mpu6050_init(NULL) != 0) {
         fprintf(stderr, "Failed to initialize MPU6050 — is I2C enabled?\n");
         return;
     }
+    component_status_mask |= COMPONENT_IMU;
     double initial_tilt_angle = 0.0;
     if (read_tilt_feedback_angle(&initial_tilt_angle) == 0) {
         curr_tilt_angle = (float)initial_tilt_angle;
@@ -501,12 +507,14 @@ void operation_init() {
         fprintf(stderr, "Failed to initialize BTS/BTN7960 HAL. Are you running as root?\n");
         return;
     }
+    component_status_mask |= COMPONENT_TILT_DRIVER;
 
     fprintf(stderr, "[operation] initializing TB6600 motor driver\n");
     if (tb6600_init(&motor, 1) < 0) {
         fprintf(stderr, "Failed to initialize TB6600\n");
         return;
     }
+    component_status_mask |= COMPONENT_HOPPER_STEPPER;
     tb6600_set_direction(&motor, 0);
     tb6600_enable(&motor, 1);
 
@@ -520,12 +528,14 @@ void operation_init() {
         fprintf(stderr, "Failed to write MCP4725 EEPROM power-on default\n");
         return;
     }
+    component_status_mask |= COMPONENT_FLYWHEEL_DAC;
 
     fprintf(stderr, "[operation] initializing ball presence sensor (HC-SR04)\n");
     if (hcsr04_init() != 0) {
         fprintf(stderr, "Failed to initialize HC-SR04 ball sensor\n");
         return;
     }
+    component_status_mask |= COMPONENT_BALL_SENSOR;
 
     operation_initialized = 1;
     
@@ -1121,6 +1131,25 @@ int hopper_pulse(void) {
         printf("Pulsing hopper (attempt %d/%d) while sounding %d warning beeps...\n",
                attempt, HOPPER_PULSE_MAX_ATTEMPTS, LAUNCH_BEEP_COUNT);
 
+        // Only start the settle countdown once a ball is actually seated, so an
+        // empty/misfed hopper doesn't burn the delay before retrying.
+        if (hcsr04_ball_present_debounced()) {
+            uint32_t waited_us = 0;
+            while (waited_us < HOPPER_PRELAUNCH_DELAY_US) {
+                if (operation_interrupt_pending()) {
+                    fprintf(stderr, "Hopper pulse aborted during pre-launch delay.\n");
+                    operation_clear_interrupt();
+                    if (warning_thread_started) {
+                        pthread_join(warning_thread, NULL);
+                    }
+                    tb6600_enable(&motor, 0);
+                    return -1;
+                }
+                usleep(HOPPER_PRELAUNCH_SLICE_US);
+                waited_us += HOPPER_PRELAUNCH_SLICE_US;
+            }
+        }
+
         tb6600_enable(&motor, 1);
         tb6600_step_accel(&motor, HOPPER_PULSE_STEPS, HOPPER_PULSE_START_DELAY_US, HOPPER_PULSE_END_DELAY_US, HOPPER_PULSE_ACCEL_STEPS);
         tb6600_enable(&motor, 0);
@@ -1247,6 +1276,14 @@ int get_speed() {
 
 int get_rpm() {
     return curr_rpm;
+}
+
+int get_hopper_pulse_count() {
+    return (int)hopper_pulse_count;
+}
+
+int operation_component_status() {
+    return (int)component_status_mask;
 }
 
 void pause_machine() {

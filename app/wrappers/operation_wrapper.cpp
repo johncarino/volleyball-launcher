@@ -261,6 +261,20 @@ Value getTachReading(const CallbackInfo& info) {
     return Number::New(env, rpm);
 }
 
+// --- getHopperPulseCount() ---
+// Authoritative hopper pulse counter used by the UI's "shots until re-home".
+Value getHopperPulseCount(const CallbackInfo& info) {
+    Env env = info.Env();
+    return Number::New(env, get_hopper_pulse_count());
+}
+
+// --- getComponentStatus() ---
+// Bitmask of which HAL components initialized successfully (COMPONENT_* bits).
+Value getComponentStatus(const CallbackInfo& info) {
+    Env env = info.Env();
+    return Number::New(env, operation_component_status());
+}
+
 // --- requestInterrupt() ---
 // Raises the software interrupt (emergency abort), asking any in-progress
 // blocking operation (tilt/speed feedback loops, hopper stepping, etc.)
@@ -294,6 +308,8 @@ Object Init(Env env, Object exports) {
     exports.Set("tiltSignal", Function::New(env, tiltSignal));
     exports.Set("speedSignal", Function::New(env, speedSignal));
     exports.Set("getTachReading", Function::New(env, getTachReading));
+    exports.Set("getHopperPulseCount", Function::New(env, getHopperPulseCount));
+    exports.Set("getComponentStatus", Function::New(env, getComponentStatus));
     exports.Set("syncSet", Function::New(env, syncSet));
     exports.Set("setMachine", Function::New(env, setMachine));
     exports.Set("resumeMachine", Function::New(env, resumeMachine));

@@ -56,6 +56,20 @@ float get_yaw_angle();
 int get_speed();
 int get_rpm();
 
+/* Number of hopper pulses since the last re-home (mirrors the counter that
+ * triggers a reset every HOPPER_RESET_INTERVAL_PULSES). */
+int get_hopper_pulse_count();
+
+/* Per-HAL-component init results as a bitmask (see COMPONENT_* below); a set
+ * bit means that component's *_init() succeeded during operation_init(). */
+#define COMPONENT_TACHOMETER     (1u << 0)
+#define COMPONENT_IMU            (1u << 1)
+#define COMPONENT_TILT_DRIVER    (1u << 2)
+#define COMPONENT_HOPPER_STEPPER (1u << 3)
+#define COMPONENT_FLYWHEEL_DAC   (1u << 4)
+#define COMPONENT_BALL_SENSOR    (1u << 5)
+int operation_component_status();
+
 void machine_operating();
 void resume_machine();
 void pause_machine();

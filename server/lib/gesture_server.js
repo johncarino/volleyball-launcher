@@ -6,18 +6,15 @@
  *   1. Control:  browser --socket.io--> here.  On "start" we spawn the MediaPipe
  *      recogniser (m2demo); on "stop" we kill it.
  *   2. Data:     m2demo --UDP 127.0.0.1:12345--> here.  Each datagram is a
- *      per-hand gesture summary line which we parse and broadcast to every
- *      browser as a "gesture-update" event shaped { left, right }, one entry
- *      per hand (or a NONE placeholder if that hand isn't visible). There is
- *      no gesture->set mapping here; the browser itself watches for an open
- *      right hand (start) / open left hand (stop) to drive the Single Shot /
- *      Sequence run (see armLaunchGesture/handleLaunchGestureFrame in
- *      public/index.html).
+ *      pose summary line which we parse and broadcast to every browser as a
+ *      "gesture-update" event shaped { present, armRaised }. There is no
+ *      gesture->set mapping here; the browser itself watches for a raised arm
+ *      held ~3s to start the Single Shot / Sequence run (see
+ *      armLaunchGesture/handleLaunchGestureFrame in public/index.html).
  *
  * UDP wire protocol (one line per datagram, ASCII):
- *   "hands <n> [<label> <count> <thumb> <index> <middle> <ring> <pinky> <NAME>]..."
- *   where <label> is R/L/U (right/left/unknown), e.g.
- *   "hands 1 R 5 1 1 1 1 1 OPEN_PALM"
+ *   "pose <present> <arm_raised>"  where each field is 0/1, e.g. "pose 1 1"
+ *   (person visible, an arm raised) or "pose 0 0" (no person).
  */
 
 var socketio = require('socket.io');
@@ -37,7 +34,7 @@ var OPERATION_LAZY_INIT = process.env.OPERATION_LAZY_INIT === '1';
 // e.g. <mediapipe>/bazel-bin/mediapipe/mediapipe_files/m2demo
 var M2DEMO_BIN    = process.env.M2DEMO_BIN || 'm2demo';
 var GRAPH_CONFIG  = process.env.GESTURE_GRAPH ||
-        path.join(__dirname, '..', '..', 'mediapipe_files', 'hand_tracking_custom.pbtxt');
+        path.join(__dirname, '..', '..', 'mediapipe_files', 'pose_tracking_custom.pbtxt');
 var CAMERA_INDEX  = process.env.GESTURE_CAMERA || '0';
 // Stable USB camera selection. /dev/videoN numbers get reshuffled across reboots
 // (e.g. a platform JPEG encoder can take video0), so we prefer the persistent
@@ -80,6 +77,48 @@ var currentCourtWidth = 9.0;
 // Track saved set data indexed by machinePosition and setIndex
 var savedSets = {};  // savedSets[machinePos + '_' + setIdx] = { launch_speed, tilt_angle, yaw_angle, rpm_output, ... }
 
+// ---- Shared, server-authoritative UI state (cross-device sync) -------------
+// The browser used to keep its saved slots / enable flags / calibration only in
+// its own tab, so a second device never saw the first one's changes. We now
+// mirror the committed config here and broadcast every change to all clients, so
+// a freshly connected device can be brought up to date with buildStateSnapshot.
+var slotDescriptors = {};   // key -> { machinePosition, setIndex, targetLocation, tempo }
+var slotEnabledState = {};  // key -> bool (whether the slot is armed for the run queue)
+var sharedUiState = null;   // last live selections/options from any client (see 'uiState')
+var calibrationInitialized = false;  // guards page-loaded from resetting a peer's calibration
+var hasHomedOnStartup = false;       // one-time homing after the machine/server starts
+
+function buildStateSnapshot() {
+	var slots = Object.keys(slotDescriptors).map(function(key) {
+		var d = slotDescriptors[key];
+		return {
+			machinePosition: d.machinePosition,
+			setIndex: d.setIndex,
+			targetLocation: d.targetLocation,
+			tempo: d.tempo,
+			enabled: !!slotEnabledState[key]
+		};
+	});
+	return {
+		slots: slots,
+		calibration: {
+			net: Math.round(currentNetHeight * 100),
+			len: currentCourtLength,
+			wid: currentCourtWidth
+		},
+		uiState: sharedUiState
+	};
+}
+
+function broadcastCalibration() {
+	if (!io) return;
+	io.sockets.emit('calibration-updated', {
+		net: Math.round(currentNetHeight * 100),
+		len: currentCourtLength,
+		wid: currentCourtWidth
+	});
+}
+
 // ---- Native wrappers (built by: cd server && npm run build) --------------
 var operation = (function() {
 	try {
@@ -95,6 +134,8 @@ var operation = (function() {
 			tiltSignal: function(){},
 			speedSignal: function(){},
 			getTachReading: function(){ return 0; },
+			getHopperPulseCount: function(){ return 0; },
+			getComponentStatus: function(){ return 0; },
 			syncSet: function(){},
 			setMachine: function(machinePosition, setIndex, callback){
 				setImmediate(function() { callback(null, true); });
@@ -147,12 +188,23 @@ exports.listen = function(server) {
 	startUdpReceiver();
 	startPreviewReceiver();
 
+	// Home once when the machine/server starts. When operation control isn't
+	// lazily initialised, bring it up now so the one-time homing runs at boot;
+	// otherwise it runs the first time a client enters an operation mode.
+	if (!OPERATION_LAZY_INIT) {
+		initOperation(null, 'startup');
+	}
+
 	io.sockets.on('connection', function(socket) {
 		handleCommand(socket);
+
+		// Bring a freshly connected device up to date with the shared config.
+		socket.emit('state-snapshot', buildStateSnapshot());
 
 		socket.on('advanced-enter', function() {
 			initOperation(socket, 'advanced-enter');
 			startTelemetry(socket);
+			emitComponentStatus(socket);
 		});
 
 		socket.on('advanced-leave', function() {
@@ -162,6 +214,10 @@ exports.listen = function(server) {
 
 		socket.on('operation-enter', function() {
 			initOperation(socket, 'operation-enter');
+		});
+
+		socket.on('requestComponentStatus', function() {
+			emitComponentStatus(socket);
 		});
 
 		socket.on('operation-leave', function() {
@@ -197,6 +253,23 @@ function stopTelemetry(socket) {
 	}
 }
 
+// Push per-component init status (from operation_component_status()) so the
+// Manual page can show which hardware actually came up.
+function emitComponentStatus(socket) {
+	if (!socket) return;
+	var mask = 0;
+	try { mask = operation.getComponentStatus(); } catch (e) { mask = 0; }
+	socket.emit('component-status', {
+		ready: operationReady,
+		tachometer:    !!(mask & 1),
+		imu:           !!(mask & 2),
+		tiltDriver:    !!(mask & 4),
+		hopperStepper: !!(mask & 8),
+		flywheelDac:   !!(mask & 16),
+		ballSensor:    !!(mask & 32)
+	});
+}
+
 function ensureOperationReady(socket, commandName) {
 	if (operationReady) {
 		return true;
@@ -229,12 +302,30 @@ function initOperation(socket, reason) {
 		operationReady = true;
 		console.log('[operation] operationInit complete (' + reason + ').');
 		if (socket) socket.emit('operation-state', 'READY');
+		maybeStartupHoming();
 		return true;
 	} catch (e) {
 		operationReady = false;
 		console.log('[operation] operationInit failed: ' + e.message);
 		if (socket) socket.emit('machine-error', 'Failed to initialize operation mode.');
 		return false;
+	}
+}
+
+// Run the homing sequence exactly once, the first time motor control becomes
+// available after the machine/server starts. Switching UI tabs no longer homes
+// (that used to happen on every Configure/Manual/Launch switch); the manual
+// "Home machine" button remains for on-demand re-homing.
+function maybeStartupHoming() {
+	if (hasHomedOnStartup || !operationReady) return;
+	hasHomedOnStartup = true;
+	try {
+		console.log('[operation] Running one-time startup homing sequence.');
+		operation.homingSequence();
+		if (io) io.sockets.emit('homing-complete');
+	} catch (e) {
+		console.error('[operation] Startup homing failed: ' + e.message);
+		if (io) io.sockets.emit('homing-error', 'Startup homing failed.');
 	}
 }
 
@@ -313,16 +404,24 @@ function handleCommand(socket) {
 	});
 
 	socket.on('page-loaded', function() {
-		console.log("Got page-loaded event. Applying default calibration.");
+		console.log("Got page-loaded event.");
 		try {
-			calibration.defaultCalibration();
-			currentNetHeight = 2.43;
-			currentCourtLength = 18.0;
-			currentCourtWidth = 9.0;
-			if (typeof setApi.setCalibration === 'function') {
-				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+			// Only apply the factory defaults the first time — after that the
+			// shared calibration belongs to whoever set it, so a second device
+			// loading the page must not wipe it. Either way, hand the client the
+			// current shared state so it renders what everyone else sees.
+			if (!calibrationInitialized) {
+				calibration.defaultCalibration();
+				currentNetHeight = 2.43;
+				currentCourtLength = 18.0;
+				currentCourtWidth = 9.0;
+				if (typeof setApi.setCalibration === 'function') {
+					setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
+				}
+				calibrationInitialized = true;
+				socket.emit('calibration-state', 'DEFAULT_APPLIED');
 			}
-			socket.emit('calibration-state', 'DEFAULT_APPLIED');
+			socket.emit('state-snapshot', buildStateSnapshot());
 		} catch (e) {
 			console.log('[calibration] defaultCalibration failed: ' + e.message);
 			socket.emit('machine-error', 'Failed to apply default calibration.');
@@ -335,6 +434,7 @@ function handleCommand(socket) {
 			var netHeight = parseFloat(value);
 			calibration.setNetHeight(netHeight);
 			currentNetHeight = netHeight;
+			calibrationInitialized = true;
 			if (typeof setApi.setCalibration === 'function') {
 				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
 			}
@@ -350,6 +450,7 @@ function handleCommand(socket) {
 			var courtLength = parseFloat(value);
 			calibration.setCourtLength(courtLength);
 			currentCourtLength = courtLength;
+			calibrationInitialized = true;
 			if (typeof setApi.setCalibration === 'function') {
 				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
 			}
@@ -365,6 +466,7 @@ function handleCommand(socket) {
 			var courtWidth = parseFloat(value);
 			calibration.setCourtWidth(courtWidth);
 			currentCourtWidth = courtWidth;
+			calibrationInitialized = true;
 			if (typeof setApi.setCalibration === 'function') {
 				setApi.setCalibration(currentNetHeight, currentCourtLength, currentCourtWidth);
 			}
@@ -399,6 +501,8 @@ function handleCommand(socket) {
 
 			console.log('[set] Recalculated ' + (Array.isArray(updatedSlots) ? updatedSlots.length : 0) + ' saved set slot(s) for new calibration.');
 			socket.emit('sets-recalculated', { updated: Array.isArray(updatedSlots) ? updatedSlots.length : 0 });
+			// Mirror the new calibration to every other device's court summary.
+			broadcastCalibration();
 		} catch (e) {
 			console.log('[set] recalculateSets failed: ' + e.message);
 			socket.emit('machine-error', 'Failed to recalculate saved sets.');
@@ -433,7 +537,22 @@ function handleCommand(socket) {
 				// Store the set data for later use by setMachine
 				var key = machinePosition + '_' + setIndex;
 				savedSets[key] = setData;
+				slotDescriptors[key] = {
+					machinePosition: machinePosition,
+					setIndex: setIndex,
+					targetLocation: targetLocation,
+					tempo: tempo
+				};
+				slotEnabledState[key] = true;
 				socket.emit('set-save-state', 'SAVED');
+				// Mirror the new slot to every other connected device.
+				if (io) io.sockets.emit('set-saved', {
+					machinePosition: machinePosition,
+					setIndex: setIndex,
+					targetLocation: targetLocation,
+					tempo: tempo,
+					enabled: true
+				});
 			} else {
 				throw new Error('saveSet returned no data (validation may have failed)');
 			}
@@ -441,6 +560,57 @@ function handleCommand(socket) {
 			console.log('[set] saveSet failed: ' + e.message);
 			socket.emit('machine-error', 'Failed to save set slot.');
 		}
+	});
+
+	// Enable/disable a saved slot for the sequence run queue (broadcast so every
+	// device shows the same armed slots).
+	socket.on('setSlotEnabled', function(payload) {
+		try {
+			if (!payload || typeof payload !== 'object') return;
+			var machinePosition = parseInt(payload.machinePosition, 10);
+			var setIndex = parseInt(payload.setIndex, 10);
+			var enabled = payload.enabled === true;
+			if (Number.isNaN(machinePosition) || Number.isNaN(setIndex)) return;
+			var key = machinePosition + '_' + setIndex;
+			if (!slotDescriptors[key]) return;
+			slotEnabledState[key] = enabled;
+			if (io) io.sockets.emit('slot-enabled', {
+				machinePosition: machinePosition,
+				setIndex: setIndex,
+				enabled: enabled
+			});
+		} catch (e) {
+			console.log('[set] setSlotEnabled failed: ' + e.message);
+		}
+	});
+
+	// Delete a saved slot (broadcast so every device drops it).
+	socket.on('deleteSet', function(payload) {
+		try {
+			if (!payload || typeof payload !== 'object') return;
+			var machinePosition = parseInt(payload.machinePosition, 10);
+			var setIndex = parseInt(payload.setIndex, 10);
+			if (Number.isNaN(machinePosition) || Number.isNaN(setIndex)) return;
+			var key = machinePosition + '_' + setIndex;
+			delete slotDescriptors[key];
+			delete slotEnabledState[key];
+			delete savedSets[key];
+			if (io) io.sockets.emit('set-deleted', {
+				machinePosition: machinePosition,
+				setIndex: setIndex
+			});
+		} catch (e) {
+			console.log('[set] deleteSet failed: ' + e.message);
+		}
+	});
+
+	// Live editing session (selections, tempo, single-shot pick, run options,
+	// live court slider values). Stored and relayed to every OTHER device so all
+	// screens mirror the same in-progress config.
+	socket.on('uiState', function(state) {
+		if (!state || typeof state !== 'object') return;
+		sharedUiState = state;
+		socket.broadcast.emit('uiState', state);
 	});
 
 	socket.on('setMachine', function(payload) {
@@ -564,7 +734,9 @@ function handleCommand(socket) {
 			socket.emit('machine-error', 'Cannot pulse hopper: machine is not running.');
 		}
 		socket.emit('machine-ready', true);
-		socket.emit('hopper-pulse-complete', pulsed !== false);
+		var pulseCount = 0;
+		try { pulseCount = operation.getHopperPulseCount(); } catch (e) { pulseCount = 0; }
+		socket.emit('hopper-pulse-complete', pulsed !== false, pulseCount);
 	});
 
 	socket.on('homing-sequence', function() {
@@ -759,17 +931,13 @@ function startUdpReceiver() {
 	var receiver = dgram.createSocket('udp4');
 
 	receiver.on('message', function(msg) {
-		var hands = parseHandsLine(msg.toString('utf8').trim());
-		if (!hands || !io) return;
-		// Base case: no set-sign mapping. Just relay each hand's raw gesture by
-		// its own left/right label so the browser can watch for an open right
-		// hand (start) / open left hand (stop) itself.
-		var left = null, right = null;
-		for (var i = 0; i < hands.length; i++) {
-			if (hands[i].hand === 'left' && !left) left = hands[i];
-			else if (hands[i].hand === 'right' && !right) right = hands[i];
-		}
-		io.sockets.emit('gesture-update', { left: left || NONE_HAND, right: right || NONE_HAND });
+		var pose = parsePoseLine(msg.toString('utf8').trim());
+		if (!pose || !io) return;
+		// The pose recogniser is a dumb sensor: it reports whether a person is
+		// present and whether an arm is raised (wrist above shoulder). The browser
+		// watches for a raised arm held ~3s to start a run (see
+		// handleLaunchGestureFrame in public/index.html).
+		io.sockets.emit('gesture-update', { present: pose.present, armRaised: pose.armRaised });
 	});
 
 	receiver.on('error', function(err) {
@@ -808,45 +976,18 @@ function startPreviewReceiver() {
 	receiver.bind(PREVIEW_PORT, UDP_HOST);
 }
 
-// A "no hand seen" placeholder matching the gesture-update shape.
-var NONE_HAND = {
-	count: 0,
-	fingers: { thumb: false, index: false, middle: false, ring: false, pinky: false },
-	name: 'NONE',
-	hand: 'none'
-};
-
-// "hands <n> [<label> <count> <t> <i> <m> <r> <p> <NAME>]..." -> array of hand
-// objects, or null. <label> is R/L/U (right/left/unknown) as reported by
-// MediaPipe/m2demo. In practice that comes out mirrored relative to the
-// physical camera setup (confirmed on hardware), so we swap it here rather
-// than in m2demo.cpp -- much cheaper to tweak/redeploy than the Bazel binary.
-// If a future camera/mirror change fixes it upstream, flip this back.
-function parseHandsLine(line) {
+// "pose <present> <arm_raised>" -> { present, armRaised } (each 0/1), or null.
+// The recogniser (m2demo) reports one person's pose: whether it's visible and
+// whether either wrist is above the matching shoulder (an arm raised to signal
+// "start"). Kept trivial so the recogniser stays a dumb sensor and the start
+// policy lives in the browser.
+function parsePoseLine(line) {
 	var parts = line.split(/\s+/);
-	if (parts[0] !== 'hands') return null;
-	var n = parseInt(parts[1], 10);
-	if (Number.isNaN(n)) return null;
-	var hands = [];
-	var idx = 2;
-	for (var k = 0; k < n; k++) {
-		if (idx + 8 > parts.length) break;  // malformed / truncated
-		var label = parts[idx];
-		hands.push({
-			hand: label === 'R' ? 'left' : (label === 'L' ? 'right' : 'unknown'),
-			count: parseInt(parts[idx + 1], 10) || 0,
-			fingers: {
-				thumb:  parts[idx + 2] === '1',
-				index:  parts[idx + 3] === '1',
-				middle: parts[idx + 4] === '1',
-				ring:   parts[idx + 5] === '1',
-				pinky:  parts[idx + 6] === '1'
-			},
-			name: parts[idx + 7]
-		});
-		idx += 8;
-	}
-	return hands;
+	if (parts[0] !== 'pose') return null;
+	return {
+		present: parts[1] === '1',
+		armRaised: parts[2] === '1'
+	};
 }
 
 // ---- Clean up the child process when the server stops ----------------------

@@ -1,18 +1,21 @@
 // m2demo.cpp
 //
-// Headless MediaPipe hand-gesture recogniser for the BeagleY-AI.
+// Headless MediaPipe pose recogniser for the BeagleY-AI.
 //
 // Pipeline:
-//   CSI / USB camera --(OpenCV)--> input_video --[hand_tracking_custom.pbtxt]-->
-//   landmarks --(hand_recognition)--> gesture summary --(UDP)--> Node backend.
+//   CSI / USB camera --(OpenCV)--> input_video --[pose_tracking_custom.pbtxt]-->
+//   pose_landmarks --(pose_recognition)--> pose summary --(UDP)--> Node backend.
 //
 // The Node backend (server/lib/gesture_server.js) binds UDP 127.0.0.1:12345 and
 // relays each summary to the browser over socket.io. This program is spawned and
-// killed by that backend in response to the web UI's Start/Stop buttons.
+// killed by that backend in response to the web UI's Start/Stop buttons. The
+// browser watches for a raised arm (wrist above shoulder) held ~3s to start a
+// launch run.
 //
 // Based on MediaPipe's example
 //   mediapipe/examples/desktop/demo_run_graph_main.cc
-// with the GUI display replaced by a throttled UDP push and a "no hand" timeout.
+// with the GUI display replaced by a throttled UDP push and a "no person"
+// timeout.
 
 #include <array>
 #include <algorithm>
@@ -36,6 +39,7 @@
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/absl_log.h"
+#include "absl/log/initialize.h"
 #include "mediapipe/framework/calculator_framework.h"
 #include "mediapipe/framework/formats/classification.pb.h"
 #include "mediapipe/framework/formats/image_frame.h"
@@ -48,13 +52,12 @@
 #include "mediapipe/framework/port/parse_text_proto.h"
 #include "mediapipe/framework/port/ret_check.h"
 #include "mediapipe/framework/port/status.h"
-#include "mediapipe/mediapipe_files/hand_recognition.h"
+#include "mediapipe/mediapipe_files/pose_recognition.h"
 
 namespace {
 constexpr char kInputStream[] = "input_video";
 constexpr char kOutputStream[] = "output_video";
-constexpr char kLandmarksStream[] = "landmarks";
-constexpr char kHandednessStream[] = "handedness";
+constexpr char kLandmarksStream[] = "pose_landmarks";
 }  // namespace
 
 ABSL_FLAG(std::string, calculator_graph_config_file, "",
@@ -379,26 +382,6 @@ class UdpSender {
 
 using Clock = std::chrono::steady_clock;
 
-// Build the UDP wire line describing every visible hand for one frame:
-//   "hands <n>" then, per hand, " <label> <count> <t> <i> <m> <r> <p> <NAME>"
-// where <label> is R (right), L (left) or U (unknown). The Node backend decides
-// which hand signs sets and which starts/stops, so the recogniser stays a dumb
-// sensor and the choice can be toggled live without restarting it.
-std::string BuildHandsLine(
-    const std::vector<mediapipe::NormalizedLandmarkList>& hands,
-    const std::vector<std::string>& labels) {
-  std::ostringstream os;
-  os << "hands " << hands.size();
-  for (size_t k = 0; k < hands.size(); ++k) {
-    const gesture::HandSummary s = gesture::AnalyzeHand(hands[k]);
-    os << ' ' << (k < labels.size() ? labels[k] : std::string("U")) << ' '
-       << s.count;
-    for (bool up : s.fingers_up) os << ' ' << (up ? '1' : '0');
-    os << ' ' << s.name;
-  }
-  return os.str();
-}
-
 }  // namespace
 
 absl::Status RunMPPGraph() {
@@ -419,99 +402,40 @@ absl::Status RunMPPGraph() {
   MP_RETURN_IF_ERROR(
       udp.Open(absl::GetFlag(FLAGS_udp_host), absl::GetFlag(FLAGS_udp_port)));
 
-  // Shared throttle state (observers run on graph threads).
+  // Shared throttle state (the observer runs on a graph thread).
   auto last_send = Clock::now() - std::chrono::hours(1);
-  auto last_hand = Clock::now() - std::chrono::hours(1);
+  auto last_person = Clock::now() - std::chrono::hours(1);
   const auto interval =
       std::chrono::milliseconds(absl::GetFlag(FLAGS_send_interval_ms));
+  std::mutex send_mutex;  // guards last_send / last_person
 
-  // Latest gesture summary, shared with the capture loop for the preview
-  // overlay (the observers run on separate graph threads).
+  // Latest pose summary, shared with the capture loop for the preview overlay
+  // (the observer runs on a separate graph thread).
   std::mutex summary_mutex;
-  gesture::HandSummary latest_summary;
+  gesture::PoseSummary latest_summary;
 
   // Static digital zoom (see --zoom): fixed for the whole session, read once.
   const double zoom_value = std::max(1.0, absl::GetFlag(FLAGS_zoom));
 
-  // 3. Observe the landmarks + handedness streams. MediaPipe emits both at the
-  //    same timestamp (one entry per detected hand, index-aligned), but on
-  //    separate streams and possibly separate threads, so we rendez-vous them
-  //    by timestamp before sending a combined per-frame line. Both streams only
-  //    fire when a hand is present, so a "no hand" timeout lives in the capture
-  //    loop below.
-  struct Pending {
-    bool have_lm = false;
-    bool have_hd = false;
-    std::vector<mediapipe::NormalizedLandmarkList> hands;
-    std::vector<std::string> labels;
-  };
-  std::mutex pending_mutex;
-  std::map<int64_t, Pending> pending;
-
-  // Emit one completed frame (called with pending_mutex held). Throttled to
-  // --send_interval_ms.
-  auto emit_frame = [&](const Pending& p) {
-    const auto now = Clock::now();
-    if (!p.hands.empty()) last_hand = now;
-    if (now - last_send < interval) return;
-    last_send = now;
-    {
-      std::lock_guard<std::mutex> lock(summary_mutex);
-      latest_summary =
-          p.hands.empty() ? gesture::NoHand() : gesture::AnalyzeHand(p.hands.front());
-    }
-    udp.Send(BuildHandsLine(p.hands, p.labels));
-  };
-
-  // Merge one stream's contribution for a timestamp; when both parts have
-  // arrived, emit and drop the entry. Also prune stale half-pairs so a rare
-  // dropped packet can't grow the map without bound.
-  auto rendezvous = [&](int64_t ts, bool is_lm,
-                        std::vector<mediapipe::NormalizedLandmarkList>&& hands,
-                        std::vector<std::string>&& labels) {
-    std::lock_guard<std::mutex> lock(pending_mutex);
-    Pending& p = pending[ts];
-    if (is_lm) {
-      p.hands = std::move(hands);
-      p.have_lm = true;
-    } else {
-      p.labels = std::move(labels);
-      p.have_hd = true;
-    }
-    if (p.have_lm && p.have_hd) {
-      emit_frame(p);
-      pending.erase(ts);
-    }
-    for (auto it = pending.begin(); it != pending.end();) {
-      if (ts - it->first > 500000) it = pending.erase(it);
-      else ++it;
-    }
-  };
-
+  // 3. Observe the pose landmarks stream. BlazePose emits a single landmark
+  //    list (one person) per frame; we analyse it into a "start" signal
+  //    (a raised arm) and send "pose <present> <arm_raised>", throttled to
+  //    --send_interval_ms. The stream only fires when a person is present, so a
+  //    "no person" timeout lives in the capture loop below.
   MP_RETURN_IF_ERROR(graph.ObserveOutputStream(
       kLandmarksStream, [&](const mediapipe::Packet& packet) -> absl::Status {
-        auto hands = packet.Get<std::vector<mediapipe::NormalizedLandmarkList>>();
-        rendezvous(packet.Timestamp().Value(), /*is_lm=*/true, std::move(hands),
-                   {});
-        return absl::OkStatus();
-      }));
-
-  MP_RETURN_IF_ERROR(graph.ObserveOutputStream(
-      kHandednessStream, [&](const mediapipe::Packet& packet) -> absl::Status {
-        const auto& hd =
-            packet.Get<std::vector<mediapipe::ClassificationList>>();
-        std::vector<std::string> labels;
-        labels.reserve(hd.size());
-        for (const auto& cl : hd) {
-          std::string label = "U";
-          if (cl.classification_size() > 0) {
-            const std::string& l = cl.classification(0).label();
-            if (!l.empty()) label = (l[0] == 'R' || l[0] == 'r') ? "R" : "L";
-          }
-          labels.push_back(std::move(label));
+        const auto& lm = packet.Get<mediapipe::NormalizedLandmarkList>();
+        const gesture::PoseSummary s = gesture::AnalyzePose(lm);
+        {
+          std::lock_guard<std::mutex> slock(summary_mutex);
+          latest_summary = s;
         }
-        rendezvous(packet.Timestamp().Value(), /*is_lm=*/false, {},
-                   std::move(labels));
+        const auto now = Clock::now();
+        std::lock_guard<std::mutex> lock(send_mutex);
+        last_person = now;
+        if (now - last_send < interval) return absl::OkStatus();
+        last_send = now;
+        udp.Send(gesture::FormatSummary(s));
         return absl::OkStatus();
       }));
 
@@ -716,16 +640,15 @@ absl::Status RunMPPGraph() {
       cv::Mat preview;
       cv::cvtColor(output_mat, preview, cv::COLOR_RGB2BGR);
 
-      // Overlay the recognised gesture name + finger count so it shows on the
-      // preview (drawn twice: black outline then green fill for legibility).
-      gesture::HandSummary snap;
+      // Overlay the pose state so it shows on the preview (drawn twice: black
+      // outline then green fill for legibility).
+      gesture::PoseSummary snap;
       {
         std::lock_guard<std::mutex> lock(summary_mutex);
         snap = latest_summary;
       }
       const std::string label =
-          snap.present ? snap.name + " (" + std::to_string(snap.count) + ")"
-                       : "NONE";
+          snap.present ? (snap.arm_raised ? "ARM RAISED" : "READY") : "NO PERSON";
       cv::putText(preview, label, cv::Point(12, 34), cv::FONT_HERSHEY_SIMPLEX,
                   1.0, cv::Scalar(0, 0, 0), 4, cv::LINE_AA);
       cv::putText(preview, label, cv::Point(12, 34), cv::FONT_HERSHEY_SIMPLEX,
@@ -753,19 +676,19 @@ absl::Status RunMPPGraph() {
       }
     }
 
-    // No-hand timeout: if neither hand has been seen for a while, emit an empty
+    // No-person timeout: if no pose has been seen for a while, emit an empty
     // frame so the backend clears the display and control state.
     {
-      std::lock_guard<std::mutex> lock(pending_mutex);
+      std::lock_guard<std::mutex> lock(send_mutex);
       const auto now = Clock::now();
-      if (now - last_hand > std::chrono::milliseconds(300) &&
+      if (now - last_person > std::chrono::milliseconds(300) &&
           now - last_send >= interval) {
         last_send = now;
         {
           std::lock_guard<std::mutex> slock(summary_mutex);
-          latest_summary = gesture::NoHand();
+          latest_summary = gesture::NoPose();
         }
-        udp.Send("hands 0");
+        udp.Send("pose 0 0");
       }
     }
   }
@@ -777,6 +700,9 @@ absl::Status RunMPPGraph() {
 
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
+  // Without this, ABSL_LOG output (including fatal RET_CHECK reasons) is silently
+  // dropped, so camera/graph failures produce no diagnostics at all.
+  absl::InitializeLog();
   const absl::Status run_status = RunMPPGraph();
   if (!run_status.ok()) {
     ABSL_LOG(ERROR) << "Failed to run the graph: " << run_status.message();

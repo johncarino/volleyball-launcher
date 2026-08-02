@@ -15,6 +15,10 @@
     <div class="statusbar">
       <img src="images/logo.png" alt="AVSS logo" class="statusbar-logo">
       <div class="statusbar-right">
+        <span class="mstate ready" id="machine-state" title="Machine status">
+          <span class="mstate-dot" aria-hidden="true"></span>
+          <span id="machine-state-text">Ready</span>
+        </span>
         <span class="conn" id="conn-status">
           <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
           <span id="conn-text">AVSS connected</span>
@@ -32,6 +36,11 @@
     </div>
 
     <div class="content" id="main-content"></div>
+
+    <button class="emergency-stop" id="emergency-stop" onclick="emergencyStop()" aria-label="Emergency stop — halt all motors">
+      <i class="ti ti-hand-stop" aria-hidden="true"></i>
+      <span>STOP</span>
+    </button>
 
     <div class="modal-overlay" id="align-modal" onclick="handleAlignOverlayClick(event)">
       <div class="modal-sheet">
@@ -163,12 +172,28 @@
         machineSocket.on('gesture-update', (data) => { handleLaunchGestureFrame(data); });
         machineSocket.on('gesture-frame', (data) => { renderPreviewFrame(data); });
         machineSocket.on('state-reply', (state) => { setGestureRunning(state === 'RUNNING'); });
-        machineSocket.on('recognizer-stopped', () => { setGestureRunning(false); setLaunchPreviewVisible(false); });
-        machineSocket.on('gesture-error', (message) => { showGestureError(message); setGestureRunning(false); setLaunchPreviewVisible(false); });
+        machineSocket.on('recognizer-stopped', () => {
+          setGestureRunning(false);
+          if (window._launchGestureArmed && !isRunning) handleCameraFailure('recogniser stopped');
+          else setLaunchPreviewVisible(false);
+        });
+        machineSocket.on('gesture-error', (message) => {
+          showGestureError(message);
+          setGestureRunning(false);
+          if (window._launchGestureArmed && !isRunning) handleCameraFailure(message);
+          else setLaunchPreviewVisible(false);
+        });
 
         // ---- Set-slot save confirmation from the backend ----
         machineSocket.on('set-save-state', (state) => { onSetSaveState(state); });
-        machineSocket.on('set-machine-state', (state) => {
+
+        // ---- Cross-device config sync: apply changes made on other devices ----
+        machineSocket.on('state-snapshot', (snap) => { applyStateSnapshot(snap); });
+        machineSocket.on('set-saved', (d) => { applyRemoteSetSaved(d); });
+        machineSocket.on('slot-enabled', (d) => { applyRemoteSlotEnabled(d); });
+        machineSocket.on('set-deleted', (d) => { applyRemoteSetDeleted(d); });
+        machineSocket.on('calibration-updated', (c) => { applyRemoteCalibration(c); });
+        machineSocket.on('uiState', (s) => { applyRemoteUiState(s); });        machineSocket.on('set-machine-state', (state) => {
           if (state === 'APPLIED' && isRunning && window._activeMode === 'launch') {
             beginSequenceShot();
           } else if (state === 'APPLIED' && isRunning && window._activeMode === 'single_shot') {
@@ -176,19 +201,31 @@
           } else if (state === 'FAILED' && isRunning) {
             stopRunSequence();
           }
+          if (state === 'FAILED') setMachineState('error', 'Set failed');
         });
-        machineSocket.on('machine-ready', (ready) => { machineReady = ready === true; });
-        machineSocket.on('hopper-pulse-complete', (completed) => {
+        machineSocket.on('machine-ready', (ready) => {
+          machineReady = ready === true;
+          if (window._homingInProgress) return;
+          setMachineState(machineReady ? 'ready' : 'busy');
+        });
+        machineSocket.on('hopper-pulse-complete', (completed, count) => {
+          if (typeof count === 'number') { hopperPulseCount = count; renderRehomeCount(); }
+          else if (completed) { hopperPulseCount++; renderRehomeCount(); }
           if (!isRunning) return;
           if (!completed || window._activeMode === 'single_shot') stopRunSequence();
           else if (window._activeMode === 'launch') completeSequenceShot();
         });
-        machineSocket.on('machine-error', (message) => { onMachineError(message); });
+        machineSocket.on('machine-error', (message) => { setMachineState('error'); onMachineError(message); });
         machineSocket.on('homing-complete', () => {
+          window._homingInProgress = false;
+          hopperPulseCount = 0; renderRehomeCount();
+          setMachineState('ready');
           resetManualVisuals();
           setHomingButtonState(false, 'Homing complete');
         });
         machineSocket.on('homing-error', (message) => {
+          window._homingInProgress = false;
+          setMachineState('error');
           setHomingButtonState(false, 'Home machine');
           onMachineError(message);
         });
@@ -199,18 +236,49 @@
         // ---- Live telemetry (real tachometer RPM) ----
         machineSocket.on('telemetry', (data) => { renderTelemetry(data); });
 
+        // ---- Per-component connection status ----
+        machineSocket.on('component-status', (data) => { renderComponentStatus(data); });
+
         // ---- Server shutdown ----
         machineSocket.on('server-shutdown', () => { showShuttingDown(); });
       }
 
-      // Update the "AVSS Connected/Disconnected" indicator in the top bar.
+      // Update the connection indicator. Socket.IO reconnects automatically, so
+      // a dropped link is shown as "Reconnecting…" rather than a dead end.
       function setConnStatus(connected) {
         const wrap = document.getElementById('conn-status');
         const text = document.getElementById('conn-text');
         const icon = document.getElementById('conn-icon');
         if (wrap) wrap.classList.toggle('disconnected', !connected);
-        if (text) text.textContent = connected ? 'AVSS Connected' : 'AVSS Disconnected';
+        if (text) text.textContent = connected ? 'AVSS connected' : 'Reconnecting…';
         if (icon) icon.className = 'ti ' + (connected ? 'ti-wifi' : 'ti-wifi-off');
+        if (!connected) setMachineState('offline', 'Offline');
+      }
+
+      // Glanceable machine-state chip in the status bar.
+      const MACHINE_STATE_LABELS = {
+        ready: 'Ready', busy: 'Busy', homing: 'Homing…', error: 'Stopped', offline: 'Offline',
+      };
+      function setMachineState(state, label) {
+        const chip = document.getElementById('machine-state');
+        const text = document.getElementById('machine-state-text');
+        if (!chip) return;
+        chip.className = 'mstate ' + state;
+        if (text) text.textContent = label || MACHINE_STATE_LABELS[state] || state;
+      }
+
+      // Emergency stop: halt motors + hopper immediately from any operating mode.
+      function emergencyStop() {
+        emitMachine('requestInterrupt');
+        emitMachine('stopMotors');
+        emitMachine('hopper-off');
+        if (isRunning) stopRunSequence();
+        hopperOn = false;
+        const hopperBtn = document.getElementById('hopper-toggle-btn');
+        if (hopperBtn) { hopperBtn.textContent = 'Feeder Off'; hopperBtn.classList.remove('active'); }
+        setMachineState('error', 'Stopped');
+        const btn = document.getElementById('emergency-stop');
+        if (btn) { btn.classList.remove('activated'); void btn.offsetWidth; btn.classList.add('activated'); }
       }
 
       function onAdvancedAngleInput(value) {
@@ -263,6 +331,8 @@
       }
 
       function runHomingSequence() {
+        window._homingInProgress = true;
+        setMachineState('homing');
         setHomingButtonState(true, 'Homing...');
         emitMachine('homing-sequence');
       }
@@ -351,12 +421,14 @@
         onHopperControl(hopperOn ? 'on' : 'off');
       }
 
-      // ---- Gesture recogniser: open-hand start/stop for Single Shot/Sequence ----
-      // No gesture->set mapping: once armed (see armLaunchGesture) the camera
-      // watches for an open RIGHT hand to start the run and an open LEFT hand to
-      // stop it (Sequence mode finishes the current shot first, see
-      // requestSequenceStop).
-      const LAUNCH_GESTURE_HOLD_MS = 600;  // hold an open hand this long to confirm
+      // ---- Gesture recogniser: raised-arm start for Single Shot/Sequence ----
+      // Once armed (see armLaunchGesture) the camera watches for a RAISED ARM
+      // (wrist above shoulder, detected by the pose recogniser) held for
+      // LAUNCH_GESTURE_HOLD_MS to start the run. After it fires we stop
+      // processing frames (a software gate) to avoid false positives, then
+      // re-arm once the shot (Single Shot) or the whole sequence completes.
+      // There is no stop gesture — use the on-screen Stop button.
+      const LAUNCH_GESTURE_HOLD_MS = 3000;  // hold a raised arm this long to confirm
       const LAUNCH_BUFFER_SECONDS = 5;     // countdown before the camera turns on
 
       // How long the "Select a set first" warning stays on the Start button.
@@ -367,8 +439,7 @@
       }
 
       function resetLaunchGestureHolds() {
-        window._launchHoldRight = { name: null, since: 0, fired: false };
-        window._launchHoldLeft = { name: null, since: 0, fired: false };
+        window._launchHoldArm = { raised: false, since: 0, fired: false };
       }
       resetLaunchGestureHolds();
 
@@ -387,6 +458,7 @@
         let remaining = LAUNCH_BUFFER_SECONDS;
         const showCountdown = () => {
           if (btn) btn.innerHTML = `<i class="ti ti-hourglass" aria-hidden="true"></i> Starting camera in ${remaining}s`;
+          updateLaunchStatus('arming', `Get into position — camera starts in ${remaining}s`);
         };
         showCountdown();
         clearInterval(window._launchBufferTimer);
@@ -401,7 +473,10 @@
             emitMachine('start');
           }
           window._launchGestureCameraReady = true;
+          window._camConfirmed = false;
           setLaunchPreviewVisible(true);
+          updateLaunchStatus('waiting');
+          startCameraHealthTimer();
           if (btn) {
             btn.disabled = false;
             btn.classList.remove('confirm');
@@ -419,25 +494,150 @@
         clearInterval(window._launchBufferTimer);
         window._launchBufferTimer = null;
         setLaunchPreviewVisible(false);
+        updateLaunchStatus('idle');
         if (window._launchGestureAutoStarted) {
           emitMachine('stop');
           window._launchGestureAutoStarted = false;
         }
       }
 
-      // Small camera preview shown once the camera is actually looking for
-      // hands (after the countdown buffer completes); hidden while idle/armed.
+      // Camera preview shown once the camera is actually looking for hands
+      // (after the countdown buffer completes); hidden while idle/armed.
       function setLaunchPreviewVisible(visible) {
         const section = document.getElementById('gesture-preview-section');
         if (section) section.style.display = visible ? '' : 'none';
-        if (!visible) {
+        if (visible) {
+          updateCameraStatus(false, false);
+          startPreviewWatchdog();
+        } else {
+          stopPreviewWatchdog();
+          setHoldProgress(false, 0);
           const img = document.getElementById('gesture-preview');
           if (img) img.removeAttribute('src');
+          const wrap = document.getElementById('gesture-preview-wrap');
+          if (wrap) wrap.classList.remove('signal-lost', 'expanded', 'holding');
         }
+      }
+
+      // Detection-state pill overlaid on the live feed (crisp HTML text, driven
+      // by the same {present, armRaised} pose data used to trigger a launch).
+      function updateCameraStatus(present, raised) {
+        const pill = document.getElementById('cam-status');
+        const txt = document.getElementById('cam-status-text');
+        if (!pill || !txt) return;
+        pill.classList.remove('ready', 'raised');
+        if (!present) { txt.textContent = 'No person detected'; }
+        else if (raised) { pill.classList.add('raised'); txt.textContent = 'Arm raised — hold!'; }
+        else { pill.classList.add('ready'); txt.textContent = 'Ready — raise your right hand'; }
+      }
+
+      // Circumference of the hold-countdown ring (r=52).
+      const CAM_RING_C = 2 * Math.PI * 52;
+      function setHoldProgress(active, progress) {
+        const wrap = document.getElementById('gesture-preview-wrap');
+        if (wrap) wrap.classList.toggle('holding', active);
+        const fill = document.getElementById('cam-ring-fill');
+        if (fill) {
+          const p = Math.max(0, Math.min(1, progress));
+          fill.style.strokeDasharray = CAM_RING_C;
+          fill.style.strokeDashoffset = CAM_RING_C * (1 - p);
+        }
+        const num = document.getElementById('cam-ring-num');
+        if (num) num.textContent = active ? String(Math.max(1, Math.ceil((1 - progress) * (LAUNCH_GESTURE_HOLD_MS / 1000)))) : '';
+      }
+
+      function toggleCameraExpand() {
+        const wrap = document.getElementById('gesture-preview-wrap');
+        if (wrap) wrap.classList.toggle('expanded');
+      }
+
+      // Prominent launch status banner on the Single Shot / Sequence screens.
+      const LAUNCH_STATUS_MAP = {
+        idle:       { cls: '',           icon: 'ti-info-circle',    text: 'Tap Confirm to arm the camera, then raise your right hand to launch.' },
+        arming:     { cls: 'arming',     icon: 'ti-hourglass',      text: 'Get into position…' },
+        waiting:    { cls: 'arming',     icon: 'ti-hourglass',      text: 'Starting camera…' },
+        ready:      { cls: 'ready',      icon: 'ti-hand-finger',    text: 'Camera ready — raise your RIGHT hand to launch.' },
+        holding:    { cls: 'holding',    icon: 'ti-hand-stop',      text: 'Hold it there…' },
+        firing:     { cls: 'firing',     icon: 'ti-volleyball',     text: 'Launching!' },
+        camerafail: { cls: 'camerafail', icon: 'ti-alert-triangle', text: 'Camera didn’t start — tap Start below to launch manually.' },
+      };
+      function updateLaunchStatus(state, text) {
+        const box = document.getElementById('launch-status');
+        if (!box) return;
+        const m = LAUNCH_STATUS_MAP[state] || LAUNCH_STATUS_MAP.idle;
+        box.classList.remove('arming', 'ready', 'holding', 'firing');
+        if (m.cls) box.classList.add(m.cls);
+        const icon = box.querySelector('.ls-icon i');
+        if (icon) icon.className = 'ti ' + m.icon;
+        const txt = document.getElementById('launch-status-text');
+        if (txt) txt.textContent = text || m.text;
+      }
+
+      // Camera health: if the recogniser never streams a frame/pose shortly after
+      // arming (camera busy/unplugged, or m2demo exited), fall back to manual so
+      // the user isn't stuck waiting on a gesture that can't be detected.
+      const CAM_HEALTH_TIMEOUT_MS = 5000;
+      function startCameraHealthTimer() {
+        clearTimeout(window._camHealthTimer);
+        window._camHealthTimer = setTimeout(() => {
+          if (window._launchGestureArmed && !window._camConfirmed && !isRunning) {
+            handleCameraFailure(null);
+          }
+        }, CAM_HEALTH_TIMEOUT_MS);
+      }
+
+      // The first frame or pose after arming confirms the pipeline is alive.
+      function markCameraWorking() {
+        if (!window._launchGestureArmed || window._camConfirmed) return;
+        window._camConfirmed = true;
+        clearTimeout(window._camHealthTimer);
+        if (window._launchGestureCameraReady) updateLaunchStatus('ready');
+      }
+
+      // Camera couldn't stream: keep the Start button and tell the user to use it
+      // instead of the raise-hand gesture.
+      function handleCameraFailure(reason) {
+        if (!window._launchGestureArmed && !window._launchGestureCameraReady) return;
+        clearTimeout(window._camHealthTimer);
+        window._camConfirmed = false;
+        window._launchGestureArmed = false;
+        window._launchGestureCameraReady = false;
+        setLaunchPreviewVisible(false);
+        const btn = document.getElementById('launch-main-btn');
+        if (btn && !btn.classList.contains('stop')) {
+          btn.disabled = false;
+          btn.classList.remove('confirm');
+          btn.classList.add('start');
+          btn.setAttribute('onclick', 'toggleLaunch(this)');
+          btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+        }
+        const detail = reason ? (' (' + reason + ')') : '';
+        updateLaunchStatus('camerafail', 'Camera didn’t start' + detail + ' — tap Start below to launch manually.');
+      }
+
+      // Flag the preview as stale if frames stop arriving (recogniser died,
+      // camera unplugged, …) instead of silently freezing on the last frame.
+      function startPreviewWatchdog() {
+        clearInterval(window._previewWatchdog);
+        window._lastPreviewFrameAt = Date.now();
+        window._previewWatchdog = setInterval(() => {
+          const wrap = document.getElementById('gesture-preview-wrap');
+          if (!wrap) return;
+          const stale = Date.now() - (window._lastPreviewFrameAt || 0) > 2000;
+          wrap.classList.toggle('signal-lost', stale);
+        }, 1000);
+      }
+      function stopPreviewWatchdog() {
+        clearInterval(window._previewWatchdog);
+        window._previewWatchdog = null;
       }
 
       let _previewUrl = null;
       function renderPreviewFrame(data) {
+        window._lastPreviewFrameAt = Date.now();
+        markCameraWorking();
+        const wrap = document.getElementById('gesture-preview-wrap');
+        if (wrap) wrap.classList.remove('signal-lost');
         const img = document.getElementById('gesture-preview');
         if (!img) return;
         let bytes = null;
@@ -454,31 +654,41 @@
         _previewUrl = url;
       }
 
-      // data is { left, right }, one gesture summary per hand (see
-      // gesture_server.js). Right hand open = start; left hand open = stop.
+      // data is { present, armRaised } from the pose recogniser (see
+      // gesture_server.js). A raised arm held LAUNCH_GESTURE_HOLD_MS starts the
+      // run; there is no stop gesture.
       function handleLaunchGestureFrame(data) {
+        const present = !!(data && data.present);
+        const raised = !!(data && data.armRaised);
+        markCameraWorking();
+        if (window._launchGestureCameraReady) updateCameraStatus(present, raised);
         if (!window._launchGestureArmed || !window._launchGestureCameraReady) return;
         const now = Date.now();
 
-        const rightName = (data && data.right && data.right.name) || 'NONE';
-        const rst = window._launchHoldRight;
-        if (rightName !== rst.name) { rst.name = rightName; rst.since = now; rst.fired = false; }
-        if (rightName === 'OPEN_PALM' && !rst.fired && now - rst.since >= LAUNCH_GESTURE_HOLD_MS) {
-          rst.fired = true;
-          const btn = document.getElementById('launch-main-btn');
-          if (btn && !btn.disabled && !btn.classList.contains('stop')) {
-            console.log('[gesture] open right hand held — starting the run');
-            toggleLaunch(btn);
+        const st = window._launchHoldArm;
+        if (raised !== st.raised) { st.raised = raised; st.since = now; st.fired = false; }
+        if (raised && !st.fired) {
+          const held = now - st.since;
+          const progress = Math.min(1, held / LAUNCH_GESTURE_HOLD_MS);
+          setHoldProgress(true, progress);
+          updateLaunchStatus('holding');
+          if (held >= LAUNCH_GESTURE_HOLD_MS) {
+            st.fired = true;
+            setHoldProgress(false, 0);
+            updateLaunchStatus('firing');
+            const btn = document.getElementById('launch-main-btn');
+            if (btn && !btn.disabled && !btn.classList.contains('stop')) {
+              console.log('[gesture] arm raised — starting the run');
+              // Stop watching for gestures so a still-raised arm can't re-trigger
+              // mid-run; re-armed after the shot / sequence completes (see
+              // stopRunSequence).
+              window._launchGestureCameraReady = false;
+              toggleLaunch(btn);
+            }
           }
-        }
-
-        const leftName = (data && data.left && data.left.name) || 'NONE';
-        const lst = window._launchHoldLeft;
-        if (leftName !== lst.name) { lst.name = leftName; lst.since = now; lst.fired = false; }
-        if (leftName === 'OPEN_PALM' && !lst.fired && now - lst.since >= LAUNCH_GESTURE_HOLD_MS) {
-          lst.fired = true;
-          console.log('[gesture] open left hand held — stopping after the current shot');
-          requestSequenceStop();
+        } else if (!raised) {
+          setHoldProgress(false, 0);
+          updateLaunchStatus('ready');
         }
       }
 
@@ -747,6 +957,7 @@
       }
 
       function refreshCourtPicker() {
+        pushUiState();
         const wrap = document.getElementById('court-picker-wrap');
         if (wrap) {
           wrap.innerHTML = courtPickerHTML();
@@ -764,10 +975,13 @@
         if (wrap) {
           wrap.classList.toggle('tempo-open', showTempo);
         }
+
+        refreshStepIndicator();
       }
 
       function toggleRandom() {
         randomOn = !randomOn;
+        pushUiState();
         const btn = document.getElementById('pb-random');
         if (!btn) return;
         btn.classList.toggle('active', randomOn);
@@ -775,6 +989,7 @@
 
       function cycleRepeat() {
         repeatState = (repeatState + 1) % 2;
+        pushUiState();
         const btn = document.getElementById('pb-repeat');
         if (!btn) return;
         btn.classList.toggle('active', repeatState > 0);
@@ -801,8 +1016,48 @@
     </div>`;
       }
 
+      // Guided step indicator for the Configure flow: reflects how far the user
+      // has progressed through machine → target → tempo → save.
+      const STEP_HINTS = {
+        machine: 'Step 1 — Tap a machine: Left, Center, or Right.',
+        target: 'Step 2 — Tap a target zone on the court.',
+        tempo: 'Step 3 — Choose a tempo arc.',
+        save: 'Step 4 — Tap a slot to save this set.',
+      };
+      function stepIndicatorHTML() {
+        const done = {
+          machine: !!selectedMachine,
+          target: !!selectedTarget,
+          tempo: tempoSelected && selectedTempo != null,
+          save: slotSaved,
+        };
+        let active = 'machine';
+        if (done.machine) active = 'target';
+        if (done.machine && done.target) active = 'tempo';
+        if (done.machine && done.target && done.tempo) active = 'save';
+        if (done.save) active = null;
+        const steps = [
+          { key: 'machine', n: 1, label: 'Machine' },
+          { key: 'target', n: 2, label: 'Target' },
+          { key: 'tempo', n: 3, label: 'Tempo' },
+          { key: 'save', n: 4, label: 'Save' },
+        ];
+        const items = steps.map(s => {
+          const cls = done[s.key] ? 'done' : (active === s.key ? 'active' : '');
+          const badge = done[s.key] ? '<i class="ti ti-check" aria-hidden="true"></i>' : s.n;
+          return `<div class="step-item ${cls}"><span class="step-badge">${badge}</span><span class="step-label">${s.label}</span></div>`;
+        }).join('');
+        const hint = active ? STEP_HINTS[active] : 'Set saved — add more, or tap “Continue to Launch”.';
+        return `<div class="step-indicator">${items}</div><div class="step-hint">${hint}</div>`;
+      }
+      function refreshStepIndicator() {
+        const wrap = document.getElementById('step-indicator-wrap');
+        if (wrap) wrap.innerHTML = stepIndicatorHTML();
+      }
+
       const screens = {
         configure: () => `
+          <div class="section" id="step-indicator-wrap" style="margin-top:8px">${stepIndicatorHTML()}</div>
           <div class="section" style="margin-top:8px">
             <div id="court-picker-wrap">${courtPickerHTML()}</div>
             <div class="tempo-attached" id="tempo-wrap">${tempoPillsHTML()}</div>
@@ -816,6 +1071,11 @@
           <div class="section">
             <div class="section-label">Save Set Slots</div>
             <div class="save-slots" id="slots-wrap">${slotsHTML()}</div>
+          </div>
+          <div class="section" style="margin-top:8px">
+            <div class="manual-utility-actions">
+              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and hopper to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
+            </div>
           </div>
           <div class="section" style="margin-top:8px">
             <button class="op-btn continue-style" onclick="goToSingleShot()"><i class="ti ti-arrow-right" aria-hidden="true"></i> Continue to Launch</button>
@@ -903,11 +1163,25 @@
               <button class="hopper-btn" id="hopper-toggle-btn" onclick="toggleHopper()">Feeder Off</button>
               <button class="hopper-btn" id="hopper-pulse-btn" onclick="pulseHopper(this)">Single Ball</button>
             </div>
+            <div class="card" style="margin-top:8px">
+              <div class="dev-row"><span class="dev-label">Shots until re-home</span><span class="dev-val" id="rehome-count">4</span></div>
+            </div>
           </div>
           <div class="section">
             <div class="section-label">Live telemetry</div>
             <div class="card">
               <div class="dev-row"><span class="dev-label">Flywheel</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-l" style="width:74%"></div></div><span class="dev-val" id="fw-l-v">3700 rpm</span></div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-label">Connected components</div>
+            <div class="card">
+              <div class="dev-row"><span class="dev-label">Flywheel speed (MCP4725 DAC)</span><span class="dev-val" id="comp-dac">—</span></div>
+              <div class="dev-row"><span class="dev-label">Flywheel RPM (Tachometer)</span><span class="dev-val" id="comp-tach">—</span></div>
+              <div class="dev-row"><span class="dev-label">Tilt actuator (BTS7960)</span><span class="dev-val" id="comp-tilt">—</span></div>
+              <div class="dev-row"><span class="dev-label">Tilt sensor (MPU6050)</span><span class="dev-val" id="comp-imu">—</span></div>
+              <div class="dev-row"><span class="dev-label">Hopper feeder (TB6600 stepper)</span><span class="dev-val" id="comp-hopper">—</span></div>
+              <div class="dev-row"><span class="dev-label">Ball detection (HC-SR04)</span><span class="dev-val" id="comp-ball">—</span></div>
             </div>
           </div>
           <div class="section">
@@ -937,13 +1211,21 @@
           </div>
           <div class="section">
             <div class="section-label">Launch</div>
+            <div class="launch-status" id="launch-status"><span class="ls-icon"><i class="ti ti-info-circle" aria-hidden="true"></i></span><span id="launch-status-text">Tap Confirm to arm the camera, then raise your right hand to launch.</span></div>
             <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
-            <div class="gesture-hint">Confirm arms the camera: open your right hand to start, open your left hand to stop.</div>
           </div>
           <div class="section" id="gesture-preview-section" style="display:none">
             <div class="section-label">Camera</div>
-            <div class="gesture-preview-wrap">
+            <div class="gesture-preview-wrap" id="gesture-preview-wrap">
               <img id="gesture-preview" alt="Camera view" />
+              <span class="cam-live"><span class="cam-live-dot"></span>LIVE</span>
+              <button class="cam-expand" onclick="toggleCameraExpand()" aria-label="Expand camera"><i class="ti ti-arrows-maximize" aria-hidden="true"></i></button>
+              <div class="cam-ring" id="cam-ring">
+                <svg viewBox="0 0 120 120" width="120" height="120"><circle class="cam-ring-track" cx="60" cy="60" r="52" stroke-width="8"></circle><circle class="cam-ring-fill" id="cam-ring-fill" cx="60" cy="60" r="52" stroke-width="8"></circle></svg>
+                <span class="cam-ring-num" id="cam-ring-num"></span>
+              </div>
+              <div class="cam-status" id="cam-status"><span class="cam-status-dot"></span><span id="cam-status-text">No person detected</span></div>
+              <div class="cam-signal-lost"><i class="ti ti-video-off" aria-hidden="true"></i><div>Camera signal lost</div></div>
             </div>
           </div>
           <div class="section" id="gesture-error-box" style="display:none">
@@ -966,13 +1248,21 @@
           </div>
           <div class="section">
             <div class="section-label">Launch</div>
+            <div class="launch-status" id="launch-status"><span class="ls-icon"><i class="ti ti-info-circle" aria-hidden="true"></i></span><span id="launch-status-text">Tap Confirm to arm the camera, then raise your right hand to launch.</span></div>
             <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
-            <div class="gesture-hint">Confirm arms the camera: open your right hand to start, open your left hand to stop.</div>
           </div>
           <div class="section" id="gesture-preview-section" style="display:none">
             <div class="section-label">Camera</div>
-            <div class="gesture-preview-wrap">
+            <div class="gesture-preview-wrap" id="gesture-preview-wrap">
               <img id="gesture-preview" alt="Camera view" />
+              <span class="cam-live"><span class="cam-live-dot"></span>LIVE</span>
+              <button class="cam-expand" onclick="toggleCameraExpand()" aria-label="Expand camera"><i class="ti ti-arrows-maximize" aria-hidden="true"></i></button>
+              <div class="cam-ring" id="cam-ring">
+                <svg viewBox="0 0 120 120" width="120" height="120"><circle class="cam-ring-track" cx="60" cy="60" r="52" stroke-width="8"></circle><circle class="cam-ring-fill" id="cam-ring-fill" cx="60" cy="60" r="52" stroke-width="8"></circle></svg>
+                <span class="cam-ring-num" id="cam-ring-num"></span>
+              </div>
+              <div class="cam-status" id="cam-status"><span class="cam-status-dot"></span><span id="cam-status-text">No person detected</span></div>
+              <div class="cam-signal-lost"><i class="ti ti-video-off" aria-hidden="true"></i><div>Camera signal lost</div></div>
             </div>
           </div>
           <div class="section" id="gesture-error-box" style="display:none">
@@ -1038,6 +1328,7 @@
           wid: parseFloat(widEl.textContent),
           preset: presetEl ? presetEl.value : 'custom',
         };
+        pushUiState();
       }
 
       // Pushes the current courtSettings (net height / court dimensions) to the
@@ -1100,6 +1391,7 @@
       }
 
       function refreshTempo() {
+        pushUiState();
         const wrap = document.getElementById('tempo-wrap');
         if (wrap) wrap.innerHTML = tempoPillsHTML();
       }
@@ -1118,6 +1410,7 @@
       }
 
       function refreshSlots() {
+        pushUiState();
         const wrap = document.getElementById('slots-wrap');
         if (wrap) {
           wrap.innerHTML = slotsHTML(false);
@@ -1214,6 +1507,7 @@
         const machineKey = selectedMachine || 'L';
         if (!slots[machineKey][n]) return; // nothing saved in this slot, nothing to toggle
         slotEnabled[machineKey][n] = !slotEnabled[machineKey][n];
+        emitMachine('setSlotEnabled', { machinePosition: MACHINE_INDEX[machineKey], setIndex: n - 1, enabled: slotEnabled[machineKey][n] });
         activateSlot(machineKey, n);
         refreshSlots();
       }
@@ -1423,6 +1717,17 @@
           btn.classList.remove('stop'); btn.classList.add('start');
           btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
         }
+
+        // Single Shot restarts gesture watching for the next start signal; a
+        // Sequence run does the same once it finishes. If the user has left the
+        // mode, disarmLaunchGesture already cleared _launchGestureArmed, so this
+        // stays off.
+        if (window._launchGestureArmed) {
+          resetLaunchGestureHolds();
+          window._launchGestureCameraReady = true;
+          updateLaunchStatus('ready');
+          updateCameraStatus(false, false);
+        }
       }
 
       function activateSlot(machineKey, n) {
@@ -1523,6 +1828,222 @@
         }
       }
 
+      // ---- Cross-device sync helpers ----
+      // The server mirrors the whole editing session (saved slots, enable flags,
+      // court calibration, and the live selections/options below) and broadcasts
+      // every change; these apply an incoming change from another device to this
+      // tab's local state so all connected screens stay in sync.
+      const MACHINE_KEY_BY_INDEX = { 0: 'L', 1: 'C', 2: 'R' };
+
+      // While applying a change received from another device, suppress the
+      // outgoing broadcast so remote updates don't echo back (depth counter so
+      // nested appliers, e.g. snapshot -> calibration, still work).
+      let _remoteApplyDepth = 0;
+      function beginRemoteApply() { _remoteApplyDepth++; }
+      function endRemoteApply() { _remoteApplyDepth = Math.max(0, _remoteApplyDepth - 1); }
+
+      // The live, per-session selections/options shared across devices (in
+      // addition to slots/enable/calibration, which have their own events).
+      function currentUiState() {
+        return {
+          selectedMachine, selectedTarget, selectedTempo,
+          tempoSelected, slotSaved, lockedSide, previewSide,
+          singleShotSelected: { L: singleShotSelected.L, C: singleShotSelected.C, R: singleShotSelected.R },
+          randomOn, repeatState,
+          courtSettings: { net: courtSettings.net, len: courtSettings.len, wid: courtSettings.wid, preset: courtSettings.preset },
+        };
+      }
+
+      // Broadcast this device's live selections to the others (debounced to
+      // coalesce rapid changes). No-op while applying a remote change.
+      function pushUiState() {
+        if (_remoteApplyDepth > 0 || !machineSocket) return;
+        clearTimeout(window._uiPushTimer);
+        window._uiPushTimer = setTimeout(() => { machineSocket.emit('uiState', currentUiState()); }, 80);
+      }
+
+      function applyRemoteUiState(s) {
+        if (!s) return;
+        beginRemoteApply();
+        try {
+          if (s.selectedMachine !== undefined) selectedMachine = s.selectedMachine;
+          if (s.selectedTarget !== undefined) selectedTarget = s.selectedTarget;
+          if (s.selectedTempo !== undefined) selectedTempo = s.selectedTempo;
+          if (s.tempoSelected !== undefined) tempoSelected = s.tempoSelected;
+          if (s.slotSaved !== undefined) slotSaved = s.slotSaved;
+          if (s.lockedSide !== undefined) lockedSide = s.lockedSide;
+          if (s.previewSide !== undefined) previewSide = s.previewSide;
+          if (s.singleShotSelected) {
+            ['L', 'C', 'R'].forEach(k => { singleShotSelected[k] = s.singleShotSelected[k]; });
+          }
+          if (s.randomOn !== undefined) randomOn = s.randomOn;
+          if (s.repeatState !== undefined) repeatState = s.repeatState;
+          if (s.courtSettings) { courtSettings = Object.assign({}, courtSettings, s.courtSettings); }
+          // Reflect on whichever screen this device is showing.
+          refreshCourtPicker();
+          refreshTempo();
+          refreshSlots();
+          refreshLaunchView();
+          syncCourtSettingsInputs();
+          syncPlaybackButtons();
+          updateSummaryChips();
+        } finally {
+          endRemoteApply();
+        }
+      }
+
+      // Push the range sliders + labels on the Court Settings tab to match
+      // courtSettings (used when another device drags them).
+      function syncCourtSettingsInputs() {
+        const netVal = document.getElementById('net-val');
+        const lenVal = document.getElementById('len-val');
+        const widVal = document.getElementById('wid-val');
+        if (netVal) netVal.textContent = `${courtSettings.net} cm`;
+        if (lenVal) lenVal.textContent = `${courtSettings.len.toFixed(1)} m`;
+        if (widVal) widVal.textContent = `${courtSettings.wid.toFixed(1)} m`;
+        const netCard = netVal && netVal.closest('.card');
+        if (netCard) {
+          const r = netCard.querySelector('input[type="range"]');
+          if (r) r.value = courtSettings.net;
+        }
+        const lenCard = lenVal && lenVal.closest('.card');
+        if (lenCard) {
+          const ranges = lenCard.querySelectorAll('input[type="range"]');
+          if (ranges[0]) ranges[0].value = courtSettings.len;
+          if (ranges[1]) ranges[1].value = courtSettings.wid;
+        }
+        const preset = document.getElementById('court-preset-select');
+        if (preset) preset.value = courtSettings.preset;
+      }
+
+      function syncPlaybackButtons() {
+        const rnd = document.getElementById('pb-random');
+        if (rnd) rnd.classList.toggle('active', randomOn);
+        const rep = document.getElementById('pb-repeat');
+        if (rep) {
+          rep.classList.toggle('active', repeatState > 0);
+          const lbl = rep.querySelector('.pb-btn-label');
+          if (lbl) lbl.textContent = repeatLabels[repeatState];
+          const ic = rep.querySelector('i');
+          if (ic) ic.className = `ti ${repeatIcons[repeatState]}`;
+        }
+      }
+
+      function slotDescriptorToSlot(d) {
+        const machineKey = MACHINE_KEY_BY_INDEX[d.machinePosition];
+        if (!machineKey) return null;
+        const target = String(d.targetLocation);
+        const tempo = d.tempo;
+        const name = [`Machine ${machineKey}`, `Zone ${target}`, `Tempo ${tempo}`].join(' · ');
+        return { machineKey, n: d.setIndex + 1, slot: { name, machine: machineKey, target, tempo } };
+      }
+
+      function applyRemoteSetSaved(d) {
+        const parsed = slotDescriptorToSlot(d);
+        if (!parsed) return;
+        beginRemoteApply();
+        try {
+          slots[parsed.machineKey][parsed.n] = parsed.slot;
+          slotEnabled[parsed.machineKey][parsed.n] = d.enabled !== false;
+          refreshSlots();
+          refreshCourtPicker();
+        } finally {
+          endRemoteApply();
+        }
+      }
+
+      function applyRemoteSlotEnabled(d) {
+        const machineKey = MACHINE_KEY_BY_INDEX[d.machinePosition];
+        const n = d.setIndex + 1;
+        if (!machineKey || !slots[machineKey][n]) return;
+        beginRemoteApply();
+        try {
+          slotEnabled[machineKey][n] = !!d.enabled;
+          refreshSlots();
+        } finally {
+          endRemoteApply();
+        }
+      }
+
+      function applyRemoteSetDeleted(d) {
+        const machineKey = MACHINE_KEY_BY_INDEX[d.machinePosition];
+        const n = d.setIndex + 1;
+        if (!machineKey) return;
+        beginRemoteApply();
+        try {
+          slots[machineKey][n] = null;
+          slotEnabled[machineKey][n] = false;
+          if (singleShotSelected[machineKey] === n) singleShotSelected[machineKey] = null;
+          refreshSlots();
+          refreshCourtPicker();
+        } finally {
+          endRemoteApply();
+        }
+      }
+
+      function applyRemoteCalibration(c) {
+        if (!c) return;
+        beginRemoteApply();
+        try {
+          const net = parseInt(c.net, 10);
+          const len = parseFloat(c.len);
+          const wid = parseFloat(c.wid);
+          if (!Number.isNaN(net)) courtSettings.net = net;
+          if (!Number.isNaN(len)) courtSettings.len = len;
+          if (!Number.isNaN(wid)) courtSettings.wid = wid;
+          courtSettings.preset = 'custom';
+          for (const [key, p] of Object.entries(courtPresets)) {
+            if (p.net === courtSettings.net && p.len === courtSettings.len && p.wid === courtSettings.wid) {
+              courtSettings.preset = key;
+              break;
+            }
+          }
+          // Re-render the court settings tab if it's open so its sliders update.
+          if (window._activeMode === 'court_settings') {
+            document.getElementById('main-content').innerHTML = screens.court_settings();
+          }
+          syncCourtSettingsInputs();
+          updateSummaryChips();
+        } finally {
+          endRemoteApply();
+        }
+      }
+
+      function updateSummaryChips() {
+        const netTxt = `${courtSettings.net} cm`;
+        const courtTxt = `${courtSettings.len.toFixed(1)} m × ${courtSettings.wid.toFixed(1)} m`;
+        const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+        set('net-summary-val', netTxt);
+        set('court-summary-val', courtTxt);
+        set('sum-net', netTxt);
+        set('sum-court', courtTxt);
+      }
+
+      function applyStateSnapshot(snap) {
+        if (!snap) return;
+        beginRemoteApply();
+        try {
+          if (Array.isArray(snap.slots)) {
+            ['L', 'C', 'R'].forEach(k => {
+              slots[k] = { 1: null, 2: null, 3: null, 4: null };
+              slotEnabled[k] = { 1: false, 2: false, 3: false, 4: false };
+            });
+            snap.slots.forEach(d => {
+              const parsed = slotDescriptorToSlot(d);
+              if (!parsed) return;
+              slots[parsed.machineKey][parsed.n] = parsed.slot;
+              slotEnabled[parsed.machineKey][parsed.n] = d.enabled !== false;
+            });
+          }
+          if (snap.calibration) applyRemoteCalibration(snap.calibration);
+          if (snap.uiState) applyRemoteUiState(snap.uiState);
+          refreshSlots();
+          refreshCourtPicker();
+        } finally {
+          endRemoteApply();
+        }
+      }
+
       // Backend rejected the save (e.g. native addon unavailable or validation
       // failed) — roll back the optimistic slot update so the UI doesn't claim
       // a slot is saved when it isn't.
@@ -1547,6 +2068,7 @@
         slots[machineKey][n] = null;
         slotEnabled[machineKey][n] = false;
         if (singleShotSelected[machineKey] === n) singleShotSelected[machineKey] = null; // add this line
+        emitMachine('deleteSet', { machinePosition: MACHINE_INDEX[machineKey], setIndex: n - 1 });
 
         if (machineKey === selectedMachine) {
           const stillHasSlots = [1, 2, 3, 4].some(i => !!slots[machineKey][i]);
@@ -1635,7 +2157,7 @@
       function homeTabsHTML() {
         return `<div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
             <button class="modetab-header" role="tab" data-mode="configure">Configure</button>
-            <button class="modetab-header" role="tab" data-mode="advanced">Manual</button>
+            <button class="modetab-header" role="tab" data-mode="advanced">Manual Control</button>
             <button class="modetab-header" role="tab" data-mode="court_settings">Court Settings</button>
           </div>`;
       }
@@ -1678,12 +2200,12 @@
         if ((previousMode === 'launch' || previousMode === 'single_shot') && mode !== previousMode && isRunning) {
           stopRunSequence();
         }
-        // Stop the active run first, then home while operation control is still
-        // initialized. Cleanup events are queued only after this request.
+        // Homing no longer runs on tab switches — the machine homes once at
+        // startup (server-side). Just cancel any pending manual-start timer when
+        // leaving an operating mode; use the "Home machine" button to re-home.
         if (leavingLaunchModes || leavingManual) {
           clearTimeout(window._manualStartTimer);
           window._manualStartTimer = null;
-          emitMachine('homing-sequence');
         }
         if (previousMode === 'advanced' && mode !== 'advanced') {
           emitMachine('advanced-leave');
@@ -1731,6 +2253,9 @@
         if (mode === 'advanced') {
           emitMachine('advanced-enter');
           startTelemetry();
+          renderRehomeCount();
+          renderComponentStatus();
+          emitMachine('requestComponentStatus');
         }
         if (OPERATION_MODES.includes(mode) && !OPERATION_MODES.includes(previousMode)) {
           emitMachine('operation-enter');
@@ -1763,6 +2288,42 @@
 
       // Full-scale RPM used to scale the flywheel bar width.
       const FW_MAX_RPM = 3700;
+
+      // Mirrors firmware HOPPER_RESET_INTERVAL_PULSES: every Nth pulse re-homes.
+      const HOPPER_RESET_INTERVAL = 4;
+      let hopperPulseCount = 0;
+      function renderRehomeCount() {
+        const el = document.getElementById('rehome-count');
+        if (!el) return;
+        const remaining = HOPPER_RESET_INTERVAL - (hopperPulseCount % HOPPER_RESET_INTERVAL);
+        el.textContent = (remaining === HOPPER_RESET_INTERVAL && hopperPulseCount > 0)
+          ? 'Re-homing' : remaining;
+      }
+
+      // Latest per-component status from the server; re-applied on mode render.
+      let _componentStatus = null;
+      function renderComponentStatus(data) {
+        if (data) _componentStatus = data;
+        const s = _componentStatus;
+        const map = {
+          'comp-dac': 'flywheelDac', 'comp-tach': 'tachometer', 'comp-tilt': 'tiltDriver',
+          'comp-imu': 'imu', 'comp-hopper': 'hopperStepper', 'comp-ball': 'ballSensor'
+        };
+        for (const [id, key] of Object.entries(map)) {
+          const el = document.getElementById(id);
+          if (!el) continue;
+          if (!s || !s.ready) {
+            el.textContent = '\u2014';
+            el.style.color = 'var(--text-tertiary)';
+          } else if (s[key]) {
+            el.textContent = 'Connected';
+            el.style.color = '#3fb950';
+          } else {
+            el.textContent = 'Not detected';
+            el.style.color = '#f85149';
+          }
+        }
+      }
 
       function renderTelemetry(data) {
         if (!data) return;

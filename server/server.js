@@ -64,7 +64,12 @@ function send404(response) {
 function sendFile(response, filePath, fileContents) {
 	response.writeHead(
 			200,
-			{"content-type": mime.lookup(path.basename(filePath))}
+			{
+				"content-type": mime.lookup(path.basename(filePath)),
+				// Always revalidate so a kiosk/phone never serves a stale page or
+				// script after an update (otherwise old cached UI keeps running).
+				"cache-control": "no-cache, no-store, must-revalidate"
+			}
 		);
 	response.end(fileContents);
 }

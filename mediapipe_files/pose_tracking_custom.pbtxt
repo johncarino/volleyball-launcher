@@ -1,0 +1,71 @@
+# MediaPipe graph that performs full-body pose tracking on CPU (TensorFlow
+# Lite), customised for the BeagleY-AI volleyball-launcher gesture control.
+#
+# This is a near-copy of MediaPipe's shipped
+#   mediapipe/graphs/pose_tracking/pose_tracking_cpu.pbtxt
+# with one change: the "pose_landmarks" output stream is consumed by
+# m2demo.cpp, which derives the launcher's "start" signal (a raised arm: a
+# wrist above the matching shoulder) from it. The rendered "output_video"
+# stream is still produced so the FlowLimiterCalculator has a FINISHED
+# back-edge (and so a frame can optionally be previewed/saved for debug).
+#
+# Input:  input_video     (BGR/RGB camera frames as ImageFrame)
+# Output: output_video    (rendered ImageFrame, not displayed when headless)
+#         pose_landmarks  (NormalizedLandmarkList, 33 BlazePose points)
+
+input_stream: "input_video"
+output_stream: "output_video"
+output_stream: "pose_landmarks"
+
+# Throttle the camera frames so the graph never queues more work than it can
+# finish. FINISHED is fed by output_video as a back-edge.
+node {
+  calculator: "FlowLimiterCalculator"
+  input_stream: "input_video"
+  input_stream: "FINISHED:output_video"
+  input_stream_info: {
+    tag_index: "FINISHED"
+    back_edge: true
+  }
+  output_stream: "throttled_input_video"
+}
+
+# Model configuration: model_complexity 1 (lite/full/heavy = 0/1/2) balances
+# accuracy and CPU on the AM67A; smooth_landmarks reduces jitter; segmentation
+# is off (unused and expensive).
+node {
+  calculator: "ConstantSidePacketCalculator"
+  output_side_packet: "PACKET:0:model_complexity"
+  output_side_packet: "PACKET:1:smooth_landmarks"
+  output_side_packet: "PACKET:2:enable_segmentation"
+  node_options: {
+    [type.googleapis.com/mediapipe.ConstantSidePacketCalculatorOptions]: {
+      packet { int_value: 1 }
+      packet { bool_value: true }
+      packet { bool_value: false }
+    }
+  }
+}
+
+# Detects/tracks pose landmarks.
+node {
+  calculator: "PoseLandmarkCpu"
+  input_side_packet: "MODEL_COMPLEXITY:model_complexity"
+  input_side_packet: "SMOOTH_LANDMARKS:smooth_landmarks"
+  input_side_packet: "ENABLE_SEGMENTATION:enable_segmentation"
+  input_stream: "IMAGE:throttled_input_video"
+  output_stream: "LANDMARKS:pose_landmarks"
+  output_stream: "DETECTION:pose_detection"
+  output_stream: "ROI_FROM_LANDMARKS:roi_from_landmarks"
+}
+
+# Renders the landmarks onto the frame. Produces output_video, which is used as
+# the FlowLimiter FINISHED signal (and the optional preview) when headless.
+node {
+  calculator: "PoseRendererCpu"
+  input_stream: "IMAGE:throttled_input_video"
+  input_stream: "LANDMARKS:pose_landmarks"
+  input_stream: "ROI:roi_from_landmarks"
+  input_stream: "DETECTION:pose_detection"
+  output_stream: "IMAGE:output_video"
+}

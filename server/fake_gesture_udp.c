@@ -1,22 +1,14 @@
 // fake_gesture_udp.c
 //
 // Hardware-free test source for the BeagleY-AI gesture-control backend.
-// Pretends to be the MediaPipe recogniser (m2demo): it PUSHES fake gesture
-// summaries to the Node server's UDP listener at ~1 Hz, cycling through an
-// open RIGHT hand (start), idle, an open LEFT hand (stop), idle, so you can
-// verify the Single Shot / Sequence open-hand start/stop flow without a
-// camera.
+// Pretends to be the MediaPipe pose recogniser (m2demo): it PUSHES fake pose
+// summaries to the Node server's UDP listener at ~1 Hz, cycling through
+// "arm raised" (start), then idle, so you can verify the Single Shot / Sequence
+// raised-arm start flow without a camera.
 //
 // Wire protocol (matches m2demo / gesture_server.js):
-//   "hands <n>" then, per hand, " <label> <count> <t> <i> <m> <r> <p> <NAME>"
-// where <label> is R/L/U (right/left/unknown). Frames labelled 'U' are
-// treated as "no hand" by the backend (only L/R are wired to start/stop).
-//
-// NOTE: gesture_server.js's parseHandsLine swaps R<->L on the way in (m2demo's
-// raw labels come out mirrored relative to the physical camera on real
-// hardware), so the labels below are intentionally the opposite of the
-// physical hand they simulate -- 'L' below yields the backend's 'right' hand,
-// and vice versa.
+//   "pose <present> <arm_raised>"  where each field is 0/1, e.g. "pose 1 1"
+//   (person visible, an arm raised) or "pose 0 0" (no person).
 //
 // Build:  gcc -O2 -Wall -Wextra -o fake_gesture_udp fake_gesture_udp.c
 // Run:    ./fake_gesture_udp        (sends to 127.0.0.1:12345)
@@ -32,25 +24,21 @@
 #include <unistd.h>
 
 typedef struct {
-    const char *label;  // "R", "L", or "U" (no hand)
-    int count;
-    int fingers[5];  // thumb, index, middle, ring, pinky
-    const char *name;
+    int present;
+    int arm_raised;
 } Frame;
 
-// Two consecutive identical-gesture frames are enough to satisfy the web UI's
-// ~600ms hold threshold at the default 1000ms send interval.
+// The web UI holds a raised arm ~3s to confirm, so keep the arm up for several
+// consecutive frames at the default 1000ms send interval, then drop it.
 static const Frame kFrames[] = {
-    {"L", 5, {1, 1, 1, 1, 1}, "OPEN_PALM"},  // -> backend 'right' hand: start
-    {"L", 5, {1, 1, 1, 1, 1}, "OPEN_PALM"},
-    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
-    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
-    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
-    {"R", 5, {1, 1, 1, 1, 1}, "OPEN_PALM"},  // -> backend 'left' hand: stop
-    {"R", 5, {1, 1, 1, 1, 1}, "OPEN_PALM"},
-    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
-    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
-    {"U", 0, {0, 0, 0, 0, 0}, "NONE"},
+    {1, 1},  // person present, arm raised (start)
+    {1, 1},
+    {1, 1},
+    {1, 1},
+    {1, 0},  // arm lowered
+    {0, 0},  // no person
+    {0, 0},
+    {0, 0},
 };
 static const int kNumFrames = (int)(sizeof(kFrames) / sizeof(kFrames[0]));
 
@@ -86,9 +74,7 @@ int main(int argc, char **argv) {
     for (;;) {
         const Frame *f = &kFrames[idx];
         char msg[128];
-        snprintf(msg, sizeof(msg), "hands 1 %s %d %d %d %d %d %d %s",
-                 f->label, f->count, f->fingers[0], f->fingers[1], f->fingers[2],
-                 f->fingers[3], f->fingers[4], f->name);
+        snprintf(msg, sizeof(msg), "pose %d %d", f->present, f->arm_raised);
 
         if (sendto(sock, msg, strlen(msg), 0,
                    (struct sockaddr *)&dest, sizeof(dest)) < 0) {

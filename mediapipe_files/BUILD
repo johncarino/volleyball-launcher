@@ -21,15 +21,14 @@ package(default_visibility = ["//visibility:public"])
 cc_binary(
     name = "m2demo",
     srcs = [
-        "hand_recognition.cpp",
-        "hand_recognition.h",
+        "pose_recognition.cpp",
+        "pose_recognition.h",
         "m2demo.cpp",
     ],
     data = [
-        "hand_tracking_custom.pbtxt",
-        "//mediapipe/modules/hand_landmark:hand_landmark_full.tflite",
-        "//mediapipe/modules/hand_landmark:handedness.txt",
-        "//mediapipe/modules/palm_detection:palm_detection_full.tflite",
+        "pose_tracking_custom.pbtxt",
+        "//mediapipe/modules/pose_detection:pose_detection.tflite",
+        "//mediapipe/modules/pose_landmark:pose_landmark_full.tflite",
     ],
     deps = [
         "//mediapipe/framework:calculator_framework",
@@ -44,10 +43,11 @@ cc_binary(
         "//mediapipe/framework/port:parse_text_proto",
         "//mediapipe/framework/port:ret_check",
         "//mediapipe/framework/port:status",
-        "//mediapipe/graphs/hand_tracking:desktop_tflite_calculators",
+        "//mediapipe/graphs/pose_tracking:pose_tracking_cpu_deps",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/log:initialize",
     ],
 )
 
