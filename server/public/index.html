@@ -51,7 +51,10 @@
               aria-hidden="true"></i></button>
         </div>
         <div class="modal-body">
-          <img id="align-modal-img" src="" alt="Machine alignment reference" class="align-modal-img">
+          <div class="align-modal-img-row" id="align-modal-img-row">
+            <img id="align-modal-img2" src="" alt="Net alignment reference" class="align-modal-img">
+            <img id="align-modal-img" src="" alt="Line alignment reference" class="align-modal-img">
+          </div>
           <p id="align-modal-text" class="align-modal-text"></p>
         </div>
         <button class="modal-save" onclick="closeAlignModal()">Got it</button>
@@ -71,13 +74,13 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-      
+
       function isLinuxDevice() {
         const ua = navigator.userAgent || '';
         // Android reports "Linux" in its UA too, so it must be excluded explicitly.
         return /Linux/.test(ua) && !/Android/.test(ua);
       }
-      const SHOW_QR_ON_START = isLinuxDevice(); // set to true/false to force this on any device
+      const SHOW_QR_ON_START = isLinuxDevice(); // set to true/false to force QR code overlay on any device
       window.addEventListener('load', () => {
         if (SHOW_QR_ON_START) {
           requestAnimationFrame(() => requestAnimationFrame(openQrModal));
@@ -122,11 +125,15 @@
       const MACHINE_INDEX = { L: 0, C: 1, R: 2 };
       const targetNames = { T1: 'Zone 1', T2: 'Zone 2', T3: 'Zone 3', T4: 'Zone 4', T5: 'Zone 5' };
 
-      const alignImages = { L: 'images/left.png', C: 'images/front.png', R: 'images/right.png' };
+      const alignImages = {
+        L: { line: 'images/linealignleft.jpg', net: 'images/netalignleft.jpg' },
+        C: { line: 'images/front.png', net: null },
+        R: { line: 'images/linealignright.jpg', net: 'images/netalignright.jpg' },
+      };
       const alignInstructions = {
-        L: 'Placeholder instructions for aligning the machine at the LEFT position.',
+        L: 'Place the machine on the left side of the court, near the net. Align the back wheels to the edge line of the court.',
         C: 'Placeholder instructions for aligning the machine at the CENTER position.',
-        R: 'Placeholder instructions for aligning the machine at the RIGHT position.',
+        R: 'Place the machine on the right side of the court, near the net. Align the back wheels to the edge line of the court.',
       };
 
       const courtPresets = {
@@ -144,9 +151,20 @@
 
       function openAlignModal(id) {
         const img = document.getElementById('align-modal-img');
+        const img2 = document.getElementById('align-modal-img2');
         const text = document.getElementById('align-modal-text');
         const title = document.getElementById('align-modal-title');
-        if (img) img.src = alignImages[id] || '';
+        const images = alignImages[id] || {};
+        if (img) img.src = images.line || '';
+        if (img2) {
+          if (images.net) {
+            img2.src = images.net;
+            img2.style.display = '';
+          } else {
+            img2.removeAttribute('src');
+            img2.style.display = 'none';
+          }
+        }
         if (text) text.textContent = alignInstructions[id] || '';
         if (title) title.textContent = `${machineNames[id] || id} machine alignment`;
         document.getElementById('align-modal').classList.add('open');

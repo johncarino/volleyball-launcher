@@ -750,19 +750,29 @@ input[type=range] { accent-color: var(--blue); }
 .court-sel-val { font-size: 13px; font-weight: 500; color: var(--text-primary); }
 .court-sel-val.unset { color: var(--text-tertiary); font-weight: 400; }
 
+.align-modal-img-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
 .align-modal-img {
+  flex: 1;
+  min-width: 0;
   width: 100%;
-  max-height: 40vh;
+  max-height: 32vh;
   object-fit: contain;
   border-radius: var(--radius-md);
   display: block;
-  margin-bottom: 12px;
   background: var(--bg-secondary);
 }
 .align-modal-text {
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+.align-modal-img-row img[style*="display: none"] + .align-modal-img,
+.align-modal-img-row img:only-child {
+  flex: 1 1 100%;
 }
 
 .qr-modal-sheet {
