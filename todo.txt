@@ -22,12 +22,3 @@ CONSIDERATION
 
 CLEANUP
 - Remove any unused code
-
-beaglebone/mnt/remote/jp/volleyball_launcher/server/
-npm start
-browser to 192.168.7.2:8088
-advanced mode->pulse hopper
-
-npm run build
-
-tb6600_test reverse
