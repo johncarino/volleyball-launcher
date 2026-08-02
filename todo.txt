@@ -2,15 +2,11 @@ PRIORITY
 - Fill in alignment modals
 - Add QR code button
 - Machine position appears after selecting set in center
-- Change court dimensions to reflect presets
 - Add homing overlay with prompt
-- Fix invalidated sets in UI
-- Fix hidden plus minus buttons in manual mode, x buttons on set slots
-- Arc shouldnt reset after modals
 - Fix scrolling on linux
-- Fix center image inverted
-- Fix being able to change the machine_control
+- Fix being able to change the machine (backend issue)
 - Change target zone names based off side
+- Make court graphic smaller
 
 AESTHETIC
 - Change background colours to be better

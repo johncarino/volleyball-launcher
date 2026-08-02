@@ -112,6 +112,12 @@
       };
       let courtSettings = { net: 243, len: 18, wid: 9, preset: 'mens' };
 
+      function courtSummaryHTML() {
+        const preset = courtPresets[courtSettings.preset];
+        if (preset) return `${preset.label} Court`;
+        return `Net Height: ${courtSettings.net} cm · Court: ${courtSettings.len.toFixed(1)} m × ${courtSettings.wid.toFixed(1)} m`;
+      }
+
       function openAlignModal(id) {
         const img = document.getElementById('align-modal-img');
         const text = document.getElementById('align-modal-text');
@@ -750,8 +756,8 @@
         const machineImages = { L: 'images/left.png', R: 'images/right.png' };
         function machineImageFor(id) {
           if (id !== 'C') return machineImages[id];
-          if (previewSide === 'left') return 'images/left.png';
-          if (previewSide === 'right') return 'images/right.png';
+          if (previewSide === 'left') return 'images/right.png';
+          if (previewSide === 'right') return 'images/left.png';
           return 'images/front.png';
         }
         const mCircles = machineSpots.map(s => {
@@ -805,20 +811,20 @@
           const baseMidY = (startY + endY) / 2;
 
           const highlightTempo = hoveredTempo || selectedTempo;
-          tempoArcs = [1, 2, 3, 4].map(tempo => {
-            const tempoDisabled = !isTempoAllowed(mSel, tSel, tempo);
-            const active = !tempoDisabled && tempo === highlightTempo;
+          tempoArcs = [1, 2, 3, 4]
+          .filter(tempo => isTempoAllowed(mSel, tSel, tempo))
+          .map(tempo => {
+            const active = tempo === highlightTempo;
             const isSelected = tempo === selectedTempo;
             const arcHeight = 16 + tempo * 50;
             const ctrlY = baseMidY - arcHeight;
             const stroke = active ? '#e08a1e' : '#c2b8ab';
             const strokeWidth = active ? 2.5 : 1;
-            const opacity = tempoDisabled ? 0.08 : (active ? 0.95 : 0.4);
-            const flashClass = (!tempoDisabled && !readonly && !tempoSelected) ? 'selectable-flash' : '';
-            const hitProps = readonly || tempoDisabled
-              ? ''
+            const opacity = active ? 0.95 : 0.4;
+            const flashClass = (!readonly && !tempoSelected) ? 'selectable-flash' : '';
+            const hitProps = readonly ? ''
               : `onclick="selectTempo(${tempo})" onmouseenter="onTempoHover(${tempo})" onmouseleave="onTempoHover(null)" style="cursor:pointer"`;
-            const hitArea = readonly || tempoDisabled ? '' : `<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="transparent" stroke-width="14" ${hitProps}/>`;
+            const hitArea = readonly ? '' : `<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="transparent" stroke-width="14" ${hitProps}/>`;
             const labelT = 0.35; // 0 = at machine, 0.5 = arc midpoint, 1 = at target. Lower = closer to machine.
             const oneMinusT = 1 - labelT;
             const peakX = oneMinusT * oneMinusT * startX + 2 * labelT * oneMinusT * midX + labelT * labelT * endX;
@@ -918,9 +924,7 @@
           alignShown[id] = true;
         }
 
-        const savedSlot = [1, 2, 3, 4]
-          .map(n => slots[id][n])
-          .find(s => !!s);
+        const savedSlot = [1, 2, 3, 4].map(n => slots[id][n]).find(s => !!s);
 
         if (savedSlot) {
           selectedTarget = savedSlot.target;
@@ -929,7 +933,8 @@
           slotSaved = true;
           lockedSide = (id === 'C') ? zoneSide(savedSlot.target) : null;
           previewSide = lockedSide;
-        } else {
+        } else if (!reselectingSame) {
+          // only clear the in-progress selection when actually switching machines
           selectedTarget = null;
           tempoSelected = false;
           slotSaved = false;
@@ -1063,8 +1068,7 @@
             <div class="tempo-attached" id="tempo-wrap">${tempoPillsHTML()}</div>
             <div class="court-summary-card">
               <div class="court-summary-rows">
-                <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="net-summary-val">${courtSettings.net} cm</span></div>
-                <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="court-summary-val">${courtSettings.len.toFixed(1)} m × ${courtSettings.wid.toFixed(1)} m</span></div>
+                <div class="summary-row"><span class="summary-val" id="court-summary-val">${courtSummaryHTML()}</span></div>
               </div>
             </div>
           </div>
@@ -1074,7 +1078,7 @@
           </div>
           <div class="section" style="margin-top:8px">
             <div class="manual-utility-actions">
-              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and hopper to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
+              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and feeder to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
             </div>
           </div>
           <div class="section" style="margin-top:8px">
@@ -1135,30 +1139,30 @@
                 <div class="vert-slider-col">
                   <span class="vert-slider-label">Angle</span>
                   <span class="vert-slider-val" id="dev-ang-val">8°</span>
-                  <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
+                  <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)" aria-label="Increase">+</button>
                   <div class="vert-slider-track">
                     <input type="range" id="dev-ang-range" class="vertical" min="8" max="85" value="8" step="1"
                       oninput="onAdvancedAngleInput(this.value)" onchange="onAdvancedAngleChange(this.value)">
                   </div>
-                  <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
+                  <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)" aria-label="Decrease">&minus;</button>
                   <span style="font-size:11px;color:var(--text-tertiary)">8° – 85°</span>
                 </div>
                 <div class="vert-slider-col">
                   <span class="vert-slider-label">Speed</span>
                   <span class="vert-slider-val" id="dev-spd-val">0 %</span>
-                  <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', 1)"><i class="ti ti-plus" aria-hidden="true"></i></button>
+                  <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', 1)" aria-label="Increase">+</button>
                   <div class="vert-slider-track">
                     <input type="range" id="dev-spd-range" class="vertical" min="0" max="100" value="0" step="1"
                       oninput="onAdvancedSpeedInput(this.value)" onchange="onAdvancedSpeedChange(this.value)">
                   </div>
-                  <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', -1)"><i class="ti ti-minus" aria-hidden="true"></i></button>
+                  <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', -1)" aria-label="Decrease">&minus;</button>
                   <span style="font-size:11px;color:var(--text-tertiary)">0 – 100%</span>
                 </div>
               </div>
             </div>
           </div>
           <div class="section">
-            <div class="section-label">Hopper</div>
+            <div class="section-label">Feeder</div>
             <div class="hopper-controls">
               <button class="hopper-btn" id="hopper-toggle-btn" onclick="toggleHopper()">Feeder Off</button>
               <button class="hopper-btn" id="hopper-pulse-btn" onclick="pulseHopper(this)">Single Ball</button>
@@ -1188,7 +1192,7 @@
             <div class="section-label">Launch</div>
             <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
             <div class="manual-utility-actions">
-              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and hopper to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
+              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and feeder to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
             </div>
           </div>`,
 
@@ -1197,8 +1201,7 @@
             <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
             <div class="court-summary-card">
               <div class="court-summary-rows">
-                <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">${courtSettings.net} cm</span></div>
-                <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">${courtSettings.len.toFixed(1)} m × ${courtSettings.wid.toFixed(1)} m</span></div>
+                <div class="summary-row"><span class="summary-val" id="sum-court">${courtSummaryHTML()}</span></div>
               </div>
             </div>
           </div>
@@ -1237,8 +1240,7 @@
             <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
             <div class="court-summary-card">
               <div class="court-summary-rows">
-                <div class="summary-row"><span class="summary-key"><i class="ti ti-ruler" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Net height</span><span class="summary-val" id="sum-net">${courtSettings.net} cm</span></div>
-                <div class="summary-row"><span class="summary-key"><i class="ti ti-dimensions" style="font-size:14px;vertical-align:-2px;margin-right:4px" aria-hidden="true"></i>Court</span><span class="summary-val" id="sum-court">${courtSettings.len.toFixed(1)} m × ${courtSettings.wid.toFixed(1)} m</span></div>
+                <div class="summary-row"><span class="summary-val" id="sum-court">${courtSummaryHTML()}</span></div>
               </div>
             </div>
           </div>
@@ -1274,19 +1276,17 @@
         const net = document.getElementById('net-val');
         const len = document.getElementById('len-val');
         const wid = document.getElementById('wid-val');
+        const presetSel = document.getElementById('court-preset-select');
         if (!net || !len || !wid) return;
-        const netTxt = net.textContent;
-        const courtTxt = `${len.textContent} × ${wid.textContent}`;
 
-        const netConfig = document.getElementById('net-summary-val');
+        const preset = courtPresets[presetSel ? presetSel.value : 'custom'];
+        const summaryTxt = preset ? `${preset.label} Court` : `Net Height: ${net.textContent} · Court: ${len.textContent} × ${wid.textContent}`;
+
         const courtConfig = document.getElementById('court-summary-val');
-        if (netConfig) netConfig.textContent = netTxt;
-        if (courtConfig) courtConfig.textContent = courtTxt;
+        if (courtConfig) courtConfig.textContent = summaryTxt;
 
-        const netLaunch = document.getElementById('sum-net');
         const courtLaunch = document.getElementById('sum-court');
-        if (netLaunch) netLaunch.textContent = netTxt;
-        if (courtLaunch) courtLaunch.textContent = courtTxt;
+        if (courtLaunch) courtLaunch.textContent = summaryTxt;
       }
 
       function applyCourtPreset(key) {
@@ -1357,11 +1357,11 @@
 
       function tempoPillsHTML() {
         const flashClass = !tempoSelected ? ' selectable-flash' : '';
-        const pills = [1, 2, 3, 4].map(n => {
-          const disabled = !isTempoAllowed(selectedMachine, selectedTarget, n);
-          return `<button class="tempo-pill${disabled ? '' : flashClass} ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
-      onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)" ${disabled ? 'disabled' : ''}>${n}</button>`;
-        }).join('');
+        const pills = [1, 2, 3, 4]
+          .filter(n => isTempoAllowed(selectedMachine, selectedTarget, n))
+          .map(n => `<button class="tempo-pill${flashClass} ${selectedTempo == n ? 'active' : ''}" onclick="setPill(this)"
+            onmouseenter="onTempoHover(${n})" onmouseleave="onTempoHover(null)">${n}</button>`)
+          .join('');
         return `
     <div class="tempo-row">
       <span class="tempo-label">Tempo</span>
@@ -1487,7 +1487,7 @@
           const nameClass = s ? '' : ' empty-name';
 
           const deleteBtn = (!readonly && s)
-            ? `<button class="slot-delete" onclick="event.stopPropagation(); deleteSlot('${machineKey}', ${n})" aria-label="Delete slot"><i class="ti ti-x" aria-hidden="true"></i></button>`
+            ? `<button class="slot-delete" onclick="event.stopPropagation(); deleteSlot('${machineKey}', ${n})" aria-label="Delete slot">x</button>`
             : '';
 
           return `<div class="slot${stateClass}${flashClass}" ${clickAttr}>
@@ -2010,13 +2010,10 @@
       }
 
       function updateSummaryChips() {
-        const netTxt = `${courtSettings.net} cm`;
-        const courtTxt = `${courtSettings.len.toFixed(1)} m × ${courtSettings.wid.toFixed(1)} m`;
+        const summaryTxt = courtSummaryHTML();
         const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-        set('net-summary-val', netTxt);
-        set('court-summary-val', courtTxt);
-        set('sum-net', netTxt);
-        set('sum-court', courtTxt);
+        set('court-summary-val', summaryTxt);
+        set('sum-court', summaryTxt);
       }
 
       function applyStateSnapshot(snap) {
@@ -2047,7 +2044,7 @@
       // Backend rejected the save (e.g. native addon unavailable or validation
       // failed) — roll back the optimistic slot update so the UI doesn't claim
       // a slot is saved when it isn't.
-      function onMachineError(message) {
+      function onMachineError(message) {/*
         console.warn('[machine-error]', message);
         if (pendingSlotSave) {
           const { machineKey, n, previousSlot, previousEnabled } = pendingSlotSave;
@@ -2060,7 +2057,7 @@
           pendingSlotSave = null;
           refreshSlots();
           refreshCourtPicker();
-        }
+        }*/
         showGestureError(typeof message === 'string' ? message : 'Machine error');
       }
 
@@ -2118,7 +2115,7 @@
               hopperOn = false;
               const hopperBtn = document.getElementById('hopper-toggle-btn');
               if (hopperBtn) {
-                hopperBtn.textContent = 'Hopper Off';
+                hopperBtn.textContent = 'Feeder Off';
                 hopperBtn.classList.remove('active');
               }
               onHopperControl('off');
@@ -2157,8 +2154,8 @@
       function homeTabsHTML() {
         return `<div class="modenav-header" id="modenav" role="tablist" aria-label="Modes">
             <button class="modetab-header" role="tab" data-mode="configure">Configure</button>
-            <button class="modetab-header" role="tab" data-mode="advanced">Manual Control</button>
             <button class="modetab-header" role="tab" data-mode="court_settings">Court Settings</button>
+            <button class="modetab-header" role="tab" data-mode="advanced">Manual Control</button>
           </div>`;
       }
 

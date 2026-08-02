@@ -586,15 +586,17 @@ input[type=range] { accent-color: var(--blue); }
   margin-top: -8px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
 }
 .court-summary-card .summary-row {
   padding: 8px 0;
+  justify-content: center;
 }
 .court-summary-rows {
   flex: 1;
   min-width: 0;
+  text-align: center;
 }
 
 .modal-overlay {
@@ -609,6 +611,8 @@ input[type=range] { accent-color: var(--blue); }
 
 .modal-sheet {
   width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
   background: var(--bg-primary);
   border-radius: 16px 16px 0 0;
   padding: 0 0 32px;
