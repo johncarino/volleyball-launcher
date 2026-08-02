@@ -733,12 +733,12 @@
 
         const baseOffset = 25; // default vertical offset
         const isFullySelected = !!(mSel && tSel);
-        const targetShift = isFullySelected ? 85 - baseOffset : 0; // extra shift added on top of baseOffset
+        const targetShift = isFullySelected ? 70 - baseOffset : 0; // extra shift added on top of baseOffset
 
         const machineSpots = [
-          { id: 'L', cx: 18, cy: 133 + baseOffset },
-          { id: 'C', cx: 160, cy: 133 + baseOffset },
-          { id: 'R', cx: 302, cy: 133 + baseOffset },
+          { id: 'L', cx: 18, cy: 118 + baseOffset },
+          { id: 'C', cx: 160, cy: 118 + baseOffset },
+          { id: 'R', cx: 302, cy: 118 + baseOffset },
         ];
         const targetSpots = [
           { id: '1', cx: 64, cy: 20 + baseOffset },
@@ -841,37 +841,12 @@
           }).join('');
         }
 
-        // Legend text
-        const dotsLegend = 'Continue to Launch';
-
-        let legendText = 'Select a machine location';
-        let legendClass = 'legend-text-select';
-        if (mSel === 'C' && !tSel) {
-          legendText = 'Select a Target Zone. Only one direction at a time';
-          legendClass = 'legend-text-select';
-        } else if (mSel && !tSel) {
-          legendText = 'Select a Target Zone';
-          legendClass = 'legend-text-select';
-        } else if (mSel && tSel && !tempoSelected && !readonly) {
-          legendText = 'Select an Arc Tempo';
-          legendClass = 'legend-text-select';
-        } else if (mSel && tSel && tempoSelected && !slotSaved && !readonly) {
-          legendText = 'Save to Set Slot';
-          legendClass = 'legend-text-select';
-        } else if (mSel && tSel && tempoSelected && slotSaved && !readonly) {
-          legendText = dotsLegend;
-          legendClass = 'legend-text-select';
-        } else if (mSel && tSel && readonly) {
-          legendText = dotsLegend;
-          legendClass = 'legend-text-select';
-        }
-
         const showTempo = !readonly && mSel && tSel;
 
         return `
     <div class="court-picker" style="${readonly ? 'pointer-events:none;' : ''}">
       <div class="court-svg-wrap">
-        <svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 320 185" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <pattern id="netMesh" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <line x1="0" y1="0" x2="0" y2="8" stroke="#9ab0bb" stroke-width="0.6"/>
@@ -879,9 +854,9 @@
             </pattern>
           </defs>
           <g id="court-shift-g" data-target-shift="${targetShift}" style="transform:translateY(${targetShift}px); transition:transform 0.35s ease;">
-            <line x1="20" y1="${170 + baseOffset}" x2="300" y2="${170 + baseOffset}" stroke="#aaa" stroke-width="1.5"/>
-            <line x1="40" y1="${30 + baseOffset}" x2="40" y2="${170 + baseOffset}" stroke="#555" stroke-width="3"/>
-            <line x1="280" y1="${30 + baseOffset}" x2="280" y2="${170 + baseOffset}" stroke="#555" stroke-width="3"/>
+            <line x1="20" y1="${155 + baseOffset}" x2="300" y2="${155 + baseOffset}" stroke="#aaa" stroke-width="1.5"/>
+            <line x1="40" y1="${30 + baseOffset}" x2="40" y2="${155 + baseOffset}" stroke="#555" stroke-width="3"/>
+            <line x1="280" y1="${30 + baseOffset}" x2="280" y2="${155 + baseOffset}" stroke="#555" stroke-width="3"/>
             <rect x="40" y="${44 + baseOffset}" width="240" height="40" fill="url(#netMesh)" opacity="0.55"/>
             <rect x="40" y="${44 + baseOffset}" width="240" height="40" fill="none" stroke="#8a9aa3" stroke-width="1"/>
             <rect x="38" y="${40 + baseOffset}" width="244" height="4" fill="#fdfdfd" stroke="#555" stroke-width="1" rx="1"/>
@@ -891,12 +866,6 @@
           </g>
         </svg>
       </div>
-      ${!readonly ? `
-      <div class="court-legend">
-        <div class="legend-item" style="justify-content:center;width:100%">
-          <span id="legend-span" class="${legendClass}" style="color:var(--text-secondary);font-size:13px">${legendText}</span>
-        </div>
-      </div>` : ''}
     </div>`;
       }
 
@@ -1024,10 +993,10 @@
       // Guided step indicator for the Configure flow: reflects how far the user
       // has progressed through machine → target → tempo → save.
       const STEP_HINTS = {
-        machine: 'Step 1 — Tap a machine: Left, Center, or Right.',
-        target: 'Step 2 — Tap a target zone on the court.',
+        machine: 'Step 1 — Tap a machine: Left, Center, or Right',
+        target: 'Step 2 — Tap a target zone on the court',
         tempo: 'Step 3 — Choose a tempo arc.',
-        save: 'Step 4 — Tap a slot to save this set.',
+        save: 'Step 4 — Tap a slot to save this set',
       };
       function stepIndicatorHTML() {
         const done = {
@@ -1380,14 +1349,6 @@
           line.setAttribute('stroke-width', active ? '2.5' : '1');
           line.setAttribute('opacity', active ? '0.95' : '0.4');
         }
-      }
-
-      function flashLegendAttention() {
-        const el = document.getElementById('legend-span');
-        if (!el) return;
-        el.classList.remove('legend-attention');
-        void el.offsetWidth; // force reflow so removing+re-adding the class actually restarts the animation
-        el.classList.add('legend-attention');
       }
 
       function refreshTempo() {
@@ -1762,23 +1723,19 @@
       function saveNewSlot(n) {
         if (!selectedMachine) {
           console.warn('No machine selected, cannot save slot');
-          flashLegendAttention();
           return;
         }
         if (!selectedTarget) {
           console.warn('No target selected, cannot save slot');
-          flashLegendAttention();
           return;
         }
         if (!tempoSelected) {
           console.warn('No tempo selected, cannot save slot');
-          flashLegendAttention();
           return;
         }
         if (!isTargetAllowed(selectedMachine, selectedTarget) ||
             !isTempoAllowed(selectedMachine, selectedTarget, selectedTempo)) {
           console.warn('Invalid machine, target, or tempo combination');
-          flashLegendAttention();
           return;
         }
         const machinePart = `Machine ${selectedMachine}`;

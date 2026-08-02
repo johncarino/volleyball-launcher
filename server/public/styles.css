@@ -431,7 +431,7 @@ body {
 .step-item.active .step-label { color: var(--blue); font-weight: 600; }
 .step-item.done .step-badge { background: var(--green); color: #fff; border-color: var(--green); }
 .step-item.done .step-label { color: var(--green); }
-.step-hint { text-align: center; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; min-height: 18px; }
+.step-hint { text-align: center; font-size: 13px; font-weight: 600; color: var(--blue); opacity: 0.85; margin-bottom: 8px; min-height: 18px; }
 
 .shutdown-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.65);
@@ -752,9 +752,12 @@ input[type=range] { accent-color: var(--blue); }
 
 .align-modal-img {
   width: 100%;
+  max-height: 40vh;
+  object-fit: contain;
   border-radius: var(--radius-md);
   display: block;
   margin-bottom: 12px;
+  background: var(--bg-secondary);
 }
 .align-modal-text {
   font-size: 13px;
