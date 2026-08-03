@@ -4,10 +4,7 @@ PRIORITY
     - Add "Busy" overlay instead of "Ready" icon
     - User confirms homing machine before automatic homing
 - Grey out/disable continue to launch button until set is saved
-- Disable start button in manual until speed is input
 - Disable angle in manual while changing
-- Move connected components under start button
-- Remove shots until re-home
 
 AESTHETIC
 - Change background colours to be better
