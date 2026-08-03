@@ -282,8 +282,6 @@
           setMachineState(machineReady ? 'ready' : 'busy');
         });
         machineSocket.on('hopper-pulse-complete', (completed, count) => {
-          if (typeof count === 'number') { hopperPulseCount = count; renderRehomeCount(); }
-          else if (completed) { hopperPulseCount++; renderRehomeCount(); }
           if (!isRunning) return;
           if (!completed || window._activeMode === 'single_shot') stopRunSequence();
           else if (window._activeMode === 'launch') completeSequenceShot();
@@ -291,7 +289,6 @@
         machineSocket.on('machine-error', (message) => { setMachineState('error'); onMachineError(message); });
         machineSocket.on('homing-complete', () => {
           window._homingInProgress = false;
-          hopperPulseCount = 0; renderRehomeCount();
           setMachineState('ready');
           resetManualVisuals();
           setHomingButtonState(false, 'Homing complete');
@@ -1203,14 +1200,18 @@
               <button class="hopper-btn" id="hopper-toggle-btn" onclick="toggleHopper()">Feeder Off</button>
               <button class="hopper-btn" id="hopper-pulse-btn" onclick="pulseHopper(this)">Single Ball</button>
             </div>
-            <div class="card" style="margin-top:8px">
-              <div class="dev-row"><span class="dev-label">Shots until re-home</span><span class="dev-val" id="rehome-count">4</span></div>
-            </div>
           </div>
           <div class="section">
             <div class="section-label">Live telemetry</div>
             <div class="card">
               <div class="dev-row"><span class="dev-label">Flywheel</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-l" style="width:74%"></div></div><span class="dev-val" id="fw-l-v">3700 rpm</span></div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-label">Launch</div>
+            <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+            <div class="manual-utility-actions">
+              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and feeder to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
             </div>
           </div>
           <div class="section">
@@ -1222,13 +1223,6 @@
               <div class="dev-row"><span class="dev-label">Tilt sensor (MPU6050)</span><span class="dev-val" id="comp-imu">—</span></div>
               <div class="dev-row"><span class="dev-label">Hopper feeder (TB6600 stepper)</span><span class="dev-val" id="comp-hopper">—</span></div>
               <div class="dev-row"><span class="dev-label">Ball detection (HC-SR04)</span><span class="dev-val" id="comp-ball">—</span></div>
-            </div>
-          </div>
-          <div class="section">
-            <div class="section-label">Launch</div>
-            <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
-            <div class="manual-utility-actions">
-              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and feeder to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
             </div>
           </div>`,
 
@@ -2274,7 +2268,6 @@
         if (mode === 'advanced') {
           emitMachine('advanced-enter');
           startTelemetry();
-          renderRehomeCount();
           renderComponentStatus();
           emitMachine('requestComponentStatus');
         }
@@ -2309,17 +2302,6 @@
 
       // Full-scale RPM used to scale the flywheel bar width.
       const FW_MAX_RPM = 3700;
-
-      // Mirrors firmware HOPPER_RESET_INTERVAL_PULSES: every Nth pulse re-homes.
-      const HOPPER_RESET_INTERVAL = 4;
-      let hopperPulseCount = 0;
-      function renderRehomeCount() {
-        const el = document.getElementById('rehome-count');
-        if (!el) return;
-        const remaining = HOPPER_RESET_INTERVAL - (hopperPulseCount % HOPPER_RESET_INTERVAL);
-        el.textContent = (remaining === HOPPER_RESET_INTERVAL && hopperPulseCount > 0)
-          ? 'Re-homing' : remaining;
-      }
 
       // Latest per-component status from the server; re-applied on mode render.
       let _componentStatus = null;
