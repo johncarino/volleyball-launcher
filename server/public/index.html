@@ -379,12 +379,21 @@
       function onAdvancedSpeedInput(value) {
         const val = parseInt(value, 10);
         document.getElementById('dev-spd-val').textContent = val + '%';
+        updateManualStartAvailability(val);
       }
 
       function onAdvancedSpeedChange(value) {
         const val = parseInt(value, 10);
         document.getElementById('dev-spd-val').textContent = val + '%';
         emitMachine('setSpeed', val);
+        updateManualStartAvailability(val);
+      }
+
+      function updateManualStartAvailability(speedVal) {
+        if (window._activeMode !== 'advanced') return;
+        const btn = document.getElementById('launch-main-btn');
+        if (!btn || btn.classList.contains('stop')) return;
+        btn.disabled = (parseInt(speedVal, 10) === 0);
       }
 
       function onHopperControl(action) {
@@ -424,6 +433,7 @@
           launch.classList.remove('stop');
           launch.classList.add('start');
           launch.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+          launch.disabled = true;
         }
         hopperOn = false;
         if (hopper) {
@@ -432,7 +442,6 @@
         }
         clearInterval(window._telem);
         renderTelemetry({ rpm: 0 });
-		setManualAngleControlsDisabled(false);
       }
 
 	  function setManualAngleControlsDisabled(disabled) {
@@ -1220,7 +1229,7 @@
           </div>
           <div class="section">
             <div class="section-label">Launch</div>
-            <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+            <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)" disabled><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
             <div class="manual-utility-actions">
               <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and feeder to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
             </div>
@@ -2310,6 +2319,7 @@
         }
         if (rangeId === 'dev-spd-range') {
           emitMachine('setSpeed', parseInt(input.value, 10));
+          updateManualStartAvailability(input.value);
         }
       }
 
