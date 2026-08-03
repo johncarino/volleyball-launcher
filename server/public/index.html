@@ -432,7 +432,17 @@
         }
         clearInterval(window._telem);
         renderTelemetry({ rpm: 0 });
+		setManualAngleControlsDisabled(false);
       }
+
+	  function setManualAngleControlsDisabled(disabled) {
+		const controls = document.getElementById('manual-angle-controls');
+		if (!controls) return;
+		controls.classList.toggle('controls-disabled', disabled);
+		controls.querySelectorAll('input, button').forEach(control => {
+		  control.disabled = disabled;
+		});
+	  }
 
       // The hopper feeds balls into the flywheel, so it must never be started/
       // pulsed while the Manual screen's launcher ("Start") is stopped -- the
@@ -1170,7 +1180,7 @@
             <div class="section-label">Manual control</div>
             <div class="card">
               <div class="vert-sliders">
-                <div class="vert-slider-col">
+                <div class="vert-slider-col" id="manual-angle-controls">
                   <span class="vert-slider-label">Angle</span>
                   <span class="vert-slider-val" id="dev-ang-val">8°</span>
                   <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', 1)" aria-label="Increase">+</button>
@@ -2123,6 +2133,7 @@
         if (running) {
           btn.classList.remove('stop'); btn.classList.add('start');
           btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+		  setManualAngleControlsDisabled(false);
           clearInterval(window._telem);
           clearTimeout(window._manualStartTimer);
           window._manualStartTimer = null;
@@ -2143,6 +2154,7 @@
         } else {
           btn.classList.remove('start'); btn.classList.add('stop');
           btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+		  setManualAngleControlsDisabled(true);
           startTelemetry();
           if (window._activeMode === 'advanced') {
             clearTimeout(window._manualStartTimer);
