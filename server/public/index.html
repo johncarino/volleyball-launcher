@@ -15,6 +15,9 @@
     <div class="statusbar">
       <img src="images/logo.png" alt="AVSS logo" class="statusbar-logo">
       <div class="statusbar-right">
+        <button class="qr-status-btn" id="qr-status-btn" onclick="openQrModal()" aria-label="Show QR code" style="display:none">
+          <i class="ti ti-qrcode" aria-hidden="true"></i>
+        </button>
         <span class="mstate ready" id="machine-state" title="Machine status"
           onclick="refreshUiIfOffline()" onkeydown="refreshUiIfOffline(event)">
           <span class="mstate-dot" aria-hidden="true"></span>
@@ -91,6 +94,10 @@
       const SHOW_QR_ON_START = isLinuxDevice(); // set to true/false to force QR code overlay on any device
       window.addEventListener('load', () => {
         preloadAlignImages();
+        if (isLinuxDevice()) {
+          const qrBtn = document.getElementById('qr-status-btn');
+          if (qrBtn) qrBtn.style.display = '';
+        }
         if (SHOW_QR_ON_START) {
           requestAnimationFrame(() => requestAnimationFrame(openQrModal));
         }

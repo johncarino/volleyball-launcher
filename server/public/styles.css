@@ -191,6 +191,24 @@ body {
   background: var(--bg-danger);
 }
 
+.qr-status-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 0.5px solid var(--border-secondary);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.qr-status-btn:active {
+  background: var(--bg-secondary);
+}
+
 .modenav-header {
   display: flex;
   align-items: center;

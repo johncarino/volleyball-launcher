@@ -1,9 +1,8 @@
 PRIORITY
-- Add QR code button
 - Add homing overlay with prompt
     - Add "Busy" overlay instead of "Ready" icon
     - User confirms homing machine before automatic homing
-- Disable angle in manual while changing
+- Align the speaker timing
 
 AESTHETIC
 - Change background colours to be better
