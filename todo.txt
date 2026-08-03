@@ -3,19 +3,17 @@ PRIORITY
 - Add homing overlay with prompt
     - Add "Busy" overlay instead of "Ready" icon
     - User confirms homing machine before automatic homing
-- Fix scrolling on linux
-- Fix being able to change the machine (backend issue)
 - Grey out/disable continue to launch button until set is saved
 - Disable start button in manual until speed is input
 - Disable angle in manual while changing
+- Move connected components under start button
+- Remove shots until re-home
 
 AESTHETIC
 - Change background colours to be better
 
 CONSIDERATION
 - Ready icon?
-- Connected components?
-- Shots until re-home?
 - 2nd stop button?
 - further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Shot variance variable
