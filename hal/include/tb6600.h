@@ -50,6 +50,11 @@ void tb6600_step_continuous(tb6600_t *motor, int delay_us, volatile int *run_fla
 void tb6600_step(tb6600_t *motor, int steps, int delay_us);
 void tb6600_step_accel(tb6600_t *motor, int steps, int start_delay_us,
                        int end_delay_us, int accel_steps);
+// Accelerated move that exits between step pulses when run_flag becomes zero.
+void tb6600_step_accel_interruptible(tb6600_t *motor, int steps,
+                                     int start_delay_us, int end_delay_us,
+                                     int accel_steps,
+                                     volatile int *run_flag);
 void tb6600_close(tb6600_t *motor);
 
 #endif // TB6600_H

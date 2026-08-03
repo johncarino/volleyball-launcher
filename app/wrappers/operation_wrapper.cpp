@@ -19,6 +19,7 @@ using namespace Napi;
 // hardware state (DAC, motor driver, curr_tilt_angle), so only one tilt may
 // run at a time. Set true when a TiltWorker is queued, cleared when it finishes.
 static std::atomic<bool> g_tiltInProgress(false);
+static std::atomic<bool> g_homingInProgress(false);
 
 // Runs the blocking tilt_signal() feedback loop on a libuv worker thread so it
 // no longer freezes Node's event loop (telemetry and other socket handlers
@@ -94,6 +95,27 @@ private:
     int setIndex_;
 };
 
+class HomingWorker : public AsyncWorker {
+public:
+    HomingWorker(const Napi::Function& callback)
+        : AsyncWorker(callback, "HomingWorker") {}
+
+    void Execute() override {
+        homing_sequence();
+    }
+
+    void OnOK() override {
+        g_homingInProgress.store(false);
+        Callback().Call({Env().Null(), Boolean::New(Env(), true)});
+    }
+
+    void OnError(const Error& e) override {
+        g_homingInProgress.store(false);
+        Callback().Call({Error::New(Env(), e.Message()).Value(),
+                         Boolean::New(Env(), false)});
+    }
+};
+
 // --- operationInit() ---
 Value operationInit(const CallbackInfo& info) {
     Env env = info.Env();
@@ -114,8 +136,17 @@ Value operationCleanup(const CallbackInfo& info) {
 // --- homingSequence() ---
 Value homingSequence(const CallbackInfo& info) {
     Env env = info.Env();
-    homing_sequence();
-    return env.Undefined();
+    if (info.Length() < 1 || !info[0].IsFunction()) {
+        TypeError::New(env, "homingSequence expects a callback")
+            .ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    bool expected = false;
+    if (!g_homingInProgress.compare_exchange_strong(expected, true)) {
+        return Boolean::New(env, false);
+    }
+    (new HomingWorker(info[0].As<Function>()))->Queue();
+    return Boolean::New(env, true);
 }
 
 // --- tiltSignal(angle) ---
@@ -289,6 +320,23 @@ Value requestInterrupt(const CallbackInfo& info) {
     return env.Undefined();
 }
 
+Value markHopperMisaligned(const CallbackInfo& info) {
+    Env env = info.Env();
+    hopper_mark_misaligned();
+    return env.Undefined();
+}
+
+Value hopperNeedsHoming(const CallbackInfo& info) {
+    Env env = info.Env();
+    return Boolean::New(env, hopper_needs_homing() != 0);
+}
+
+Value forceStop(const CallbackInfo& info) {
+    Env env = info.Env();
+    operation_force_stop();
+    return env.Undefined();
+}
+
 // --- isInterruptPending() ---
 Value isInterruptPending(const CallbackInfo& info) {
     Env env = info.Env();
@@ -312,6 +360,8 @@ Object Init(Env env, Object exports) {
     exports.Set("speedSignal", Function::New(env, speedSignal));
     exports.Set("getTachReading", Function::New(env, getTachReading));
     exports.Set("getHopperPulseCount", Function::New(env, getHopperPulseCount));
+    exports.Set("markHopperMisaligned", Function::New(env, markHopperMisaligned));
+    exports.Set("hopperNeedsHoming", Function::New(env, hopperNeedsHoming));
     exports.Set("getComponentStatus", Function::New(env, getComponentStatus));
     exports.Set("syncSet", Function::New(env, syncSet));
     exports.Set("setMachine", Function::New(env, setMachine));
@@ -321,6 +371,7 @@ Object Init(Env env, Object exports) {
     exports.Set("hopperStop", Function::New(env, hopperStop));
     exports.Set("hopperPulse", Function::New(env, hopperPulse));
     exports.Set("requestInterrupt", Function::New(env, requestInterrupt));
+    exports.Set("forceStop", Function::New(env, forceStop));
     exports.Set("isInterruptPending", Function::New(env, isInterruptPending));
     exports.Set("clearInterrupt", Function::New(env, clearInterrupt));
     return exports;

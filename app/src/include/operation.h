@@ -50,6 +50,8 @@ int hopper_start();
 void hopper_stop();
 int hopper_pulse();
 void hopper_reset();
+void hopper_mark_misaligned(void);
+int hopper_needs_homing(void);
 int get_tach_reading();
 
 float get_tilt_angle();
@@ -88,6 +90,7 @@ void shuffle_set_sequence();
 */
 void operation_install_interrupt_handler(void);
 void operation_request_interrupt(void);
+void operation_force_stop(void);
 int  operation_interrupt_pending(void);
 void operation_clear_interrupt(void);
 

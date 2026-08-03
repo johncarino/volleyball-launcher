@@ -16,6 +16,9 @@ float d_angle = 0;
 volatile int operation_initialized = 0;
 volatile int hopper_enabled = 1; // 0 = enabled, 1 = disabled
 volatile int hopper_running = 0;
+static volatile int hopper_pulse_running = 0;
+static volatile sig_atomic_t homing_running = 0;
+static volatile sig_atomic_t homing_cancel_requested = 0;
 volatile int launcher_running = 0;
 
 #define TILT_TOLERANCE_DEG 0.2
@@ -69,6 +72,7 @@ static mcp4725_t dac1 = MCP4725_INIT_ZERO;
 static pthread_t hopper_thread;
 static volatile int hopper_thread_created = 0;
 static unsigned int hopper_pulse_count = 0;
+static volatile int hopper_alignment_required = 1;
 static volatile unsigned int component_status_mask = 0;
 static volatile int feedback_sensor_fault = 0;
 static int speed_cache_valid = 0;
@@ -141,6 +145,8 @@ static void operation_interrupt_handler(int signo) {
     (void)signo;
     g_operation_interrupt = 1;
     hopper_running = 0;
+    hopper_pulse_running = 0;
+    if (homing_running) homing_cancel_requested = 1;
     launcher_running = 0;
 }
 
@@ -161,6 +167,25 @@ void operation_install_interrupt_handler(void) {
 
 void operation_request_interrupt(void) {
     operation_interrupt_handler(0);
+}
+
+void operation_force_stop(void) {
+    operation_interrupt_handler(0);
+    hopper_alignment_required = 1;
+
+    if (!operation_initialized) {
+        return;
+    }
+
+    // Stop each driver explicitly as well as setting the cooperative flags.
+    // This immediately removes power from the actuator, flywheel, and hopper.
+    bts_stop();
+    mcp4725_set_raw(&dac1, 0);
+    hopper_stop();
+    curr_speed = 0.0f;
+    curr_rpm = 0;
+    speed_cache_valid = 0;
+    fprintf(stderr, "[operation] Emergency stop: all motion stopped.\n");
 }
 
 int operation_interrupt_pending(void) {
@@ -473,6 +498,8 @@ void operation_cleanup() {
 }
 
 void homing_sequence() {
+    homing_running = 1;
+    homing_cancel_requested = 0;
     printf("Homing sequence initiated. Moving to default position...\n");
 
     // Start from a known stopped state so tilt_signal() cannot restore a
@@ -487,6 +514,10 @@ void homing_sequence() {
     // 1. Return the launcher to its mechanical starting angle while the
     // flywheel and hopper are stopped.
     tilt_signal(INITIAL_TILT_ANGLE);
+    if (homing_cancel_requested) {
+        fprintf(stderr, "Homing cancelled while returning tilt to home.\n");
+        goto homing_stop;
+    }
     if (feedback_sensor_fault) {
         fprintf(stderr, "Homing aborted: unable to reach the initial tilt position.\n");
         goto homing_stop;
@@ -498,6 +529,11 @@ void homing_sequence() {
     printf("Homing: running flywheel at %.0f RPM.\n", HOMING_FLYWHEEL_RPM);
     speed_signal(HOMING_FLYWHEEL_RPM);
     launcher_running = 1;
+
+    if (homing_cancel_requested) {
+        fprintf(stderr, "Homing cancelled before hopper reset.\n");
+        goto homing_stop;
+    }
 
     // 3. Find and settle at the hopper home position.
     hopper_reset();
@@ -513,6 +549,7 @@ homing_stop:
     curr_rpm = 0;
     launcher_running = 0;
     speed_cache_valid = 0;
+    homing_running = 0;
     printf("Homing sequence finished with all motors stopped.\n");
 }
 
@@ -1040,8 +1077,23 @@ int hopper_pulse(void) {
         }
 
         tb6600_enable(&motor, 1);
-        tb6600_step_accel(&motor, HOPPER_PULSE_STEPS, HOPPER_PULSE_START_DELAY_US, HOPPER_PULSE_END_DELAY_US, HOPPER_PULSE_ACCEL_STEPS);
+        hopper_pulse_running = 1;
+        tb6600_step_accel_interruptible(
+            &motor, HOPPER_PULSE_STEPS, HOPPER_PULSE_START_DELAY_US,
+            HOPPER_PULSE_END_DELAY_US, HOPPER_PULSE_ACCEL_STEPS,
+            &hopper_pulse_running);
+        hopper_pulse_running = 0;
         tb6600_enable(&motor, 0);
+
+        if (warning_thread_started) {
+            pthread_join(warning_thread, NULL);
+        }
+
+        if (operation_interrupt_pending()) {
+            fprintf(stderr, "Hopper pulse interrupted during stepping.\n");
+            operation_clear_interrupt();
+            return -1;
+        }
 
         printf("Hopper pulse complete.\n");
 
@@ -1064,17 +1116,22 @@ int hopper_pulse(void) {
 }
 
 void hopper_reset() {
+    int sensor_aligned = 0;
+
     if (!motor.request) {
+        hopper_alignment_required = 1;
         fprintf(stderr, "Cannot reset hopper: motor not initialized\n");
         return;
     }
 
     if (!tach_running) {
+        hopper_alignment_required = 1;
         fprintf(stderr, "Cannot reset hopper: tachometer not initialized\n");
         return;
     }
 
     if (operation_interrupt_pending()) {
+        hopper_alignment_required = 1;
         fprintf(stderr, "Hopper reset aborted before start due to pending interrupt.\n");
         operation_clear_interrupt();
         return;
@@ -1135,6 +1192,10 @@ void hopper_reset() {
                 usleep(HOPPER_SENSOR_RUN_ON_SLICE_US);
                 run_on_elapsed_us += HOPPER_SENSOR_RUN_ON_SLICE_US;
             }
+            if (run_on_elapsed_us >= HOPPER_SENSOR_RUN_ON_US &&
+                !operation_interrupt_pending()) {
+                sensor_aligned = 1;
+            }
             break;
         }
 
@@ -1148,7 +1209,16 @@ void hopper_reset() {
     }
 
     hopper_stop();
+    hopper_alignment_required = sensor_aligned ? 0 : 1;
     printf("Hopper reset complete.\n");
+}
+
+void hopper_mark_misaligned(void) {
+    hopper_alignment_required = 1;
+}
+
+int hopper_needs_homing(void) {
+    return hopper_alignment_required != 0;
 }
 
 float get_tilt_angle() {

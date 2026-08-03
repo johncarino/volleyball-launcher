@@ -18,11 +18,13 @@
         <button class="qr-status-btn" id="qr-status-btn" onclick="openQrModal()" aria-label="Show QR code" style="display:none">
           <i class="ti ti-qrcode" aria-hidden="true"></i>
         </button>
-        <span class="mstate ready" id="machine-state" title="Machine status">
+        <span class="mstate ready" id="machine-state" title="Machine status"
+          onclick="refreshUiIfOffline()" onkeydown="refreshUiIfOffline(event)">
           <span class="mstate-dot" aria-hidden="true"></span>
           <span id="machine-state-text">Ready</span>
         </span>
-        <span class="conn" id="conn-status">
+        <span class="conn" id="conn-status" onclick="refreshUiIfOffline()"
+          onkeydown="refreshUiIfOffline(event)">
           <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
           <span id="conn-text">AVSS connected</span>
         </span>
@@ -80,6 +82,16 @@
         <img src="images/qr.png" alt="QR code" class="qr-modal-img">
       </div>
     </div>
+
+	<div class="homing-overlay" id="homing-overlay" role="dialog" aria-modal="true"
+	  aria-labelledby="homing-overlay-title" aria-hidden="true">
+	  <div class="homing-popup">
+		<div class="homing-spinner" aria-hidden="true"></div>
+		<div class="homing-popup-title" id="homing-overlay-title">Homing machine…</div>
+		<div class="homing-popup-text">Please wait while the machine returns to its reference position.</div>
+		<div class="homing-popup-hint">Use the red STOP button to cancel.</div>
+	  </div>
+	</div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
@@ -301,6 +313,9 @@
           if (window._homingInProgress) return;
           setMachineState(machineReady ? 'ready' : 'busy');
         });
+		machineSocket.on('operation-state', (state) => {
+		  if (state === 'HOMING') showHomingPopup();
+		});
         machineSocket.on('hopper-pulse-complete', (completed, count) => {
           if (!isRunning) return;
           if (!completed || window._activeMode === 'single_shot') stopRunSequence();
@@ -312,12 +327,14 @@
 		});
         machineSocket.on('homing-complete', () => {
           window._homingInProgress = false;
+		  hideHomingPopup();
           setMachineState('ready');
           resetManualVisuals();
           setHomingButtonState(false, 'Homing complete');
         });
         machineSocket.on('homing-error', (message) => {
           window._homingInProgress = false;
+		  hideHomingPopup();
 		  setManualAngleControlsDisabled(false);
           setMachineState('error');
           setHomingButtonState(false, 'Home machine');
@@ -347,7 +364,30 @@
         if (text) text.textContent = connected ? 'AVSS connected' : 'Reconnecting…';
         if (icon) icon.className = 'ti ' + (connected ? 'ti-wifi' : 'ti-wifi-off');
         if (!connected) setMachineState('offline', 'Offline');
+		setOfflineRefreshState(!connected);
       }
+
+	  function setOfflineRefreshState(refreshable) {
+		['conn-status', 'machine-state'].forEach(id => {
+		  const el = document.getElementById(id);
+		  if (!el) return;
+		  el.classList.toggle('offline-refreshable', refreshable);
+		  el.setAttribute('role', refreshable ? 'button' : 'status');
+		  el.setAttribute('tabindex', refreshable ? '0' : '-1');
+		  el.setAttribute('aria-label', refreshable
+			? 'Offline. Activate to refresh the UI.'
+			: 'Connection status');
+		  el.title = refreshable ? 'Offline — click to refresh' : '';
+		});
+	  }
+
+	  function refreshUiIfOffline(event) {
+		const offline = document.getElementById('conn-status')?.classList.contains('disconnected');
+		if (!offline) return;
+		if (event && event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+		if (event) event.preventDefault();
+		window.location.reload();
+	  }
 
       // Glanceable machine-state chip in the status bar.
       const MACHINE_STATE_LABELS = {
@@ -363,9 +403,8 @@
 
       // Emergency stop: halt motors + hopper immediately from any operating mode.
       function emergencyStop() {
-        emitMachine('requestInterrupt');
-        emitMachine('stopMotors');
-        emitMachine('hopper-off');
+		emitMachine('force-stop');
+		hideHomingPopup();
         if (isRunning) stopRunSequence();
         hopperOn = false;
         const hopperBtn = document.getElementById('hopper-toggle-btn');
@@ -373,6 +412,7 @@
         setMachineState('error', 'Stopped');
         const btn = document.getElementById('emergency-stop');
         if (btn) { btn.classList.remove('activated'); void btn.offsetWidth; btn.classList.add('activated'); }
+		window._suppressModeLeaveCleanup = true;
         goBackToConfigure();
       }
 
@@ -436,11 +476,27 @@
 
       function runHomingSequence() {
         window._homingInProgress = true;
+		showHomingPopup();
 		setManualAngleControlsDisabled(true);
         setMachineState('homing');
         setHomingButtonState(true, 'Homing...');
         emitMachine('homing-sequence');
       }
+
+	  function showHomingPopup() {
+		window._homingInProgress = true;
+		const overlay = document.getElementById('homing-overlay');
+		if (!overlay) return;
+		overlay.classList.add('open');
+		overlay.setAttribute('aria-hidden', 'false');
+	  }
+
+	  function hideHomingPopup() {
+		const overlay = document.getElementById('homing-overlay');
+		if (!overlay) return;
+		overlay.classList.remove('open');
+		overlay.setAttribute('aria-hidden', 'true');
+	  }
 
       function resetManualVisuals() {
         const angle = document.getElementById('dev-ang-range');
@@ -2276,6 +2332,8 @@
 
       function setMode(mode) {
         const previousMode = window._activeMode || 'configure';
+		const suppressLeaveCleanup = !!window._suppressModeLeaveCleanup;
+		window._suppressModeLeaveCleanup = false;
         const leavingLaunchModes =
           (previousMode === 'launch' || previousMode === 'single_shot') &&
           mode !== 'launch' && mode !== 'single_shot';
@@ -2291,10 +2349,10 @@
           clearTimeout(window._manualStartTimer);
           window._manualStartTimer = null;
         }
-        if (previousMode === 'advanced' && mode !== 'advanced') {
+        if (!suppressLeaveCleanup && previousMode === 'advanced' && mode !== 'advanced') {
           emitMachine('advanced-leave');
         }
-        if (OPERATION_MODES.includes(previousMode) && !OPERATION_MODES.includes(mode)) {
+        if (!suppressLeaveCleanup && OPERATION_MODES.includes(previousMode) && !OPERATION_MODES.includes(mode)) {
           emitMachine('operation-leave');
         }
         if (previousMode === 'court_settings' && mode !== 'court_settings') {
