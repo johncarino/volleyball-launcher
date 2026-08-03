@@ -86,7 +86,6 @@ var slotDescriptors = {};   // key -> { machinePosition, setIndex, targetLocatio
 var slotEnabledState = {};  // key -> bool (whether the slot is armed for the run queue)
 var sharedUiState = null;   // last live selections/options from any client (see 'uiState')
 var calibrationInitialized = false;  // guards page-loaded from resetting a peer's calibration
-var hasHomedOnStartup = false;       // one-time homing after the machine/server starts
 
 function buildStateSnapshot() {
 	var slots = Object.keys(slotDescriptors).map(function(key) {
@@ -130,7 +129,10 @@ var operation = (function() {
 		return {
 			operationInit: function(){},
 			operationCleanup: function(){},
-			homingSequence: function(){},
+			homingSequence: function(callback){
+				setImmediate(function() { callback(null, true); });
+				return true;
+			},
 			tiltSignal: function(angle, callback){
 				setImmediate(function() { callback(null, true); });
 				return true;
@@ -138,6 +140,8 @@ var operation = (function() {
 			speedSignal: function(){},
 			getTachReading: function(){ return 0; },
 			getHopperPulseCount: function(){ return 0; },
+			hopperNeedsHoming: function(){ return true; },
+			markHopperMisaligned: function(){},
 			getComponentStatus: function(){ return 0; },
 			syncSet: function(){},
 			setMachine: function(machinePosition, setIndex, callback){
@@ -150,6 +154,7 @@ var operation = (function() {
 			resumeMachine: function(){},
 			pauseMachine: function(){},
 			requestInterrupt: function(){},
+			forceStop: function(){},
 			isInterruptPending: function(){ return false; },
 			clearInterrupt: function(){}
 		};
@@ -191,9 +196,8 @@ exports.listen = function(server) {
 	startUdpReceiver();
 	startPreviewReceiver();
 
-	// Home once when the machine/server starts. When operation control isn't
-	// lazily initialised, bring it up now so the one-time homing runs at boot;
-	// otherwise it runs the first time a client enters an operation mode.
+	// Initialize hardware at startup when configured. Homing is deferred until
+	// Manual or Launch entry and runs only when alignment state requires it.
 	if (!OPERATION_LAZY_INIT) {
 		initOperation(null, 'startup');
 	}
@@ -205,7 +209,9 @@ exports.listen = function(server) {
 		socket.emit('state-snapshot', buildStateSnapshot());
 
 		socket.on('advanced-enter', function() {
-			initOperation(socket, 'advanced-enter');
+			if (initOperation(socket, 'advanced-enter')) {
+				homeIfHopperMisaligned(socket, 'manual');
+			}
 			startTelemetry(socket);
 			emitComponentStatus(socket);
 		});
@@ -216,7 +222,9 @@ exports.listen = function(server) {
 		});
 
 		socket.on('operation-enter', function() {
-			initOperation(socket, 'operation-enter');
+			if (initOperation(socket, 'operation-enter')) {
+				homeIfHopperMisaligned(socket, 'launch');
+			}
 		});
 
 		socket.on('requestComponentStatus', function() {
@@ -305,7 +313,6 @@ function initOperation(socket, reason) {
 		operationReady = true;
 		console.log('[operation] operationInit complete (' + reason + ').');
 		if (socket) socket.emit('operation-state', 'READY');
-		maybeStartupHoming();
 		return true;
 	} catch (e) {
 		operationReady = false;
@@ -319,16 +326,27 @@ function initOperation(socket, reason) {
 // available after the machine/server starts. Switching UI tabs no longer homes
 // (that used to happen on every Configure/Manual/Launch switch); the manual
 // "Home machine" button remains for on-demand re-homing.
-function maybeStartupHoming() {
-	if (hasHomedOnStartup || !operationReady) return;
-	hasHomedOnStartup = true;
-	try {
-		console.log('[operation] Running one-time startup homing sequence.');
-		operation.homingSequence();
-		if (io) io.sockets.emit('homing-complete');
-	} catch (e) {
-		console.error('[operation] Startup homing failed: ' + e.message);
-		if (io) io.sockets.emit('homing-error', 'Startup homing failed.');
+function homeIfHopperMisaligned(socket, mode) {
+	if (!operationReady || !operation.hopperNeedsHoming()) {
+		console.log('[operation] Hopper aligned; skipping ' + mode + ' entry homing.');
+		return;
+	}
+
+	console.log('[operation] Hopper misaligned; homing on ' + mode + ' entry.');
+	if (socket) socket.emit('operation-state', 'HOMING');
+	if (socket) socket.emit('machine-ready', false);
+	var accepted = operation.homingSequence(function(err) {
+		var stillMisaligned = operation.hopperNeedsHoming();
+		if (socket) socket.emit('machine-ready', true);
+		if (err || stillMisaligned) {
+			if (socket) socket.emit('homing-error', 'Hopper homing did not align the sensor.');
+			return;
+		}
+		if (socket) socket.emit('homing-complete');
+	});
+	if (accepted === false && socket) {
+		socket.emit('machine-ready', true);
+		socket.emit('homing-error', 'Homing is already in progress.');
 	}
 }
 
@@ -708,6 +726,20 @@ function handleCommand(socket) {
 		}
 	});
 
+	socket.on('force-stop', function() {
+		console.log('Got force-stop command.');
+		try {
+			operation.forceStop();
+			if (io) io.sockets.emit('force-stop-complete');
+			setTimeout(function() {
+				try { operation.clearInterrupt(); } catch (e) {}
+			}, 1000);
+		} catch (e) {
+			console.log('[operation] force-stop failed: ' + e.message);
+			socket.emit('machine-error', 'Emergency stop failed.');
+		}
+	});
+
 	socket.on('stopMotors', function() {
 		if (!ensureOperationReady(socket, 'stopMotors')) return;
 		console.log("Got stopMotors command.");
@@ -723,6 +755,7 @@ function handleCommand(socket) {
 	socket.on('hopper-on', function() {
 		if (!ensureOperationReady(socket, 'hopper-on')) return;
 		console.log("Got hopper-on command.");
+		operation.markHopperMisaligned();
 		var started = operation.hopperStart();
 		if (started === false) {
 			socket.emit('machine-error', 'Cannot start hopper: machine is not running.');
@@ -732,6 +765,7 @@ function handleCommand(socket) {
 	socket.on('hopper-off', function() {
 		if (!ensureOperationReady(socket, 'hopper-off')) return;
 		console.log("Got hopper-off command.");
+		operation.markHopperMisaligned();
 		operation.hopperStop();
 	});
 
@@ -759,8 +793,17 @@ function handleCommand(socket) {
 		}
 		console.log("Got homing-sequence command.");
 		try {
-			operation.homingSequence();
-			socket.emit('homing-complete');
+			var accepted = operation.homingSequence(function(err) {
+				if (err) {
+					console.error('[operation] Homing sequence failed: ' + err.message);
+					socket.emit('homing-error', 'Homing sequence failed.');
+					return;
+				}
+				socket.emit('homing-complete');
+			});
+			if (accepted === false) {
+				socket.emit('homing-error', 'Homing is already in progress.');
+			}
 		} catch (e) {
 			console.error('[operation] Homing sequence failed: ' + e.message);
 			socket.emit('homing-error', 'Homing sequence failed.');

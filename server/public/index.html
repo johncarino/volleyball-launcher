@@ -15,11 +15,13 @@
     <div class="statusbar">
       <img src="images/logo.png" alt="AVSS logo" class="statusbar-logo">
       <div class="statusbar-right">
-        <span class="mstate ready" id="machine-state" title="Machine status">
+        <span class="mstate ready" id="machine-state" title="Machine status"
+          onclick="refreshUiIfOffline()" onkeydown="refreshUiIfOffline(event)">
           <span class="mstate-dot" aria-hidden="true"></span>
           <span id="machine-state-text">Ready</span>
         </span>
-        <span class="conn" id="conn-status">
+        <span class="conn" id="conn-status" onclick="refreshUiIfOffline()"
+          onkeydown="refreshUiIfOffline(event)">
           <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
           <span id="conn-text">AVSS connected</span>
         </span>
@@ -340,7 +342,30 @@
         if (text) text.textContent = connected ? 'AVSS connected' : 'Reconnecting…';
         if (icon) icon.className = 'ti ' + (connected ? 'ti-wifi' : 'ti-wifi-off');
         if (!connected) setMachineState('offline', 'Offline');
+		setOfflineRefreshState(!connected);
       }
+
+	  function setOfflineRefreshState(refreshable) {
+		['conn-status', 'machine-state'].forEach(id => {
+		  const el = document.getElementById(id);
+		  if (!el) return;
+		  el.classList.toggle('offline-refreshable', refreshable);
+		  el.setAttribute('role', refreshable ? 'button' : 'status');
+		  el.setAttribute('tabindex', refreshable ? '0' : '-1');
+		  el.setAttribute('aria-label', refreshable
+			? 'Offline. Activate to refresh the UI.'
+			: 'Connection status');
+		  el.title = refreshable ? 'Offline — click to refresh' : '';
+		});
+	  }
+
+	  function refreshUiIfOffline(event) {
+		const offline = document.getElementById('conn-status')?.classList.contains('disconnected');
+		if (!offline) return;
+		if (event && event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+		if (event) event.preventDefault();
+		window.location.reload();
+	  }
 
       // Glanceable machine-state chip in the status bar.
       const MACHINE_STATE_LABELS = {
@@ -356,9 +381,7 @@
 
       // Emergency stop: halt motors + hopper immediately from any operating mode.
       function emergencyStop() {
-        emitMachine('requestInterrupt');
-        emitMachine('stopMotors');
-        emitMachine('hopper-off');
+		emitMachine('force-stop');
         if (isRunning) stopRunSequence();
         hopperOn = false;
         const hopperBtn = document.getElementById('hopper-toggle-btn');
@@ -366,6 +389,7 @@
         setMachineState('error', 'Stopped');
         const btn = document.getElementById('emergency-stop');
         if (btn) { btn.classList.remove('activated'); void btn.offsetWidth; btn.classList.add('activated'); }
+		window._suppressModeLeaveCleanup = true;
         goBackToConfigure();
       }
 
@@ -2269,6 +2293,8 @@
 
       function setMode(mode) {
         const previousMode = window._activeMode || 'configure';
+		const suppressLeaveCleanup = !!window._suppressModeLeaveCleanup;
+		window._suppressModeLeaveCleanup = false;
         const leavingLaunchModes =
           (previousMode === 'launch' || previousMode === 'single_shot') &&
           mode !== 'launch' && mode !== 'single_shot';
@@ -2284,10 +2310,10 @@
           clearTimeout(window._manualStartTimer);
           window._manualStartTimer = null;
         }
-        if (previousMode === 'advanced' && mode !== 'advanced') {
+        if (!suppressLeaveCleanup && previousMode === 'advanced' && mode !== 'advanced') {
           emitMachine('advanced-leave');
         }
-        if (OPERATION_MODES.includes(previousMode) && !OPERATION_MODES.includes(mode)) {
+        if (!suppressLeaveCleanup && OPERATION_MODES.includes(previousMode) && !OPERATION_MODES.includes(mode)) {
           emitMachine('operation-leave');
         }
         if (previousMode === 'court_settings' && mode !== 'court_settings') {

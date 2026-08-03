@@ -128,6 +128,15 @@ void tb6600_step(tb6600_t *motor, int steps, int delay_us)
 void tb6600_step_accel(tb6600_t *motor, int steps, int start_delay_us,
                        int end_delay_us, int accel_steps)
 {
+    tb6600_step_accel_interruptible(motor, steps, start_delay_us,
+                                    end_delay_us, accel_steps, NULL);
+}
+
+void tb6600_step_accel_interruptible(tb6600_t *motor, int steps,
+                                     int start_delay_us, int end_delay_us,
+                                     int accel_steps,
+                                     volatile int *run_flag)
+{
     if (accel_steps > steps / 2) {
         accel_steps = steps / 2;
     }
@@ -142,6 +151,11 @@ void tb6600_step_accel(tb6600_t *motor, int steps, int start_delay_us,
            steps, start_delay_us, end_delay_us, accel_steps, decel_steps);
 
     for (int i = 0; i < steps; i++) {
+        if (run_flag && !*run_flag) {
+            printf("TB6600: accelerated stepping interrupted after %d steps\n", i);
+            break;
+        }
+
         // Compute current delay: ramp down during accel, ramp up during decel
         int delay;
         if (i < accel_steps) {
@@ -161,6 +175,15 @@ void tb6600_step_accel(tb6600_t *motor, int steps, int start_delay_us,
             return;
         }
         usleep(delay);
+
+        if (run_flag && !*run_flag) {
+            // Always return STEP low before exiting, even if the stop arrived
+            // during the high half of the pulse.
+            gpiod_line_request_set_value(motor->request, step_offset,
+                                         GPIOD_LINE_VALUE_INACTIVE);
+            printf("TB6600: accelerated stepping interrupted after %d steps\n", i);
+            break;
+        }
 
         if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_INACTIVE) < 0) {
             perror("step low failed");
