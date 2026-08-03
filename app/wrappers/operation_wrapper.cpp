@@ -25,8 +25,8 @@ static std::atomic<bool> g_tiltInProgress(false);
 // keep running while the actuator moves).
 class TiltWorker : public AsyncWorker {
 public:
-    TiltWorker(Napi::Env env, float angle)
-        : AsyncWorker(env, "TiltWorker"), angle_(angle) {}
+    TiltWorker(const Napi::Function& callback, float angle)
+        : AsyncWorker(callback, "TiltWorker"), angle_(angle) {}
 
     ~TiltWorker() override {}
 
@@ -42,11 +42,14 @@ public:
     void OnOK() override {
         std::cout << "[operation] tilt signal complete: " << angle_ << std::endl;
         g_tiltInProgress.store(false);
+        Callback().Call({Env().Null(), Boolean::New(Env(), true)});
     }
 
     void OnError(const Error& e) override {
         std::cerr << "[operation] tilt worker error: " << e.Message() << std::endl;
         g_tiltInProgress.store(false);
+        Callback().Call({Error::New(Env(), e.Message()).Value(),
+                         Boolean::New(Env(), false)});
     }
 
 private:
@@ -120,8 +123,8 @@ Value homingSequence(const CallbackInfo& info) {
 // immediately so the Node event loop (telemetry, sockets) stays responsive.
 Value tiltSignal(const CallbackInfo& info) {
     Env env = info.Env();
-    if (info.Length() < 1 || !info[0].IsNumber()) {
-        TypeError::New(env, "tiltSignal expects a number").ThrowAsJavaScriptException();
+    if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsFunction()) {
+        TypeError::New(env, "tiltSignal expects a number and callback").ThrowAsJavaScriptException();
         return env.Null();
     }
     float angle = info[0].As<Number>().FloatValue();
@@ -130,15 +133,15 @@ Value tiltSignal(const CallbackInfo& info) {
     if (!g_tiltInProgress.compare_exchange_strong(expected, true)) {
         std::cout << "[operation] tiltSignal ignored (angle=" << angle
                   << "): a tilt is already in progress." << std::endl;
-        return env.Undefined();
+        return Boolean::New(env, false);
     }
 
     std::cout << "[operation] tiltSignal received (angle=" << angle
               << "); running tilt asynchronously..." << std::endl;
 
-    TiltWorker* worker = new TiltWorker(env, angle);
+    TiltWorker* worker = new TiltWorker(info[1].As<Function>(), angle);
     worker->Queue();
-    return env.Undefined();
+    return Boolean::New(env, true);
 }
 
 // --- speedSignal(speed) ---

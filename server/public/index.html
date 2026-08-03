@@ -287,6 +287,9 @@
           else if (window._activeMode === 'launch') completeSequenceShot();
         });
         machineSocket.on('machine-error', (message) => { setMachineState('error'); onMachineError(message); });
+		machineSocket.on('tilt-state', (state) => {
+		  setManualAngleControlsDisabled(state === 'MOVING');
+		});
         machineSocket.on('homing-complete', () => {
           window._homingInProgress = false;
           setMachineState('ready');
@@ -295,6 +298,7 @@
         });
         machineSocket.on('homing-error', (message) => {
           window._homingInProgress = false;
+		  setManualAngleControlsDisabled(false);
           setMachineState('error');
           setHomingButtonState(false, 'Home machine');
           onMachineError(message);
@@ -402,6 +406,7 @@
 
       function runHomingSequence() {
         window._homingInProgress = true;
+		setManualAngleControlsDisabled(true);
         setMachineState('homing');
         setHomingButtonState(true, 'Homing...');
         emitMachine('homing-sequence');
@@ -431,7 +436,6 @@
         }
         clearInterval(window._telem);
         renderTelemetry({ rpm: 0 });
-		setManualAngleControlsDisabled(false);
       }
 
 	  function setManualAngleControlsDisabled(disabled) {
@@ -2132,7 +2136,6 @@
         if (running) {
           btn.classList.remove('stop'); btn.classList.add('start');
           btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
-		  setManualAngleControlsDisabled(false);
           clearInterval(window._telem);
           clearTimeout(window._manualStartTimer);
           window._manualStartTimer = null;
@@ -2153,7 +2156,6 @@
         } else {
           btn.classList.remove('start'); btn.classList.add('stop');
           btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
-		  setManualAngleControlsDisabled(true);
           startTelemetry();
           if (window._activeMode === 'advanced') {
             clearTimeout(window._manualStartTimer);

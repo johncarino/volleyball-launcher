@@ -131,7 +131,10 @@ var operation = (function() {
 			operationInit: function(){},
 			operationCleanup: function(){},
 			homingSequence: function(){},
-			tiltSignal: function(){},
+			tiltSignal: function(angle, callback){
+				setImmediate(function() { callback(null, true); });
+				return true;
+			},
 			speedSignal: function(){},
 			getTachReading: function(){ return 0; },
 			getHopperPulseCount: function(){ return 0; },
@@ -692,7 +695,17 @@ function handleCommand(socket) {
 		if (!ensureOperationReady(socket, 'setAngle')) return;
 		console.log("Got setAngle command: " + value);
 		console.log('[operation] forwarding setAngle to native tiltSignal.');
-		operation.tiltSignal(value);
+		socket.emit('tilt-state', 'MOVING');
+		var accepted = operation.tiltSignal(value, function(err) {
+			if (err) {
+				socket.emit('machine-error', err.message || 'Failed to change angle.');
+			}
+			socket.emit('tilt-state', err ? 'FAILED' : 'IDLE');
+		});
+		if (accepted === false) {
+			socket.emit('tilt-state', 'IDLE');
+			socket.emit('machine-error', 'The linear actuator is already changing angle.');
+		}
 	});
 
 	socket.on('stopMotors', function() {
