@@ -5,6 +5,7 @@ PRIORITY
     - User confirms homing machine before automatic homing
 - Fix scrolling on linux
 - Fix being able to change the machine (backend issue)
+- Grey out/disable continue to launch button until set is saved
 
 AESTHETIC
 - Change background colours to be better
