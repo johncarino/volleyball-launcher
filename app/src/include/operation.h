@@ -12,6 +12,7 @@
 #include "mpu6050.h"
 #include "tachometer.h"
 #include "hcsr04.h"
+#include "buzzer.h"
 
 #ifdef __cplusplus
 extern "C" {

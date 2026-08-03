@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <gpiod.h>
 
 float curr_tilt_angle = 0.0;
 float curr_speed = 0;
@@ -100,6 +101,21 @@ const char *operation_feedback_fault_message(void) {
 #define LAUNCH_BEEP_AMPLITUDE 30000.0
 #define LAUNCH_BEEP_PREROLL_MS 1000
 
+static int play_launch_warning(void) {
+    for (int i = 0; i < LAUNCH_BEEP_COUNT; i++) {
+        buzzer_tone(LAUNCH_BEEP_DURATION_MS);
+        if (i + 1 < LAUNCH_BEEP_COUNT) {
+            usleep(LAUNCH_BEEP_GAP_MS * 1000);
+        }
+    }
+    return 0;
+}
+
+
+#if 0
+// Old speaker-based warning: renders LAUNCH_BEEP_COUNT tones to a temp WAV
+// file and plays it via aplay. Kept for reference / fallback; replaced by
+// the GPIO buzzer implementation above (chip 1, offset 33, 2 kHz square wave).
 typedef struct {
     char riff[4];
     uint32_t file_size;
@@ -208,6 +224,7 @@ static int play_launch_warning(void) {
 
     return 0;
 }
+#endif
 
 static void *play_launch_warning_thread(void *arg) {
     (void)arg;
@@ -560,6 +577,7 @@ void operation_cleanup() {
     tb6600_close(&motor);
     mcp4725_cleanup(&dac1);
     bts_cleanup();
+    buzzer_cleanup();
 
     operation_initialized = 0;
     speed_cache_valid = 0;

@@ -50,7 +50,8 @@
         "../hal/src/tb6600.c",
         "../hal/src/pwm.c",
         "../hal/src/tachometer.c",
-        "../hal/src/hcsr04.c"
+        "../hal/src/hcsr04.c",
+        "../hal/src/buzzer.c"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
