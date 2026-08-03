@@ -3,7 +3,6 @@ PRIORITY
 - Add homing overlay with prompt
     - Add "Busy" overlay instead of "Ready" icon
     - User confirms homing machine before automatic homing
-- Grey out/disable continue to launch button until set is saved
 - Disable angle in manual while changing
 
 AESTHETIC

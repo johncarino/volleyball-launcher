@@ -88,6 +88,7 @@
       }
       const SHOW_QR_ON_START = isLinuxDevice(); // set to true/false to force QR code overlay on any device
       window.addEventListener('load', () => {
+        preloadAlignImages();
         if (SHOW_QR_ON_START) {
           requestAnimationFrame(() => requestAnimationFrame(openQrModal));
         }
@@ -153,6 +154,18 @@
         const preset = courtPresets[courtSettings.preset];
         if (preset) return `${preset.label} Court`;
         return `Net Height: ${courtSettings.net} cm · Court: ${courtSettings.len.toFixed(1)} m × ${courtSettings.wid.toFixed(1)} m`;
+      }
+
+      function preloadAlignImages() {
+        const urls = new Set();
+        Object.values(alignImages).forEach(pair => {
+          if (pair.line) urls.add(pair.line);
+          if (pair.net) urls.add(pair.net);
+        });
+        urls.forEach(src => {
+          const img = new Image();
+          img.src = src;
+        });
       }
 
       function openAlignModal(id) {
@@ -2180,6 +2193,10 @@
       }
 
       function goToSingleShot() {
+        if (!selectedMachine || !machineHasSavedSlot(selectedMachine)) {
+          flashContinueNeedsSet();
+          return;
+        }
         clearInterval(window._telem);
         const topbarLeft = document.getElementById('topbar-left');
         topbarLeft.innerHTML = `<button class="back-btn" onclick="goBackToConfigure()" aria-label="Back"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
@@ -2189,6 +2206,26 @@
           </div>`;
         attachModeTabListeners();
         setMode('single_shot');
+      }
+
+      // Continue to Launch on the Configure screen needs at least one saved
+      // slot on the selected machine. Reuses the same shake+warning pattern as
+      // flashSelectSetNeeded(), but targeted at the Continue button and text.
+      const CONTINUE_NEEDS_SET_HINT_MS = 1500;
+      function flashContinueNeedsSet() {
+        const btn = document.querySelector('.op-btn.continue-style');
+        if (!btn) return;
+        const original = btn.dataset.origLabel || btn.innerHTML;
+        btn.dataset.origLabel = original;
+        btn.innerHTML = '<i class="ti ti-alert-triangle" aria-hidden="true"></i> Save a set slot first';
+        btn.classList.remove('needs-set');
+        void btn.offsetWidth; // restart animation on repeat clicks
+        btn.classList.add('needs-set');
+        clearTimeout(btn._continueNeedsSetTimer);
+        btn._continueNeedsSetTimer = setTimeout(() => {
+          btn.classList.remove('needs-set');
+          btn.innerHTML = btn.dataset.origLabel;
+        }, CONTINUE_NEEDS_SET_HINT_MS);
       }
 
       function homeTabsHTML() {
