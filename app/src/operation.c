@@ -66,6 +66,7 @@ volatile int launcher_running = 0;
 #define HOPPER_RESET_POLL_DELAY_US 10000
 #define HOPPER_BALL_SEEK_TIMEOUT_SEC 30
 #define HOPPER_BALL_SEEK_POLL_DELAY_US 10000
+#define HOPPER_BALL_DETECT_RUN_ON_US 300000
 
 volatile float tilt_angle_w = 0;
 
@@ -991,9 +992,9 @@ void hopper_stop() {
     //speed_signal(curr_rpm);
 }
 
-// Runs the feeder until a ball reaches the HC-SR04 sensor. The feeder stops
-// on the first sensor hit and verifies the reading while stationary so the
-// debounce delay cannot carry the ball past the sensing position.
+// Runs the feeder until a ball reaches the HC-SR04 sensor. After the first
+// sensor hit, keep moving briefly so the hopper arm clears the sensor, then
+// stop and verify that a ball remains present.
 int hopper_seek_ball(void) {
     if (!motor.request) {
         fprintf(stderr, "Cannot seek ball: hopper motor not initialized\n");
@@ -1005,26 +1006,33 @@ int hopper_seek_ball(void) {
         return -1;
     }
 
-    if (hcsr04_ball_present_debounced()) {
-        hopper_stop();
-        printf("Ball already present; hopper remains stopped.\n");
-        return 0;
-    }
-
     time_t started = time(NULL);
     hopper_start_internal();
     if (!hopper_running) return -1;
 
     while (hopper_running && !operation_interrupt_pending()) {
         if (hcsr04_ball_present()) {
+            int run_on_elapsed_us = 0;
+            while (hopper_running && !operation_interrupt_pending() &&
+                   run_on_elapsed_us < HOPPER_BALL_DETECT_RUN_ON_US) {
+                usleep(HOPPER_BALL_SEEK_POLL_DELAY_US);
+                run_on_elapsed_us += HOPPER_BALL_SEEK_POLL_DELAY_US;
+            }
+
             hopper_stop();
 
+            if (operation_interrupt_pending()) {
+                fprintf(stderr, "Ball seek interrupted during sensor run-on.\n");
+                return -1;
+            }
+
             if (hcsr04_ball_present_debounced()) {
-                printf("Ball detected; hopper stopped.\n");
+                printf("Ball detected; hopper stopped after %.1f seconds.\n",
+                       HOPPER_BALL_DETECT_RUN_ON_US / 1000000.0);
                 return 0;
             }
 
-            printf("Transient ball sensor reading; resuming hopper search.\n");
+            printf("Hopper arm cleared sensor; resuming ball search.\n");
             hopper_start_internal();
             if (!hopper_running) return -1;
         }
