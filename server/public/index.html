@@ -93,6 +93,15 @@
       </div>
     </div>
 
+    <div class="homing-overlay" id="ball-load-overlay" role="dialog" aria-modal="true"
+      aria-labelledby="ball-load-overlay-title" aria-hidden="true">
+      <div class="homing-popup">
+        <div class="homing-spinner" aria-hidden="true"></div>
+        <div class="homing-popup-title" id="ball-load-overlay-title">Load volleyballs</div>
+        <div class="homing-popup-text">Place volleyballs into the feeder. The hopper will stop automatically when a ball is detected.</div>
+      </div>
+    </div>
+
     <button class="operating-stop" id="operating-stop" onclick="stopCurrentMode()"
       aria-label="Stop">
       <span>STOP</span>
@@ -394,11 +403,14 @@
         });
         machineSocket.on('machine-ready', (ready) => {
           machineReady = ready === true;
+          if (machineReady) hideBallLoadPopup();
           if (window._homingInProgress) return;
           setMachineState(machineReady ? 'ready' : 'busy');
         });
         machineSocket.on('operation-state', (state) => {
           if (state === 'HOMING') showHomingPopup();
+          else if (state === 'SEEKING_BALL') showBallLoadPopup();
+          else if (state === 'READY' || state === 'IDLE') hideBallLoadPopup();
         });
         machineSocket.on('hopper-pulse-complete', (completed, count) => {
           if (!isRunning) return;
@@ -606,6 +618,20 @@
 
       function hideHomingPopup() {
         const overlay = document.getElementById('homing-overlay');
+        if (!overlay) return;
+        overlay.classList.remove('open');
+        overlay.setAttribute('aria-hidden', 'true');
+      }
+
+      function showBallLoadPopup() {
+        const overlay = document.getElementById('ball-load-overlay');
+        if (!overlay) return;
+        overlay.classList.add('open');
+        overlay.setAttribute('aria-hidden', 'false');
+      }
+
+      function hideBallLoadPopup() {
+        const overlay = document.getElementById('ball-load-overlay');
         if (!overlay) return;
         overlay.classList.remove('open');
         overlay.setAttribute('aria-hidden', 'true');
@@ -2539,6 +2565,10 @@
           (previousMode === 'launch' || previousMode === 'single_shot') &&
           mode !== 'launch' && mode !== 'single_shot';
         const leavingManual = previousMode === 'advanced' && mode !== 'advanced';
+
+        if (mode !== 'advanced' && mode !== 'launch' && mode !== 'single_shot') {
+          hideBallLoadPopup();
+        }
 
         if ((previousMode === 'launch' || previousMode === 'single_shot') && mode !== previousMode && isRunning) {
           stopRunSequence();
