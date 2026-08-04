@@ -48,6 +48,7 @@ void tilt_with_feedback(float angle);
 void toggle_hopper();
 int hopper_start();
 void hopper_stop();
+int hopper_seek_ball();
 int hopper_pulse();
 void hopper_reset();
 void hopper_mark_misaligned(void);

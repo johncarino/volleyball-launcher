@@ -161,6 +161,10 @@ var operation = (function() {
 			},
 			hopperStart: function(){},
 			hopperStop: function(){},
+			hopperSeekBall: function(callback){
+				setImmediate(function() { callback(null, true); });
+				return true;
+			},
 			hopperPulse: function(callback){
 				setImmediate(function() { callback(null, true); });
 				return true;
@@ -227,19 +231,20 @@ exports.listen = function(server) {
 			// and on demand via the "Home machine" button. Homing on every tab
 			// switch was disruptive (the hopper reports "misaligned" after any
 			// pulse, so this fired constantly).
-			initOperation(socket, 'advanced-enter');
+			if (initOperation(socket, 'advanced-enter')) seekBallOnModeEntry(socket);
 			startTelemetry(socket);
 			emitComponentStatus(socket);
 		});
 
 		socket.on('advanced-leave', function() {
+			socket._ballSeekToken = null;
 			stopTelemetry(socket);
 			cleanupOperation(socket, 'advanced-leave');
 		});
 
 		socket.on('operation-enter', function() {
 			// Entering Single Shot / Sequence no longer re-homes (see advanced-enter).
-			initOperation(socket, 'operation-enter');
+			if (initOperation(socket, 'operation-enter')) seekBallOnModeEntry(socket);
 		});
 
 		socket.on('requestComponentStatus', function() {
@@ -247,6 +252,7 @@ exports.listen = function(server) {
 		});
 
 		socket.on('operation-leave', function() {
+			socket._ballSeekToken = null;
 			cleanupOperation(socket, 'operation-leave');
 		});
 
@@ -255,6 +261,46 @@ exports.listen = function(server) {
 		});
 	});
 };
+
+function seekBallOnModeEntry(socket) {
+	if (!socket || !operationReady || typeof operation.hopperSeekBall !== 'function') return;
+
+	var token = {};
+	socket._ballSeekToken = token;
+	socket.emit('machine-ready', false);
+	socket.emit('operation-state', 'SEEKING_BALL');
+
+	function startSeek() {
+		if (socket._ballSeekToken !== token || !operationReady) return;
+
+		try {
+			var accepted = operation.hopperSeekBall(function(err, found) {
+				if (socket._ballSeekToken !== token) return;
+				socket._ballSeekToken = null;
+				socket.emit('machine-ready', true);
+				socket.emit('operation-state', 'READY');
+
+				if (err || found === false) {
+					var message = err && err.message
+						? err.message
+						: 'No ball was detected before the feeder search timed out.';
+					socket.emit('machine-error', message);
+				}
+			});
+
+			// A previous mode-entry search may still be unwinding. Retry after its
+			// worker releases the native in-progress guard.
+			if (accepted === false) setTimeout(startSeek, 100);
+		} catch (e) {
+			if (socket._ballSeekToken !== token) return;
+			socket._ballSeekToken = null;
+			socket.emit('machine-ready', true);
+			socket.emit('machine-error', 'Failed to start ball search: ' + e.message);
+		}
+	}
+
+	startSeek();
+}
 
 // ---- Live telemetry (real tachometer RPM pushed to the Manual tab) ---------
 var TELEMETRY_INTERVAL_MS = 500;

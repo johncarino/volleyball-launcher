@@ -64,6 +64,8 @@ volatile int launcher_running = 0;
 #define HOMING_FLYWHEEL_RPM 300.0f
 #define HOPPER_RESET_TIMEOUT_SEC 30
 #define HOPPER_RESET_POLL_DELAY_US 10000
+#define HOPPER_BALL_SEEK_TIMEOUT_SEC 30
+#define HOPPER_BALL_SEEK_POLL_DELAY_US 10000
 
 volatile float tilt_angle_w = 0;
 
@@ -989,6 +991,59 @@ void hopper_stop() {
     //speed_signal(curr_rpm);
 }
 
+// Runs the feeder until a ball reaches the HC-SR04 sensor. The feeder stops
+// on the first sensor hit and verifies the reading while stationary so the
+// debounce delay cannot carry the ball past the sensing position.
+int hopper_seek_ball(void) {
+    if (!motor.request) {
+        fprintf(stderr, "Cannot seek ball: hopper motor not initialized\n");
+        return -1;
+    }
+
+    if (operation_interrupt_pending()) {
+        fprintf(stderr, "Ball seek aborted due to pending interrupt.\n");
+        return -1;
+    }
+
+    if (hcsr04_ball_present_debounced()) {
+        hopper_stop();
+        printf("Ball already present; hopper remains stopped.\n");
+        return 0;
+    }
+
+    time_t started = time(NULL);
+    hopper_start_internal();
+    if (!hopper_running) return -1;
+
+    while (hopper_running && !operation_interrupt_pending()) {
+        if (hcsr04_ball_present()) {
+            hopper_stop();
+
+            if (hcsr04_ball_present_debounced()) {
+                printf("Ball detected; hopper stopped.\n");
+                return 0;
+            }
+
+            printf("Transient ball sensor reading; resuming hopper search.\n");
+            hopper_start_internal();
+            if (!hopper_running) return -1;
+        }
+
+        if (difftime(time(NULL), started) >= HOPPER_BALL_SEEK_TIMEOUT_SEC) {
+            fprintf(stderr, "Ball seek timed out after %d seconds.\n",
+                    HOPPER_BALL_SEEK_TIMEOUT_SEC);
+            hopper_stop();
+            return -1;
+        }
+
+        usleep(HOPPER_BALL_SEEK_POLL_DELAY_US);
+    }
+
+    hopper_stop();
+    fprintf(stderr, "Ball seek interrupted before a ball was detected.\n");
+    return -1;
+}
+
 // Returns 0 on success, -1 if refused (motor not initialized, machine not
 // running, or an interrupt was pending).
 int hopper_pulse(void) {
@@ -1022,8 +1077,13 @@ int hopper_pulse(void) {
         hopper_stop();
     }
 
+    // Sound the warning once, before the feeder moves to launch the first
+    // ball. This blocks: the feeder does not move until the beeps finish.
+    printf("Sounding %d warning beeps before feeding ball...\n", LAUNCH_BEEP_COUNT);
+    play_launch_warning();
+
     int attempt;
-    int launched_ball = 0;
+    int fed_ball = 0;
 
     for (attempt = 1; attempt <= HOPPER_PULSE_MAX_ATTEMPTS; attempt++) {
         if (operation_interrupt_pending()) {
@@ -1032,38 +1092,31 @@ int hopper_pulse(void) {
             return -1;
         }
 
+        hopper_pulse_count++;
         if (hopper_pulse_count >= HOPPER_RESET_INTERVAL_PULSES) {
             hopper_pulse_count = 0;
-            printf("Hopper pulse #%d: realigning before the next attempt.\n",
+            printf("Hopper pulse #%d: running reset instead of pulse.\n",
                    HOPPER_RESET_INTERVAL_PULSES);
 
             hopper_reset();
 
-            if (operation_interrupt_pending()) {
-                fprintf(stderr, "Hopper pulse interrupted during realignment.\n");
-                operation_clear_interrupt();
-                return -1;
+            float d = hcsr04_get_distance_cm();
+            fprintf(stderr, "  distance: %.2f cm\n", d);
+            if (hcsr04_ball_present_debounced()) {
+                printf("Ball detected after reset (attempt %d/%d).\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
+                fed_ball = 1;
+                break;
             }
-        }
 
-        float d = hcsr04_get_distance_cm();
-        fprintf(stderr, "Hopper attempt %d/%d distance: %.2f cm\n",
-                attempt, HOPPER_PULSE_MAX_ATTEMPTS, d);
-        const int ball_present = hcsr04_ball_present_debounced();
-
-        if (ball_present) {
-            printf("Ball detected; sounding %d warning beeps before launch...\n",
-                   LAUNCH_BEEP_COUNT);
-            play_launch_warning();
-        } else {
-            printf("No ball detected; pulsing hopper without warning beeps.\n");
+            fprintf(stderr, "No ball detected after reset (attempt %d/%d).\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
+            continue;
         }
 
         printf("Pulsing hopper (attempt %d/%d)...\n",
                attempt, HOPPER_PULSE_MAX_ATTEMPTS);
 
-        // The feeder remains stopped throughout the blocking warning. It is
-        // enabled only after the beeps finish, then advances exactly once.
+        // The warning beeps above are the pre-launch warning; push the ball as
+        // soon as they finish rather than waiting out an extra settle delay.
         tb6600_enable(&motor, 1);
         hopper_pulse_running = 1;
         tb6600_step_accel_interruptible(
@@ -1072,7 +1125,10 @@ int hopper_pulse(void) {
             &hopper_pulse_running);
         hopper_pulse_running = 0;
         tb6600_enable(&motor, 0);
-        hopper_pulse_count++;
+
+        //if (warning_thread_started) {
+        //    pthread_join(warning_thread, NULL);
+        //}
 
         if (operation_interrupt_pending()) {
             fprintf(stderr, "Hopper pulse interrupted during stepping.\n");
@@ -1082,18 +1138,19 @@ int hopper_pulse(void) {
 
         printf("Hopper pulse complete.\n");
 
-        if (ball_present) {
-            printf("Detected ball launched on attempt %d/%d.\n",
-                   attempt, HOPPER_PULSE_MAX_ATTEMPTS);
-            launched_ball = 1;
+        float d = hcsr04_get_distance_cm();
+        fprintf(stderr, "  distance: %.2f cm\n", d);
+        if (hcsr04_ball_present_debounced()) {
+            printf("Ball detected after pulse attempt %d/%d.\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
+            fed_ball = 1;
             break;
         }
+
+        fprintf(stderr, "No ball detected after pulse attempt %d/%d.\n", attempt, HOPPER_PULSE_MAX_ATTEMPTS);
     }
 
-    if (!launched_ball) {
-        fprintf(stderr, "Hopper pulse: no ball launched after %d attempts.\n",
-                HOPPER_PULSE_MAX_ATTEMPTS);
-        return -1;
+    if (!fed_ball) {
+        fprintf(stderr, "Hopper pulse: no ball detected after %d attempts.\n", HOPPER_PULSE_MAX_ATTEMPTS);
     }
 
     return 0;

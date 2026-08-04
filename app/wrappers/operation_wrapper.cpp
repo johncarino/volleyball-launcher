@@ -23,6 +23,7 @@ using namespace Napi;
 static std::atomic<bool> g_tiltInProgress(false);
 static std::atomic<bool> g_homingInProgress(false);
 static std::atomic<bool> g_hopperPulseInProgress(false);
+static std::atomic<bool> g_hopperSeekInProgress(false);
 
 // Runs the blocking tilt_signal() feedback loop on a libuv worker thread so it
 // no longer freezes Node's event loop (telemetry and other socket handlers
@@ -125,6 +126,30 @@ public:
 
 private:
     bool pulsed_;
+};
+
+class HopperSeekWorker : public AsyncWorker {
+public:
+    HopperSeekWorker(const Napi::Function& callback)
+        : AsyncWorker(callback, "HopperSeekWorker"), found_(false) {}
+
+    void Execute() override {
+        found_ = (hopper_seek_ball() == 0);
+    }
+
+    void OnOK() override {
+        g_hopperSeekInProgress.store(false);
+        Callback().Call({Env().Null(), Boolean::New(Env(), found_)});
+    }
+
+    void OnError(const Error& e) override {
+        g_hopperSeekInProgress.store(false);
+        Callback().Call({Error::New(Env(), e.Message()).Value(),
+                         Boolean::New(Env(), false)});
+    }
+
+private:
+    bool found_;
 };
 
 class HomingWorker : public AsyncWorker {
@@ -312,6 +337,23 @@ Value hopperStop(const CallbackInfo& info) {
     return env.Undefined();
 }
 
+// --- hopperSeekBall(callback) ---
+Value hopperSeekBall(const CallbackInfo& info) {
+    Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsFunction()) {
+        TypeError::New(env, "hopperSeekBall expects a callback").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    bool expected = false;
+    if (!g_hopperSeekInProgress.compare_exchange_strong(expected, true)) {
+        return Boolean::New(env, false);
+    }
+
+    (new HopperSeekWorker(info[0].As<Function>()))->Queue();
+    return Boolean::New(env, true);
+}
+
 // --- hopperPulse(callback) ---
 // Non-blocking: queues the (blocking) hopper_pulse() on a worker thread and
 // returns immediately so the Node event loop stays responsive during the
@@ -412,6 +454,7 @@ Object Init(Env env, Object exports) {
     exports.Set("pauseMachine", Function::New(env, pauseMachine));
     exports.Set("hopperStart", Function::New(env, hopperStart));
     exports.Set("hopperStop", Function::New(env, hopperStop));
+    exports.Set("hopperSeekBall", Function::New(env, hopperSeekBall));
     exports.Set("hopperPulse", Function::New(env, hopperPulse));
     exports.Set("requestInterrupt", Function::New(env, requestInterrupt));
     exports.Set("forceStop", Function::New(env, forceStop));
