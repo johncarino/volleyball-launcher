@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <unistd.h> // usleep
 
+#include "log.h"
+
 // GPIO pin assignments
 #define STEP_PIN 4 //GPIO 9 offset 4 pin21
 #define DIR_PIN  10 //GPIO 24 offset 10 pin18
@@ -104,7 +106,7 @@ void tb6600_enable(tb6600_t *motor, int enable)
 
 void tb6600_step(tb6600_t *motor, int steps, int delay_us)
 {
-    printf("TB6600: stepping %d steps with %d us delay per half-cycle\n", steps, delay_us);
+    LOG_DEBUG("TB6600: stepping %d steps with %d us delay per half-cycle\n", steps, delay_us);
 
     for (int i = 0; i < steps; i++) {
         if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_ACTIVE) < 0) {
@@ -122,7 +124,7 @@ void tb6600_step(tb6600_t *motor, int steps, int delay_us)
         usleep(delay_us);
     }
 
-    printf("TB6600: stepping complete (%d steps done)\n", steps);
+    LOG_DEBUG("TB6600: stepping complete (%d steps done)\n", steps);
 }
 
 void tb6600_step_accel(tb6600_t *motor, int steps, int start_delay_us,
@@ -147,12 +149,12 @@ void tb6600_step_accel_interruptible(tb6600_t *motor, int steps,
         decel_steps = steps - accel_steps;
     }
 
-    printf("TB6600: stepping %d steps (accel %d→%d us over %d steps, decel over %d steps)\n",
+    LOG_DEBUG("TB6600: stepping %d steps (accel %d→%d us over %d steps, decel over %d steps)\n",
            steps, start_delay_us, end_delay_us, accel_steps, decel_steps);
 
     for (int i = 0; i < steps; i++) {
         if (run_flag && !*run_flag) {
-            printf("TB6600: accelerated stepping interrupted after %d steps\n", i);
+            LOG_DEBUG("TB6600: accelerated stepping interrupted after %d steps\n", i);
             break;
         }
 
@@ -181,7 +183,7 @@ void tb6600_step_accel_interruptible(tb6600_t *motor, int steps,
             // during the high half of the pulse.
             gpiod_line_request_set_value(motor->request, step_offset,
                                          GPIOD_LINE_VALUE_INACTIVE);
-            printf("TB6600: accelerated stepping interrupted after %d steps\n", i);
+            LOG_DEBUG("TB6600: accelerated stepping interrupted after %d steps\n", i);
             break;
         }
 
@@ -192,7 +194,7 @@ void tb6600_step_accel_interruptible(tb6600_t *motor, int steps,
         usleep(delay);
     }
 
-    printf("TB6600: stepping complete (%d steps done)\n", steps);
+    LOG_DEBUG("TB6600: stepping complete (%d steps done)\n", steps);
 }
 
 void tb6600_step_continuous(tb6600_t *motor, int delay_us, volatile int *run_flag)
@@ -202,7 +204,7 @@ void tb6600_step_continuous(tb6600_t *motor, int delay_us, volatile int *run_fla
         return;
     }
 
-    printf("TB6600: continuous stepping with %d us delay per half-cycle\n", delay_us);
+    LOG_DEBUG("TB6600: continuous stepping with %d us delay per half-cycle\n", delay_us);
 
     while (*run_flag) {
         if (gpiod_line_request_set_value(motor->request, step_offset, GPIOD_LINE_VALUE_ACTIVE) < 0) {
@@ -218,7 +220,7 @@ void tb6600_step_continuous(tb6600_t *motor, int delay_us, volatile int *run_fla
         usleep(delay_us);
     }
 
-    printf("TB6600: continuous stepping stopped\n");
+    LOG_DEBUG("TB6600: continuous stepping stopped\n");
 }
 
 void tb6600_close(tb6600_t *motor)

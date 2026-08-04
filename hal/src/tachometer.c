@@ -6,6 +6,8 @@
 #include <pthread.h>
 #include <time.h>
 
+#include "log.h"
+
 // ---------------------------------------------------------------------------
 // Module-level state
 // ---------------------------------------------------------------------------
@@ -71,7 +73,7 @@ void *tach_worker(void *arg)
                 tach_period_idx   = 0;
                 pthread_mutex_unlock(&tach_mutex);
 
-                printf("Tachometer: RPM = 0.0 (no pulses for %ds; last "
+                LOG_DEBUG("Tachometer: RPM = 0.0 (no pulses for %ds; last "
                        "reading was %.1f RPM)\n",
                        TACH_STALE_TIMEOUT_SEC, last_rpm);
                 have_last = 0;
@@ -135,7 +137,7 @@ void *tach_worker(void *arg)
         tach_current_rpm  = avg_rpm;
         pthread_mutex_unlock(&tach_mutex);
 
-        printf("Tachometer: RPM = %.1f (inst %.1f)\n", avg_rpm, inst_rpm);
+        LOG_DEBUG("Tachometer: RPM = %.1f (inst %.1f)\n", avg_rpm, inst_rpm);
 
         last_pulse_ns = ts_ns;
     }

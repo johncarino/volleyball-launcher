@@ -9,6 +9,8 @@
 #include <iostream>
 #include <atomic>
 
+#include "log.h"
+
 extern "C" {
 #include "../src/include/operation.h"
 }
@@ -41,7 +43,7 @@ public:
 
     // Back on the main thread once the tilt returns.
     void OnOK() override {
-        std::cout << "[operation] tilt signal complete: " << angle_ << std::endl;
+        LOG_DEBUG("[operation] tilt signal complete: %g\n", angle_);
         g_tiltInProgress.store(false);
         Callback().Call({Env().Null(), Boolean::New(Env(), true)});
     }

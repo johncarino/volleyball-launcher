@@ -699,7 +699,7 @@
         pill.classList.remove('ready', 'raised');
         if (!present) { txt.textContent = 'No person detected'; }
         else if (raised) { pill.classList.add('raised'); txt.textContent = 'Arm raised — hold!'; }
-        else { pill.classList.add('ready'); txt.textContent = 'Ready — raise your right hand'; }
+        else { pill.classList.add('ready'); txt.textContent = 'Ready — raise your arm'; }
       }
 
       // Circumference of the hold-countdown ring (r=52).
@@ -724,10 +724,10 @@
 
       // Prominent launch status banner on the Single Shot / Sequence screens.
       const LAUNCH_STATUS_MAP = {
-        idle:       { cls: '',           icon: 'ti-info-circle',    text: 'Tap Confirm to arm the camera, then raise your right hand to launch.' },
+        idle:       { cls: '',           icon: 'ti-info-circle',    text: 'Tap Confirm to arm the camera, then raise your arm to launch.' },
         arming:     { cls: 'arming',     icon: 'ti-hourglass',      text: 'Get into position…' },
         waiting:    { cls: 'arming',     icon: 'ti-hourglass',      text: 'Starting camera…' },
-        ready:      { cls: 'ready',      icon: 'ti-hand-finger',    text: 'Camera ready — raise your RIGHT hand to launch.' },
+        ready:      { cls: 'ready',      icon: 'ti-hand-finger',    text: 'Camera ready — raise your arm to launch.' },
         holding:    { cls: 'holding',    icon: 'ti-hand-stop',      text: 'Hold it there…' },
         firing:     { cls: 'firing',     icon: 'ti-volleyball',     text: 'Launching!' },
         camerafail: { cls: 'camerafail', icon: 'ti-alert-triangle', text: 'Camera didn’t start — tap Start below to launch manually.' },
@@ -1345,7 +1345,7 @@
           </div>
           <div class="section">
             <div class="section-label">Launch</div>
-            <div class="launch-status" id="launch-status"><span class="ls-icon"><i class="ti ti-info-circle" aria-hidden="true"></i></span><span id="launch-status-text">Tap Confirm to arm the camera, then raise your right hand to launch.</span></div>
+            <div class="launch-status" id="launch-status"><span class="ls-icon"><i class="ti ti-info-circle" aria-hidden="true"></i></span><span id="launch-status-text">Tap Confirm to arm the camera, then raise your arm to launch.</span></div>
             <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
           </div>
           <div class="section" id="gesture-preview-section" style="display:none">
@@ -1381,7 +1381,7 @@
           </div>
           <div class="section">
             <div class="section-label">Launch</div>
-            <div class="launch-status" id="launch-status"><span class="ls-icon"><i class="ti ti-info-circle" aria-hidden="true"></i></span><span id="launch-status-text">Tap Confirm to arm the camera, then raise your right hand to launch.</span></div>
+            <div class="launch-status" id="launch-status"><span class="ls-icon"><i class="ti ti-info-circle" aria-hidden="true"></i></span><span id="launch-status-text">Tap Confirm to arm the camera, then raise your arm to launch.</span></div>
             <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
           </div>
           <div class="section" id="gesture-preview-section" style="display:none">

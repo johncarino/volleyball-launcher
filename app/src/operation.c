@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <gpiod.h>
 
+#include "log.h"
+
 float curr_tilt_angle = 0.0;
 float curr_speed = 0;
 int curr_rpm = 0;
@@ -500,7 +502,7 @@ void operation_cleanup() {
 void homing_sequence() {
     homing_running = 1;
     homing_cancel_requested = 0;
-    printf("Homing sequence initiated. Moving to default position...\n");
+    LOG_INFO("Homing sequence initiated. Moving to default position...\n");
 
     // Start from a known stopped state so tilt_signal() cannot restore a
     // previously configured launch voltage after moving the tilt mechanism.
@@ -526,7 +528,7 @@ void homing_sequence() {
     // 2. Run the flywheel at a dedicated low speed only while finding the
     // hopper home sensor. This direct voltage estimate intentionally avoids
     // waiting for normal launch-speed feedback during homing.
-    printf("Homing: running flywheel at %.0f RPM.\n", HOMING_FLYWHEEL_RPM);
+    LOG_INFO("Homing: running flywheel at %.0f RPM.\n", HOMING_FLYWHEEL_RPM);
     speed_signal(HOMING_FLYWHEEL_RPM);
     launcher_running = 1;
 
@@ -550,7 +552,7 @@ homing_stop:
     launcher_running = 0;
     speed_cache_valid = 0;
     homing_running = 0;
-    printf("Homing sequence finished with all motors stopped.\n");
+    LOG_INFO("Homing sequence finished with all motors stopped.\n");
 }
 
 void tilt_signal(float angle) {
@@ -578,7 +580,7 @@ void tilt_signal(float angle) {
     long duration_us = tilt_angle_to_time(curr_tilt_angle, angle);
 
     if (delta_angle == 0) {
-        printf("No Change in tilt angle\n");
+        LOG_DEBUG("No Change in tilt angle\n");
         if (launcher_running) {
             mcp4725_set_mv(&dac1, (uint16_t)curr_speed);
         }
@@ -628,7 +630,7 @@ void speed_signal(float speed) {
     //convert speed to mv
     mv = rpm_to_mv(speed);
     //(void)speed;
-    printf("setting speed to %.2f mV\n", (float)mv);
+    LOG_DEBUG("setting speed to %.2f mV\n", (float)mv);
     mcp4725_set_mv(&dac1, mv);
     curr_speed = (float)mv;
     curr_rpm = speed;
@@ -660,7 +662,7 @@ void percentage_to_mv(float percentage) {
     float mv = percentage == 0.0
         ? 0.0
         : 1350.0 + (percentage / 100.0) * (MAX_LAUNCH_VOLTAGE_MV - 1350.0);
-    printf("setting speed to %.2f mV\n", mv);
+    LOG_DEBUG("setting speed to %.2f mV\n", mv);
     
     if (launcher_running) {
         mcp4725_set_mv(&dac1, (uint16_t)mv);
@@ -682,8 +684,8 @@ void set_machine(int machine_position, int set_index) {
 
     set_specs_t *spec = &set_seq[machine_position][set_index];
 
-    printf("Setting machine %d for set %d\n", machine_position, set_index);
-    printf("Tilt angle: %f, Speed (RPM): %f\n",
+    LOG_INFO("Setting machine %d for set %d\n", machine_position, set_index);
+    LOG_INFO("Tilt angle: %f, Speed (RPM): %f\n",
             spec->tilt_angle, spec->rpm_output);
 
     const float target_rpm = clamp_rpm_to_voltage_limit(spec->rpm_output);
@@ -696,7 +698,7 @@ void set_machine(int machine_position, int set_index) {
     if (reuse_speed) {
         curr_speed = speed_cache_mv;
         curr_rpm = (int)target_rpm;
-        printf("Reusing %.2f mV for consecutive %.2f RPM launch.\n",
+        LOG_DEBUG("Reusing %.2f mV for consecutive %.2f RPM launch.\n",
                speed_cache_mv, target_rpm);
     } else {
         speed_cache_valid = 0;
@@ -741,13 +743,13 @@ void tilt_with_feedback(float angle) {
 
         double error = target_angle - current_angle;
 
-        fprintf(stderr, "Current angle: %.2f, Target angle: %.2f, Error: %.2f\n", current_angle, target_angle, error);
+        LOG_DEBUG("Current angle: %.2f, Target angle: %.2f, Error: %.2f\n", current_angle, target_angle, error);
 
         if (fabs(error) <= TILT_TOLERANCE_DEG) {
             settled_reads++;
 
             if (settled_reads >= TILT_TOLERANCE_HOLD_COUNT) {
-                fprintf(stderr, "Target angle reached within tolerance.\n");
+                LOG_INFO("Target angle reached within tolerance.\n");
                 bts_stop();
                 break;
             }
@@ -777,10 +779,10 @@ void tilt_with_feedback(float angle) {
         int duty_cycle = get_tilt_duty_cycle(error);
 
         if (error > 0) {
-            printf("Tilting forward at %d%%...\n", duty_cycle);
+            LOG_DEBUG("Tilting forward at %d%%...\n", duty_cycle);
             bts_forward_start(duty_cycle);
         } else {
-            printf("Tilting backward at %d%%...\n", duty_cycle);
+            LOG_DEBUG("Tilting backward at %d%%...\n", duty_cycle);
             bts_reverse_start(duty_cycle);
         }
 
@@ -826,7 +828,7 @@ void speed_with_feedback(float rpm) {
         if (abs(actual_rpm - (int)rpm) <= SPEED_TOLERANCE_RPM) {
             settled_reads++;
             if (settled_reads >= SPEED_TOLERANCE_HOLD_COUNT) {
-                fprintf(stderr,
+                LOG_INFO(
                         "Target speed reached within tolerance: actual=%d RPM, target=%.2f RPM, voltage=%d mV.\n",
                         actual_rpm, rpm, mv);
                 feedback_completed = 1;
