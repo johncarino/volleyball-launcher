@@ -507,6 +507,15 @@
 
       // Use the same stop path as each operating mode's normal Stop button.
       function stopCurrentMode() {
+        const ballLoadOverlay = document.getElementById('ball-load-overlay');
+        if (ballLoadOverlay?.classList.contains('open')) {
+          emitMachine('force-stop');
+          hideBallLoadPopup();
+          setMachineState('error', 'Stopped');
+          goBackToConfigure();
+          return;
+        }
+
         if (window._homingInProgress) {
           emitMachine('force-stop');
           hideHomingPopup();
