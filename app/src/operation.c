@@ -64,8 +64,6 @@ volatile int launcher_running = 0;
 #define HOMING_FLYWHEEL_RPM 300.0f
 #define HOPPER_RESET_TIMEOUT_SEC 30
 #define HOPPER_RESET_POLL_DELAY_US 10000
-#define HOPPER_PRELAUNCH_DELAY_US 5000000 // settle time before each push so players can get into position
-#define HOPPER_PRELAUNCH_SLICE_US 50000   // poll interval so an interrupt aborts the wait promptly
 
 volatile float tilt_angle_w = 0;
 
@@ -1062,22 +1060,8 @@ int hopper_pulse(void) {
         printf("Pulsing hopper (attempt %d/%d)...\n",
                attempt, HOPPER_PULSE_MAX_ATTEMPTS);
 
-        // Only start the settle countdown once a ball is actually seated, so an
-        // empty/misfed hopper doesn't burn the delay before retrying.
-        if (attempt == 1 || ll_present_debounced()) {
-            uint32_t waited_us = 0;
-            while (waited_us < HOPPER_PRELAUNCH_DELAY_US) {
-                if (operation_interrupt_pending()) {
-                    fprintf(stderr, "Hopper pulse aborted during pre-launch delay.\n");
-                    operation_clear_interrupt();
-                    tb6600_enable(&motor, 0);
-                    return -1;
-                }
-                usleep(HOPPER_PRELAUNCH_SLICE_US);
-                waited_us += HOPPER_PRELAUNCH_SLICE_US;
-            }
-        }
-
+        // The warning beeps above are the pre-launch warning; push the ball as
+        // soon as they finish rather than waiting out an extra settle delay.
         tb6600_enable(&motor, 1);
         hopper_pulse_running = 1;
         tb6600_step_accel_interruptible(
