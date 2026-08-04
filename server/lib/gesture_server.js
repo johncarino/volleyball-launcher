@@ -160,7 +160,10 @@ var operation = (function() {
 			},
 			hopperStart: function(){},
 			hopperStop: function(){},
-			hopperPulse: function(){},
+			hopperPulse: function(callback){
+				setImmediate(function() { callback(null, true); });
+				return true;
+			},
 			resumeMachine: function(){},
 			pauseMachine: function(){},
 			requestInterrupt: function(){},
@@ -219,9 +222,11 @@ exports.listen = function(server) {
 		socket.emit('state-snapshot', buildStateSnapshot());
 
 		socket.on('advanced-enter', function() {
-			if (initOperation(socket, 'advanced-enter')) {
-				homeIfHopperMisaligned(socket, 'manual');
-			}
+			// Entering Manual no longer re-homes: the machine homes once at startup
+			// and on demand via the "Home machine" button. Homing on every tab
+			// switch was disruptive (the hopper reports "misaligned" after any
+			// pulse, so this fired constantly).
+			initOperation(socket, 'advanced-enter');
 			startTelemetry(socket);
 			emitComponentStatus(socket);
 		});
@@ -232,9 +237,8 @@ exports.listen = function(server) {
 		});
 
 		socket.on('operation-enter', function() {
-			if (initOperation(socket, 'operation-enter')) {
-				homeIfHopperMisaligned(socket, 'launch');
-			}
+			// Entering Single Shot / Sequence no longer re-homes (see advanced-enter).
+			initOperation(socket, 'operation-enter');
 		});
 
 		socket.on('requestComponentStatus', function() {
@@ -329,34 +333,6 @@ function initOperation(socket, reason) {
 		console.log('[operation] operationInit failed: ' + e.message);
 		if (socket) socket.emit('machine-error', 'Failed to initialize operation mode.');
 		return false;
-	}
-}
-
-// Run the homing sequence exactly once, the first time motor control becomes
-// available after the machine/server starts. Switching UI tabs no longer homes
-// (that used to happen on every Configure/Manual/Launch switch); the manual
-// "Home machine" button remains for on-demand re-homing.
-function homeIfHopperMisaligned(socket, mode) {
-	if (!operationReady || !operation.hopperNeedsHoming()) {
-		console.log('[operation] Hopper aligned; skipping ' + mode + ' entry homing.');
-		return;
-	}
-
-	console.log('[operation] Hopper misaligned; homing on ' + mode + ' entry.');
-	if (socket) socket.emit('operation-state', 'HOMING');
-	if (socket) socket.emit('machine-ready', false);
-	var accepted = operation.homingSequence(function(err) {
-		var stillMisaligned = operation.hopperNeedsHoming();
-		if (socket) socket.emit('machine-ready', true);
-		if (err || stillMisaligned) {
-			if (socket) socket.emit('homing-error', 'Hopper homing did not align the sensor.');
-			return;
-		}
-		if (socket) socket.emit('homing-complete');
-	});
-	if (accepted === false && socket) {
-		socket.emit('machine-ready', true);
-		socket.emit('homing-error', 'Homing is already in progress.');
 	}
 }
 
@@ -786,14 +762,28 @@ function handleCommand(socket) {
 		}
 		console.log("Got hopper-pulse command.");
 		socket.emit('machine-ready', false);
-		var pulsed = operation.hopperPulse();
-		if (pulsed === false) {
-			socket.emit('machine-error', 'Cannot pulse hopper: machine is not running.');
+		// hopperPulse now runs on a worker thread (it can block up to 30 s on the
+		// every-few-pulses sensor reset); completion is reported via the callback
+		// so the event loop stays responsive meanwhile.
+		var accepted = operation.hopperPulse(function(err, pulsed) {
+			socket.emit('machine-ready', true);
+			if (err) {
+				console.log('[operation] hopperPulse worker failed: ' + err.message);
+				socket.emit('machine-error', err.message || 'Hopper pulse failed.');
+			} else if (pulsed === false) {
+				socket.emit('machine-error', 'Cannot pulse hopper: machine is not running.');
+			}
+			var pulseCount = 0;
+			try { pulseCount = operation.getHopperPulseCount(); } catch (e) { pulseCount = 0; }
+			socket.emit('hopper-pulse-complete', !err && pulsed !== false, pulseCount);
+		});
+		if (accepted === false) {
+			socket.emit('machine-ready', true);
+			socket.emit('machine-error', 'Hopper is still pulsing the previous ball.');
+			var count = 0;
+			try { count = operation.getHopperPulseCount(); } catch (e) { count = 0; }
+			socket.emit('hopper-pulse-complete', false, count);
 		}
-		socket.emit('machine-ready', true);
-		var pulseCount = 0;
-		try { pulseCount = operation.getHopperPulseCount(); } catch (e) { pulseCount = 0; }
-		socket.emit('hopper-pulse-complete', pulsed !== false, pulseCount);
 	});
 
 	socket.on('homing-sequence', function() {

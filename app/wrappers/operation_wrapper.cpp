@@ -22,6 +22,7 @@ using namespace Napi;
 // run at a time. Set true when a TiltWorker is queued, cleared when it finishes.
 static std::atomic<bool> g_tiltInProgress(false);
 static std::atomic<bool> g_homingInProgress(false);
+static std::atomic<bool> g_hopperPulseInProgress(false);
 
 // Runs the blocking tilt_signal() feedback loop on a libuv worker thread so it
 // no longer freezes Node's event loop (telemetry and other socket handlers
@@ -95,6 +96,35 @@ public:
 private:
     int machinePosition_;
     int setIndex_;
+};
+
+// --- hopper_pulse() worker -------------------------------------------------
+// hopper_pulse() blocks: each pulse steps the feeder, and every few pulses it
+// runs hopper_reset(), which can wait up to 30 s for the ball sensor. Running
+// it on a worker thread keeps Node's event loop (telemetry, sockets, the whole
+// UI) responsive instead of freezing until the pulse/reset returns.
+class HopperPulseWorker : public AsyncWorker {
+public:
+    HopperPulseWorker(const Napi::Function& callback)
+        : AsyncWorker(callback, "HopperPulseWorker"), pulsed_(false) {}
+
+    void Execute() override {
+        pulsed_ = (hopper_pulse() == 0);
+    }
+
+    void OnOK() override {
+        g_hopperPulseInProgress.store(false);
+        Callback().Call({Env().Null(), Boolean::New(Env(), pulsed_)});
+    }
+
+    void OnError(const Error& e) override {
+        g_hopperPulseInProgress.store(false);
+        Callback().Call({Error::New(Env(), e.Message()).Value(),
+                         Boolean::New(Env(), false)});
+    }
+
+private:
+    bool pulsed_;
 };
 
 class HomingWorker : public AsyncWorker {
@@ -282,12 +312,23 @@ Value hopperStop(const CallbackInfo& info) {
     return env.Undefined();
 }
 
-// --- hopperPulse() ---
-// Returns true if the pulse actually ran, false if it was refused.
+// --- hopperPulse(callback) ---
+// Non-blocking: queues the (blocking) hopper_pulse() on a worker thread and
+// returns immediately so the Node event loop stays responsive during the
+// pulse/reset. Returns false if a pulse is already in progress; otherwise the
+// callback reports whether the pulse actually ran.
 Value hopperPulse(const CallbackInfo& info) {
     Env env = info.Env();
-    int rc = hopper_pulse();
-    return Boolean::New(env, rc == 0);
+    if (info.Length() < 1 || !info[0].IsFunction()) {
+        TypeError::New(env, "hopperPulse expects a callback").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    bool expected = false;
+    if (!g_hopperPulseInProgress.compare_exchange_strong(expected, true)) {
+        return Boolean::New(env, false);
+    }
+    (new HopperPulseWorker(info[0].As<Function>()))->Queue();
+    return Boolean::New(env, true);
 }
 
 // --- getTachReading() ---
