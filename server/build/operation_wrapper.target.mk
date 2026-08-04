@@ -110,7 +110,9 @@ OBJS := \
 	$(obj).target/$(TARGET)/../hal/src/mpu6050.o \
 	$(obj).target/$(TARGET)/../hal/src/tb6600.o \
 	$(obj).target/$(TARGET)/../hal/src/pwm.o \
-	$(obj).target/$(TARGET)/../hal/src/tachometer.o
+	$(obj).target/$(TARGET)/../hal/src/tachometer.o \
+	$(obj).target/$(TARGET)/../hal/src/hcsr04.o \
+	$(obj).target/$(TARGET)/../hal/src/buzzer.o
 
 # Add to the list of files we specially track dependencies for.
 all_deps += $(OBJS)
