@@ -15,16 +15,16 @@
     <div class="statusbar">
       <img src="images/logo.png" alt="AVSS logo" class="statusbar-logo">
       <div class="statusbar-right">
-        <button class="qr-status-btn" id="qr-status-btn" onclick="openQrModal()" aria-label="Show QR code" style="display:none">
+        <button class="qr-status-btn" id="qr-status-btn" onclick="openQrModal()" aria-label="Show QR code"
+          style="display:none">
           <i class="ti ti-qrcode" aria-hidden="true"></i>
         </button>
-        <span class="mstate ready" id="machine-state" title="Machine status"
-          onclick="refreshUiIfOffline()" onkeydown="refreshUiIfOffline(event)">
+        <span class="mstate ready" id="machine-state" title="Machine status" onclick="refreshUiIfOffline()"
+          onkeydown="refreshUiIfOffline(event)">
           <span class="mstate-dot" aria-hidden="true"></span>
           <span id="machine-state-text">Ready</span>
         </span>
-        <span class="conn" id="conn-status" onclick="refreshUiIfOffline()"
-          onkeydown="refreshUiIfOffline(event)">
+        <span class="conn" id="conn-status" onclick="refreshUiIfOffline()" onkeydown="refreshUiIfOffline(event)">
           <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
           <span id="conn-text">AVSS connected</span>
         </span>
@@ -54,11 +54,13 @@
           <div class="align-modal-img-row" id="align-modal-img-row">
             <div class="align-modal-img-col">
               <span id="align-modal-label2" class="align-modal-img-label"></span>
-              <img id="align-modal-img2" src="" alt="Net alignment reference" class="align-modal-img" onclick="handleAlignImageClick('left')">
+              <img id="align-modal-img2" src="" alt="Net alignment reference" class="align-modal-img"
+                onclick="handleAlignImageClick('left')">
             </div>
             <div class="align-modal-img-col">
               <span id="align-modal-label" class="align-modal-img-label"></span>
-              <img id="align-modal-img" src="" alt="Line alignment reference" class="align-modal-img" onclick="handleAlignImageClick('right')">
+              <img id="align-modal-img" src="" alt="Line alignment reference" class="align-modal-img"
+                onclick="handleAlignImageClick('right')">
             </div>
           </div>
           <p id="align-modal-text" class="align-modal-text"></p>
@@ -69,7 +71,8 @@
 
     <div class="modal-overlay" id="qr-modal" onclick="handleQrOverlayClick(event)">
       <div class="qr-modal-sheet">
-        <button class="modal-close qr-modal-close" onclick="closeQrModal()" aria-label="Close"><i class="ti ti-x" aria-hidden="true"></i></button>
+        <button class="modal-close qr-modal-close" onclick="closeQrModal()" aria-label="Close"><i class="ti ti-x"
+            aria-hidden="true"></i></button>
         <ol class="qr-modal-instructions">
           <li>Connect to the "DimeTime" Wi-Fi network on your mobile device</li>
           <li>Scan the QR code or go to <span class="qr-modal-url">http://192.168.8.1:8088</span></li>
@@ -78,19 +81,20 @@
       </div>
     </div>
 
-	<div class="homing-overlay" id="homing-overlay" role="dialog" aria-modal="true"
-	  aria-labelledby="homing-overlay-title" aria-hidden="true">
-	  <div class="homing-popup">
-		<div class="homing-spinner" aria-hidden="true"></div>
-		<div class="homing-popup-title" id="homing-overlay-title">Homing machine…</div>
-		<div class="homing-popup-text">Please wait while the machine returns to its reference position.</div>
-		<div class="homing-popup-hint">Use the red STOP button to cancel.</div>
-	  </div>
-	</div>
+    <div class="homing-overlay" id="homing-overlay" role="dialog" aria-modal="true"
+      aria-labelledby="homing-overlay-title" aria-hidden="true">
+      <div class="homing-popup">
+        <div class="homing-spinner" aria-hidden="true"></div>
+        <div class="homing-popup-title" id="homing-overlay-title">Homing machine…</div>
+        <div class="homing-popup-text">Please wait while the machine returns to its reference position.</div>
+        <div class="homing-popup-hint">Use the red STOP button to cancel.</div>
+      </div>
+    </div>
 
-  <button class="emergency-stop" id="emergency-stop" onclick="emergencyStop()" aria-label="Emergency stop — halt all motors">
-    <span>EMERGENCY STOP</span>
-  </button>
+    <button class="emergency-stop" id="emergency-stop" onclick="emergencyStop()"
+      aria-label="Emergency stop — halt all motors">
+      <span>EMERGENCY STOP</span>
+    </button>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
@@ -370,7 +374,7 @@
         machineSocket.on('slot-enabled', (d) => { applyRemoteSlotEnabled(d); });
         machineSocket.on('set-deleted', (d) => { applyRemoteSetDeleted(d); });
         machineSocket.on('calibration-updated', (c) => { applyRemoteCalibration(c); });
-        machineSocket.on('uiState', (s) => { applyRemoteUiState(s); });        machineSocket.on('set-machine-state', (state) => {
+        machineSocket.on('uiState', (s) => { applyRemoteUiState(s); }); machineSocket.on('set-machine-state', (state) => {
           if (state === 'APPLIED' && isRunning && window._activeMode === 'launch') {
             beginSequenceShot();
           } else if (state === 'APPLIED' && isRunning && window._activeMode === 'single_shot') {
@@ -385,29 +389,29 @@
           if (window._homingInProgress) return;
           setMachineState(machineReady ? 'ready' : 'busy');
         });
-		machineSocket.on('operation-state', (state) => {
-		  if (state === 'HOMING') showHomingPopup();
-		});
+        machineSocket.on('operation-state', (state) => {
+          if (state === 'HOMING') showHomingPopup();
+        });
         machineSocket.on('hopper-pulse-complete', (completed, count) => {
           if (!isRunning) return;
           if (!completed || window._activeMode === 'single_shot') stopRunSequence();
           else if (window._activeMode === 'launch') completeSequenceShot();
         });
         machineSocket.on('machine-error', (message) => { setMachineState('error'); onMachineError(message); });
-		machineSocket.on('tilt-state', (state) => {
-		  setManualAngleControlsDisabled(state === 'MOVING');
-		});
+        machineSocket.on('tilt-state', (state) => {
+          setManualAngleControlsDisabled(state === 'MOVING');
+        });
         machineSocket.on('homing-complete', () => {
           window._homingInProgress = false;
-		  hideHomingPopup();
+          hideHomingPopup();
           setMachineState('ready');
           resetManualVisuals();
           setHomingButtonState(false, 'Homing complete');
         });
         machineSocket.on('homing-error', (message) => {
           window._homingInProgress = false;
-		  hideHomingPopup();
-		  setManualAngleControlsDisabled(false);
+          hideHomingPopup();
+          setManualAngleControlsDisabled(false);
           setMachineState('error');
           setHomingButtonState(false, 'Home machine');
           onMachineError(message);
@@ -436,30 +440,30 @@
         if (text) text.textContent = connected ? 'AVSS connected' : 'Reconnecting…';
         if (icon) icon.className = 'ti ' + (connected ? 'ti-wifi' : 'ti-wifi-off');
         if (!connected) setMachineState('offline', 'Offline');
-		setOfflineRefreshState(!connected);
+        setOfflineRefreshState(!connected);
       }
 
-	  function setOfflineRefreshState(refreshable) {
-		['conn-status', 'machine-state'].forEach(id => {
-		  const el = document.getElementById(id);
-		  if (!el) return;
-		  el.classList.toggle('offline-refreshable', refreshable);
-		  el.setAttribute('role', refreshable ? 'button' : 'status');
-		  el.setAttribute('tabindex', refreshable ? '0' : '-1');
-		  el.setAttribute('aria-label', refreshable
-			? 'Offline. Activate to refresh the UI.'
-			: 'Connection status');
-		  el.title = refreshable ? 'Offline — click to refresh' : '';
-		});
-	  }
+      function setOfflineRefreshState(refreshable) {
+        ['conn-status', 'machine-state'].forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.classList.toggle('offline-refreshable', refreshable);
+          el.setAttribute('role', refreshable ? 'button' : 'status');
+          el.setAttribute('tabindex', refreshable ? '0' : '-1');
+          el.setAttribute('aria-label', refreshable
+            ? 'Offline. Activate to refresh the UI.'
+            : 'Connection status');
+          el.title = refreshable ? 'Offline — click to refresh' : '';
+        });
+      }
 
-	  function refreshUiIfOffline(event) {
-		const offline = document.getElementById('conn-status')?.classList.contains('disconnected');
-		if (!offline) return;
-		if (event && event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
-		if (event) event.preventDefault();
-		window.location.reload();
-	  }
+      function refreshUiIfOffline(event) {
+        const offline = document.getElementById('conn-status')?.classList.contains('disconnected');
+        if (!offline) return;
+        if (event && event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+        if (event) event.preventDefault();
+        window.location.reload();
+      }
 
       // Glanceable machine-state chip in the status bar.
       const MACHINE_STATE_LABELS = {
@@ -475,8 +479,8 @@
 
       // Emergency stop: halt motors + hopper immediately from any operating mode.
       function emergencyStop() {
-		emitMachine('force-stop');
-		hideHomingPopup();
+        emitMachine('force-stop');
+        hideHomingPopup();
         if (isRunning) stopRunSequence();
         hopperOn = false;
         const hopperBtn = document.getElementById('hopper-toggle-btn');
@@ -484,7 +488,7 @@
         setMachineState('error', 'Stopped');
         const btn = document.getElementById('emergency-stop');
         if (btn) { btn.classList.remove('activated'); void btn.offsetWidth; btn.classList.add('activated'); }
-		window._suppressModeLeaveCleanup = true;
+        window._suppressModeLeaveCleanup = true;
         goBackToConfigure();
       }
 
@@ -566,20 +570,20 @@
         emitMachine('homing-sequence');
       }
 
-	  function showHomingPopup() {
-		window._homingInProgress = true;
-		const overlay = document.getElementById('homing-overlay');
-		if (!overlay) return;
-		overlay.classList.add('open');
-		overlay.setAttribute('aria-hidden', 'false');
-	  }
+      function showHomingPopup() {
+        window._homingInProgress = true;
+        const overlay = document.getElementById('homing-overlay');
+        if (!overlay) return;
+        overlay.classList.add('open');
+        overlay.setAttribute('aria-hidden', 'false');
+      }
 
-	  function hideHomingPopup() {
-		const overlay = document.getElementById('homing-overlay');
-		if (!overlay) return;
-		overlay.classList.remove('open');
-		overlay.setAttribute('aria-hidden', 'true');
-	  }
+      function hideHomingPopup() {
+        const overlay = document.getElementById('homing-overlay');
+        if (!overlay) return;
+        overlay.classList.remove('open');
+        overlay.setAttribute('aria-hidden', 'true');
+      }
 
       function resetManualVisuals() {
         if (window._activeMode !== 'advanced') return;
@@ -610,17 +614,17 @@
         renderTelemetry({ rpm: 0 });
       }
 
-	  function setManualAngleControlsDisabled(disabled) {
-      const angleControls = document.getElementById('manual-angle-controls');
-      const speedControls = document.getElementById('manual-speed-controls');
-      [angleControls, speedControls].forEach(controls => {
-        if (!controls) return;
-        controls.classList.toggle('controls-disabled', disabled);
-        controls.querySelectorAll('input, button').forEach(control => {
-        control.disabled = disabled;
+      function setManualAngleControlsDisabled(disabled) {
+        const angleControls = document.getElementById('manual-angle-controls');
+        const speedControls = document.getElementById('manual-speed-controls');
+        [angleControls, speedControls].forEach(controls => {
+          if (!controls) return;
+          controls.classList.toggle('controls-disabled', disabled);
+          controls.querySelectorAll('input, button').forEach(control => {
+            control.disabled = disabled;
+          });
         });
-      });
-	  }
+      }
 
       // The hopper feeds balls into the flywheel, so it must never be started/
       // pulsed while the Manual screen's launcher ("Start") is stopped -- the
@@ -822,12 +826,12 @@
 
       // Prominent launch status banner on the Single Shot / Sequence screens.
       const LAUNCH_STATUS_MAP = {
-        idle:       { cls: '',           icon: 'ti-info-circle',    text: 'Tap Confirm to arm the camera, then raise your arm to launch.' },
-        arming:     { cls: 'arming',     icon: 'ti-hourglass',      text: 'Get into position…' },
-        waiting:    { cls: 'arming',     icon: 'ti-hourglass',      text: 'Starting camera…' },
-        ready:      { cls: 'ready',      icon: 'ti-hand-finger',    text: 'Camera ready — raise your arm to launch.' },
-        holding:    { cls: 'holding',    icon: 'ti-hand-stop',      text: 'Hold it there…' },
-        firing:     { cls: 'firing',     icon: 'ti-volleyball',     text: 'Launching!' },
+        idle: { cls: '', icon: 'ti-info-circle', text: 'Tap Confirm to arm the camera, then raise your arm to launch.' },
+        arming: { cls: 'arming', icon: 'ti-hourglass', text: 'Get into position…' },
+        waiting: { cls: 'arming', icon: 'ti-hourglass', text: 'Starting camera…' },
+        ready: { cls: 'ready', icon: 'ti-hand-finger', text: 'Camera ready — raise your arm to launch.' },
+        holding: { cls: 'holding', icon: 'ti-hand-stop', text: 'Hold it there…' },
+        firing: { cls: 'firing', icon: 'ti-volleyball', text: 'Launching!' },
         camerafail: { cls: 'camerafail', icon: 'ti-alert-triangle', text: 'Camera didn’t start — tap Start below to launch manually.' },
       };
       function updateLaunchStatus(state, text) {
@@ -1024,43 +1028,43 @@
           return 'images/front.png';
         }
         const mCircles = machineSpots.map(s => {
-        const active = mSel === s.id;
-        const ringStroke = active ? '#185FA5' : (readonly ? 'transparent' : '#185FA5');
-        const onclick = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
-        const cursor = readonly ? 'default' : 'pointer';
-        const w = machineRectWFor(s.id);
-        const rx = s.cx - w / 2;
-        const ry = s.cy - machineRectH / 2;
-        return `<g ${onclick} style="cursor:${cursor}">
+          const active = mSel === s.id;
+          const ringStroke = active ? '#185FA5' : (readonly ? 'transparent' : '#185FA5');
+          const onclick = readonly ? '' : `onclick="selectMachine('${s.id}')"`;
+          const cursor = readonly ? 'default' : 'pointer';
+          const w = machineRectWFor(s.id);
+          const rx = s.cx - w / 2;
+          const ry = s.cy - machineRectH / 2;
+          return `<g ${onclick} style="cursor:${cursor}">
           <rect x="${rx}" y="${ry}" width="${w}" height="${machineRectH}" rx="3" fill="transparent" stroke="${ringStroke}" stroke-width="2.5" opacity="${active ? 1 : 0}" style="${active ? 'filter:drop-shadow(0 0 4px rgba(24,95,165,0.6))' : ''}"/>
           <image href="${machineImageFor(s.id)}" x="${rx}" y="${ry}" width="${w}" height="${machineRectH}" preserveAspectRatio="xMidYMid meet" style="clip-path: inset(0 round 3px)"/>
         </g>`;
-      }).join('');
+        }).join('');
 
         const isMachineSelected = mSel !== null;
 
         const targetImgSize = 48; // width/height of the volleyball icon in SVG units
         const tCircles = targetSpots.map(s => {
-        const active = tSel === s.id;
-        const zSide = zoneSide(s.id);
-        const centerDisabled = mSel === 'C' && s.id === '3';
-        const sideLocked = mSel === 'C' && !!lockedSide && !active && zSide !== 'center' && zSide !== lockedSide;
-        const positionDisabled = !isTargetAllowed(mSel, s.id);
-        const disabled = centerDisabled || sideLocked || positionDisabled;
-        const clickable = isMachineSelected && !readonly && !disabled;
-        const ringStroke = active ? '#185FA5' : (clickable ? '#185FA5' : 'transparent');
-        const opacity = active ? 1 : (disabled ? 0 : (clickable ? 0.75 : 0));
-        const lineOpacity = active ? 0.6 : (disabled ? 0 : (clickable ? 0.35 : 0));
-        const flashClass = (clickable && !tSel) ? 'selectable-flash' : '';
-        const onclick = clickable ? `onclick="selectTarget('${s.id}')"` : '';
-        const cursor = clickable ? 'pointer' : 'default';
-        const half = targetImgSize / 2;
-        return `<g ${onclick} style="cursor:${cursor}">
+          const active = tSel === s.id;
+          const zSide = zoneSide(s.id);
+          const centerDisabled = mSel === 'C' && s.id === '3';
+          const sideLocked = mSel === 'C' && !!lockedSide && !active && zSide !== 'center' && zSide !== lockedSide;
+          const positionDisabled = !isTargetAllowed(mSel, s.id);
+          const disabled = centerDisabled || sideLocked || positionDisabled;
+          const clickable = isMachineSelected && !readonly && !disabled;
+          const ringStroke = active ? '#185FA5' : (clickable ? '#185FA5' : 'transparent');
+          const opacity = active ? 1 : (disabled ? 0 : (clickable ? 0.75 : 0));
+          const lineOpacity = active ? 0.6 : (disabled ? 0 : (clickable ? 0.35 : 0));
+          const flashClass = (clickable && !tSel) ? 'selectable-flash' : '';
+          const onclick = clickable ? `onclick="selectTarget('${s.id}')"` : '';
+          const cursor = clickable ? 'pointer' : 'default';
+          const half = targetImgSize / 2;
+          return `<g ${onclick} style="cursor:${cursor}">
           <line x1="${s.cx}" y1="${s.cy + 12}" x2="${s.cx}" y2="${46 + baseOffset}" stroke="#185FA5" stroke-width="1" stroke-dasharray="2 3" opacity="${lineOpacity}"/>
           <circle cx="${s.cx}" cy="${s.cy}" r="14" fill="transparent" stroke="${ringStroke}" stroke-width="2.5" opacity="${active ? 1 : 0}" style="${active ? 'filter:drop-shadow(0 0 4px rgba(24,95,165,0.6))' : ''}"/>
           <image href="images/volleyball.png" x="${s.cx - half}" y="${s.cy - half}" width="${targetImgSize}" height="${targetImgSize}" opacity="${opacity}" class="${flashClass}"/>
         </g>`;
-      }).join('');
+        }).join('');
 
         let tempoArcs = '';
         if (mSel && tSel) {
@@ -1075,33 +1079,33 @@
 
           const highlightTempo = hoveredTempo || selectedTempo;
           tempoArcs = [1, 2, 3, 4]
-          .filter(tempo => isTempoAllowed(mSel, tSel, tempo))
-          .map(tempo => {
-            const active = tempo === highlightTempo;
-            const isSelected = tempo === selectedTempo;
-            const arcHeight = 16 + tempo * 50;
-            const ctrlY = baseMidY - arcHeight;
-            const stroke = active ? '#e08a1e' : '#c2b8ab';
-            const strokeWidth = active ? 2.5 : 1;
-            const opacity = active ? 0.95 : 0.4;
-            const flashClass = (!readonly && !tempoSelected) ? 'selectable-flash' : '';
-            const hitProps = readonly ? ''
-              : `onclick="selectTempo(${tempo})" onmouseenter="onTempoHover(${tempo})" onmouseleave="onTempoHover(null)" style="cursor:pointer"`;
-            const hitArea = readonly ? '' : `<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="transparent" stroke-width="14" ${hitProps}/>`;
-            const labelT = 0.35; // 0 = at machine, 0.5 = arc midpoint, 1 = at target. Lower = closer to machine.
-            const oneMinusT = 1 - labelT;
-            const peakX = oneMinusT * oneMinusT * startX + 2 * labelT * oneMinusT * midX + labelT * labelT * endX;
-            const peakY = oneMinusT * oneMinusT * startY + 2 * labelT * oneMinusT * ctrlY + labelT * labelT * endY;
-            const pillW = 44;
-            const pillH = 16;
-            const label = isSelected
-              ? `<g>
+            .filter(tempo => isTempoAllowed(mSel, tSel, tempo))
+            .map(tempo => {
+              const active = tempo === highlightTempo;
+              const isSelected = tempo === selectedTempo;
+              const arcHeight = 16 + tempo * 50;
+              const ctrlY = baseMidY - arcHeight;
+              const stroke = active ? '#e08a1e' : '#c2b8ab';
+              const strokeWidth = active ? 2.5 : 1;
+              const opacity = active ? 0.95 : 0.4;
+              const flashClass = (!readonly && !tempoSelected) ? 'selectable-flash' : '';
+              const hitProps = readonly ? ''
+                : `onclick="selectTempo(${tempo})" onmouseenter="onTempoHover(${tempo})" onmouseleave="onTempoHover(null)" style="cursor:pointer"`;
+              const hitArea = readonly ? '' : `<path d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="transparent" stroke-width="14" ${hitProps}/>`;
+              const labelT = 0.35; // 0 = at machine, 0.5 = arc midpoint, 1 = at target. Lower = closer to machine.
+              const oneMinusT = 1 - labelT;
+              const peakX = oneMinusT * oneMinusT * startX + 2 * labelT * oneMinusT * midX + labelT * labelT * endX;
+              const peakY = oneMinusT * oneMinusT * startY + 2 * labelT * oneMinusT * ctrlY + labelT * labelT * endY;
+              const pillW = 44;
+              const pillH = 16;
+              const label = isSelected
+                ? `<g>
             <rect x="${peakX - pillW / 2}" y="${peakY - 9 - pillH / 2}" width="${pillW}" height="${pillH}" rx="${pillH / 2}" fill="#e08a1e"/>
             <text x="${peakX}" y="${peakY - 6}" text-anchor="middle" font-size="9" fill="#fff" font-family="system-ui,sans-serif" font-weight="600">Tempo ${tempo}</text>
           </g>`
-              : '';
-            return `${hitArea}<path id="tempo-line-${tempo}" d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="${opacity}" class="${flashClass}" style="pointer-events:none"/>${label}`;
-          }).join('');
+                : '';
+              return `${hitArea}<path id="tempo-line-${tempo}" d="M ${startX} ${startY} Q ${midX} ${ctrlY} ${endX} ${endY}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" opacity="${opacity}" class="${flashClass}" style="pointer-events:none"/>${label}`;
+            }).join('');
         }
 
         const showTempo = !readonly && mSel && tSel;
@@ -1995,7 +1999,7 @@
           return;
         }
         if (!isTargetAllowed(selectedMachine, selectedTarget) ||
-            !isTempoAllowed(selectedMachine, selectedTarget, selectedTempo)) {
+          !isTempoAllowed(selectedMachine, selectedTarget, selectedTempo)) {
           console.warn('Invalid machine, target, or tempo combination');
           return;
         }
@@ -2350,7 +2354,7 @@
               window._manualStartTimer = null;
               const currentBtn = document.getElementById('launch-main-btn');
               if (window._activeMode === 'advanced' && currentBtn &&
-                  currentBtn.classList.contains('stop')) {
+                currentBtn.classList.contains('stop')) {
                 emitMachine('resumeMotors');
               }
             }, START_DELAY_MS);
@@ -2432,8 +2436,8 @@
 
       function setMode(mode) {
         const previousMode = window._activeMode || 'configure';
-		const suppressLeaveCleanup = !!window._suppressModeLeaveCleanup;
-		window._suppressModeLeaveCleanup = false;
+        const suppressLeaveCleanup = !!window._suppressModeLeaveCleanup;
+        window._suppressModeLeaveCleanup = false;
         const leavingLaunchModes =
           (previousMode === 'launch' || previousMode === 'single_shot') &&
           mode !== 'launch' && mode !== 'single_shot';
