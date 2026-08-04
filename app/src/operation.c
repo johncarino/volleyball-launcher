@@ -100,7 +100,7 @@ const char *operation_feedback_fault_message(void) {
 
 #define LAUNCH_BEEP_COUNT 3
 #define LAUNCH_BEEP_FREQUENCY_HZ 880
-// 3 beeps. First 2 shorter, last longer. 100 ms gap between beeps. 1 second pre-roll before first beep.
+// 3 beeps. First 2 shorter, last longer.
 #define LAUNCH_BEEP_SHORT_DURATION_MS 300
 #define LAUNCH_BEEP_LONG_DURATION_MS (LAUNCH_BEEP_SHORT_DURATION_MS * 3)
 #define LAUNCH_BEEP_GAP_MS 400

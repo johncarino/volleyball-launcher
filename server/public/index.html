@@ -59,11 +59,11 @@
           <div class="align-modal-img-row" id="align-modal-img-row">
             <div class="align-modal-img-col">
               <span id="align-modal-label2" class="align-modal-img-label"></span>
-              <img id="align-modal-img2" src="" alt="Net alignment reference" class="align-modal-img">
+              <img id="align-modal-img2" src="" alt="Net alignment reference" class="align-modal-img" onclick="handleAlignImageClick('left')">
             </div>
             <div class="align-modal-img-col">
               <span id="align-modal-label" class="align-modal-img-label"></span>
-              <img id="align-modal-img" src="" alt="Line alignment reference" class="align-modal-img">
+              <img id="align-modal-img" src="" alt="Line alignment reference" class="align-modal-img" onclick="handleAlignImageClick('right')">
             </div>
           </div>
           <p id="align-modal-text" class="align-modal-text"></p>
@@ -194,6 +194,7 @@
         const label2 = document.getElementById('align-modal-label2');
         const text = document.getElementById('align-modal-text');
         const title = document.getElementById('align-modal-title');
+        const row = document.getElementById('align-modal-img-row');
         const images = alignImages[id] || {};
         const altText = id === 'C' ? 'Center alignment reference' : 'Line alignment reference';
         const altText2 = id === 'C' ? 'Center alignment reference' : 'Net alignment reference';
@@ -212,6 +213,8 @@
         if (label2) label2.textContent = id === 'C' ? 'Facing LEFT' : '';
         if (text) text.textContent = alignInstructions[id] || '';
         if (title) title.textContent = `${machineNames[id] || id} machine alignment`;
+        if (row) row.classList.toggle('align-modal-clickable', id === 'C');
+        updateAlignDirectionHighlight(id === 'C' ? (lockedSide || previewSide || null) : null);
         document.getElementById('align-modal').classList.add('open');
       }
 
@@ -221,6 +224,69 @@
 
       function handleAlignOverlayClick(e) {
         if (e.target === document.getElementById('align-modal')) closeAlignModal();
+      }
+
+      // Highlights whichever Center-facing image (left/right) matches `side`.
+      // Pass null to clear both — used for L/R, where these images are plain
+      // reference photos, not direction pickers.
+      function updateAlignDirectionHighlight(side) {
+        const colLeft = document.getElementById('align-modal-img2')?.closest('.align-modal-img-col');
+        const colRight = document.getElementById('align-modal-img')?.closest('.align-modal-img-col');
+        if (colLeft) colLeft.classList.toggle('align-modal-img-selected', side === 'left');
+        if (colRight) colRight.classList.toggle('align-modal-img-selected', side === 'right');
+      }
+
+      // Clicking a Center alignment image picks that facing direction.
+      // No-ops for Left/Right, whose modal images aren't direction pickers.
+      function handleAlignImageClick(side) {
+        if (selectedMachine !== 'C') return;
+        selectAlignDirection(side);
+      }
+
+      function selectAlignDirection(side) {
+        if (side !== 'left' && side !== 'right') return;
+        const previousSide = lockedSide;
+        const isSwitchingSide = !!previousSide && previousSide !== side;
+
+        previewSide = side;
+        lockedSide = side;
+        updateAlignDirectionHighlight(side);
+
+        if (isSwitchingSide) {
+          mirrorCenterDirection();
+        }
+
+        refreshCourtPicker();
+        refreshSlots();
+        refreshTempo();
+      }
+
+      // Flips every zone assigned to the Center machine to its mirror-image
+      // zone — both the in-progress (unsaved) selection and every already
+      // saved slot — and re-persists each saved slot to the backend. Tempo is
+      // left untouched: isTempoAllowed only restricts L/R, not C.
+      function mirrorCenterDirection() {
+        if (selectedMachine === 'C' && selectedTarget) {
+          selectedTarget = mirrorZoneTarget(selectedTarget);
+        }
+
+        [1, 2, 3, 4].forEach(n => {
+          const slot = slots.C[n];
+          if (!slot) return;
+          const mirroredTarget = mirrorZoneTarget(slot.target);
+          const name = ['Machine C', `Zone ${mirroredTarget}`, `Tempo ${slot.tempo}`].join(' · ');
+          slots.C[n] = { ...slot, target: mirroredTarget, name };
+
+          const targetLocation = parseInt(mirroredTarget, 10);
+          const tempo = parseInt(slot.tempo, 10);
+          if (Number.isNaN(targetLocation) || Number.isNaN(tempo)) return;
+          emitMachine('saveSet', {
+            setIndex: n - 1,
+            machinePosition: MACHINE_INDEX.C,
+            targetLocation,
+            tempo,
+          });
+        });
       }
 
       function openQrModal() {
@@ -239,6 +305,13 @@
         if (zoneId === '1' || zoneId === '2') return 'left';
         if (zoneId === '4' || zoneId === '5') return 'right';
         return 'center'; // zone 3
+      }
+
+      // Mirrors a target zone across the center line — used when the Center
+      // machine's facing direction is flipped via the alignment modal.
+      const ZONE_MIRROR = { '1': '5', '2': '4', '3': '3', '4': '2', '5': '1' };
+      function mirrorZoneTarget(target) {
+        return ZONE_MIRROR[target] || target;
       }
 
       function isTargetAllowed(machine, zoneId) {
@@ -456,8 +529,16 @@
       function updateManualStartAvailability(speedVal) {
         if (window._activeMode !== 'advanced') return;
         const btn = document.getElementById('launch-main-btn');
-        if (!btn || btn.classList.contains('stop')) return;
-        btn.disabled = (parseInt(speedVal, 10) === 0);
+        if (!btn) return;
+        const isZero = parseInt(speedVal, 10) === 0;
+        if (btn.classList.contains('stop')) {
+          if (isZero) {
+            toggleLaunch(btn); // stops the machine, switches button back to 'start'
+            btn.disabled = true;
+          }
+          return;
+        }
+        btn.disabled = isZero;
       }
 
       function onHopperControl(action) {
@@ -526,12 +607,15 @@
       }
 
 	  function setManualAngleControlsDisabled(disabled) {
-		const controls = document.getElementById('manual-angle-controls');
-		if (!controls) return;
-		controls.classList.toggle('controls-disabled', disabled);
-		controls.querySelectorAll('input, button').forEach(control => {
-		  control.disabled = disabled;
-		});
+      const angleControls = document.getElementById('manual-angle-controls');
+      const speedControls = document.getElementById('manual-speed-controls');
+      [angleControls, speedControls].forEach(controls => {
+        if (!controls) return;
+        controls.classList.toggle('controls-disabled', disabled);
+        controls.querySelectorAll('input, button').forEach(control => {
+        control.disabled = disabled;
+        });
+      });
 	  }
 
       // The hopper feeds balls into the flywheel, so it must never be started/
@@ -1281,7 +1365,7 @@
                   <button class="slider-step-btn" onclick="stepSlider('dev-ang-range', 'dev-ang-val', '°', -1)" aria-label="Decrease">&minus;</button>
                   <span style="font-size:11px;color:var(--text-tertiary)">8° – 85°</span>
                 </div>
-                <div class="vert-slider-col">
+                <div class="vert-slider-col" id="manual-speed-controls">
                   <span class="vert-slider-label">Speed</span>
                   <span class="vert-slider-val" id="dev-spd-val">0 %</span>
                   <button class="slider-step-btn" onclick="stepSlider('dev-spd-range', 'dev-spd-val', '%', 1)" aria-label="Increase">+</button>
@@ -1312,7 +1396,13 @@
             <div class="section-label">Launch</div>
             <button class="op-btn start" id="launch-main-btn" onclick="toggleLaunch(this)" disabled><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
             <div class="manual-utility-actions">
-              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and feeder to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
+              <button class="manual-home-btn" id="manual-home-btn" onclick="runHomingSequence()" title="Return tilt and hopper to their home positions"><i class="ti ti-home" aria-hidden="true"></i> Home machine</button>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-label">Live telemetry</div>
+            <div class="card">
+              <div class="dev-row"><span class="dev-label">Flywheel</span><div class="dev-bar-wrap"><div class="dev-bar" id="fw-l" style="width:74%"></div></div><span class="dev-val" id="fw-l-v">3700 rpm</span></div>
             </div>
           </div>
           <div class="section">
@@ -2190,6 +2280,7 @@
           const stillHasSlots = [1, 2, 3, 4].some(i => !!slots[machineKey][i]);
           if (!stillHasSlots) {
             lockedSide = null;
+            previewSide = null;
             slotSaved = false;
           }
         }

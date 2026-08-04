@@ -837,6 +837,14 @@ input[type=range] { accent-color: var(--blue); }
 .align-modal-img-row img:only-child {
   flex: 1 1 100%;
 }
+.align-modal-clickable .align-modal-img {
+  cursor: pointer;
+}
+.align-modal-img-col.align-modal-img-selected .align-modal-img {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+  box-shadow: 0 0 8px rgba(24,95,165,0.5);
+}
 
 .qr-modal-sheet {
   position: relative;

@@ -3,6 +3,11 @@ PRIORITY
 - Align the speaker timing
 - Make sure icons load
 - Don't re-home on manual mode every timer
+- The user will have to put the phone down when testing themselves
+- Ready icon is not synced when clicking emergency stop
+- Cancelling homing then going into single shot does not bring up the confirm button and instead is disabled start button
+- Sensor misaligned
+- Sometimes can't change machine position
 
 AESTHETIC
 - Change background colours to be better
