@@ -1085,9 +1085,9 @@ int hopper_pulse(void) {
         hopper_pulse_running = 0;
         tb6600_enable(&motor, 0);
 
-        if (warning_thread_started) {
-            pthread_join(warning_thread, NULL);
-        }
+        //if (warning_thread_started) {
+        //    pthread_join(warning_thread, NULL);
+        //}
 
         if (operation_interrupt_pending()) {
             fprintf(stderr, "Hopper pulse interrupted during stepping.\n");
