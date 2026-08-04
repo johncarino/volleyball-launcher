@@ -1,7 +1,5 @@
 PRIORITY
 - Re-comment error code
-- Make user confirm in homing overlay before homing
-- Don't re-home on manual mode every time
 - The user will have to put the phone down when testing themselves
 - Ready icon is not synced when clicking emergency stop
 - Sometimes can't change machine position
@@ -12,11 +10,9 @@ AESTHETIC
 CONSIDERATION
 - Ready icon?
 - 2nd stop button?
-- further on, we would a countdown timer on the launch screen before each launch (maybe overlayed on top of the court visual only when counting down)
 - Shot variance variable
 - Change tabs to sync?
 - Change target zone names based off side
-- Machine position appears after selecting set in center
 - Set slot presets
 
 CLEANUP
