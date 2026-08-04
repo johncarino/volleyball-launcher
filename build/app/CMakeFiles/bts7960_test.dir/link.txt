@@ -1,0 +1,1 @@
+/usr/bin/cc -pthread -Wl,--dependency-file=CMakeFiles/bts7960_test.dir/link.d CMakeFiles/bts7960_test.dir/functiontests/bts7960_test_main.c.o -o bts7960_test  ../hal/libhal.a -lgpiod -lm

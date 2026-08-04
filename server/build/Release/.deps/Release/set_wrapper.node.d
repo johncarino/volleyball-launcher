@@ -1,0 +1,1 @@
+cmd_Release/set_wrapper.node := ln -f "Release/obj.target/set_wrapper.node" "Release/set_wrapper.node" 2>/dev/null || (rm -rf "Release/set_wrapper.node" && cp -af "Release/obj.target/set_wrapper.node" "Release/set_wrapper.node")

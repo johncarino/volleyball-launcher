@@ -1,0 +1,1 @@
+/usr/bin/cc -pthread -Wl,--dependency-file=CMakeFiles/mcp4725_test.dir/link.d CMakeFiles/mcp4725_test.dir/functiontests/mcp4725_test_main.c.o -o mcp4725_test  ../hal/libhal.a -lgpiod -lm

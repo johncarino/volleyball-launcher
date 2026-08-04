@@ -1,0 +1,1 @@
+/usr/bin/cc -pthread -Wl,--dependency-file=CMakeFiles/mpu6050_test.dir/link.d CMakeFiles/mpu6050_test.dir/functiontests/mpu6050_test_main.c.o -o mpu6050_test  ../hal/libhal.a -lgpiod -lm

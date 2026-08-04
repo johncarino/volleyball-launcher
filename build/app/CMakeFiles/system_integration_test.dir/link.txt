@@ -1,0 +1,1 @@
+/usr/bin/cc -pthread -Wl,--dependency-file=CMakeFiles/system_integration_test.dir/link.d CMakeFiles/system_integration_test.dir/functiontests/system_integration_test_main.c.o -o system_integration_test  ../hal/libhal.a -lgpiod -lm

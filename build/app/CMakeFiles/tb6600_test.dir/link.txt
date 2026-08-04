@@ -1,0 +1,1 @@
+/usr/bin/cc -pthread -Wl,--dependency-file=CMakeFiles/tb6600_test.dir/link.d CMakeFiles/tb6600_test.dir/functiontests/tb6600_test_main.c.o -o tb6600_test  ../hal/libhal.a -lgpiod -lm
