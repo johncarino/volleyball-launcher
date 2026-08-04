@@ -1,11 +1,10 @@
 PRIORITY
+- Re-comment error code
 - Make user confirm in homing overlay before homing
-- Align the speaker timing
 - Make sure icons load
-- Don't re-home on manual mode every timer
+- Don't re-home on manual mode every time
 - The user will have to put the phone down when testing themselves
 - Ready icon is not synced when clicking emergency stop
-- Cancelling homing then going into single shot does not bring up the confirm button and instead is disabled start button
 - Sensor misaligned
 - Sometimes can't change machine position
 

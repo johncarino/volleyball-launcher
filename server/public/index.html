@@ -580,6 +580,8 @@
 	  }
 
       function resetManualVisuals() {
+        if (window._activeMode !== 'advanced') return;
+        
         const angle = document.getElementById('dev-ang-range');
         const angleLabel = document.getElementById('dev-ang-val');
         const speed = document.getElementById('dev-spd-range');
