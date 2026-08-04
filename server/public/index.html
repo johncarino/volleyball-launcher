@@ -359,12 +359,14 @@
         machineSocket.on('state-reply', (state) => { setGestureRunning(state === 'RUNNING'); });
         machineSocket.on('recognizer-stopped', () => {
           setGestureRunning(false);
+          window._launchGestureAutoStarted = false;
           if (window._launchGestureArmed && !isRunning) handleCameraFailure('recogniser stopped');
           else setLaunchPreviewVisible(false);
         });
         machineSocket.on('gesture-error', (message) => {
           showGestureError(message);
           setGestureRunning(false);
+          window._launchGestureAutoStarted = false;
           if (window._launchGestureArmed && !isRunning) handleCameraFailure(message);
           else setLaunchPreviewVisible(false);
         });
@@ -728,6 +730,7 @@
       // doesn't turn on immediately — a short buffer (with a visible countdown
       // on the button) gives the user time to get in frame first.
       function armLaunchGesture() {
+        window._launchCameraConfirmedForMode = true;
         window._launchGestureArmed = true;
         window._launchGestureCameraReady = false;
         window._launchGestureAutoStarted = false;
@@ -774,6 +777,7 @@
       // progress). Used when a run starts (camera no longer needed) and when a
       // run stops (we don't auto re-arm).
       function stopLaunchCamera() {
+        window._launchCameraConfirmedForMode = false;
         window._launchGestureArmed = false;
         window._launchGestureCameraReady = false;
         window._stopRequested = false;
@@ -790,6 +794,27 @@
       function disarmLaunchGesture() {
         stopLaunchCamera();
         updateLaunchStatus('idle');
+      }
+
+      function suspendLaunchGestureForRun() {
+        window._launchGestureArmed = false;
+        window._launchGestureCameraReady = false;
+        clearTimeout(window._camHealthTimer);
+        setLaunchPreviewVisible(false);
+        resetLaunchGestureHolds();
+      }
+
+      function rearmLaunchGestureAfterRun() {
+        const cameraRunning = window._recognizerRunning || window._launchGestureAutoStarted;
+        if (!window._launchCameraConfirmedForMode || !cameraRunning) return false;
+
+        window._launchGestureArmed = true;
+        window._launchGestureCameraReady = true;
+        window._camConfirmed = true;
+        resetLaunchGestureHolds();
+        setLaunchPreviewVisible(true);
+        updateLaunchStatus('ready');
+        return true;
       }
 
       // Camera preview shown once the camera is actually looking for hands
@@ -893,6 +918,10 @@
         window._camConfirmed = false;
         window._launchGestureArmed = false;
         window._launchGestureCameraReady = false;
+        if (window._launchGestureAutoStarted) {
+          emitMachine('stop');
+          window._launchGestureAutoStarted = false;
+        }
         setLaunchPreviewVisible(false);
         const btn = document.getElementById('launch-main-btn');
         if (btn && !btn.classList.contains('stop')) {
@@ -1823,9 +1852,9 @@
         }
         runIndex = 0;
         isRunning = true;
-        // The camera is only needed to detect the raise-arm start gesture; once
-        // the run is firing it's no longer needed, so shut it down.
-        stopLaunchCamera();
+        // Keep the confirmed camera process alive between launches. Disable
+        // gesture handling during the active run so it cannot retrigger.
+        suspendLaunchGestureForRun();
         updateLaunchStatus('firing');
         // Set/tilt/speed feedback runs during this window. The first hopper
         // pulse starts when both feedback and this three-second delay finish.
@@ -1957,19 +1986,25 @@
         refreshSlots();
         emitMachine('stopMotors');
 
-        // Camera stays off after a run ends (it was shut down when the run
-        // began); make sure gesture state is fully cleared and don't auto
-        // re-arm. Reset the button back to Confirm so the user can re-arm the
-        // camera for the next launch.
-        stopLaunchCamera();
-        updateLaunchStatus('idle');
+        // Confirmation is valid for the whole time spent in this launch mode.
+        // Re-arm the existing camera for the next launch when it is still
+        // running; otherwise retain the manual Start fallback.
+        const cameraRearmed = rearmLaunchGestureAfterRun();
+        if (!cameraRearmed) {
+          updateLaunchStatus(
+            window._launchCameraConfirmedForMode ? 'camerafail' : 'idle',
+            window._launchCameraConfirmedForMode
+              ? 'Camera is unavailable — tap Start below to launch manually.'
+              : undefined
+          );
+        }
 
         const btn = document.getElementById('launch-main-btn');
         if (btn) {
-          btn.classList.remove('stop', 'start');
-          btn.classList.add('confirm');
-          btn.setAttribute('onclick', 'confirmRun(this)');
-          btn.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i> Confirm';
+          btn.classList.remove('stop', 'confirm');
+          btn.classList.add('start');
+          btn.setAttribute('onclick', 'toggleLaunch(this)');
+          btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
         }
       }
 
