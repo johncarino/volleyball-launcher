@@ -24,9 +24,11 @@
           <span class="mstate-dot" aria-hidden="true"></span>
           <span id="machine-state-text">Ready</span>
         </span>
-        <span class="conn" id="conn-status" onclick="refreshUiIfOffline()" onkeydown="refreshUiIfOffline(event)">
+        <span class="conn" id="conn-status" onclick="refreshUiIfOffline()"
+          onkeydown="refreshUiIfOffline(event)">
           <i class="ti ti-wifi" id="conn-icon" style="font-size:13px" aria-hidden="true"></i>
-          <span id="conn-text">AVSS connected</span>
+          <span class="conn-text-full" id="conn-text-full">AVSS connected</span>
+          <span class="conn-text-short" id="conn-text-short">Connected</span>
         </span>
         <button class="power-btn" onclick="powerOff()" aria-label="Power off">
           <span>Power Off</span>
@@ -446,10 +448,12 @@
       // a dropped link is shown as "Reconnecting…" rather than a dead end.
       function setConnStatus(connected) {
         const wrap = document.getElementById('conn-status');
-        const text = document.getElementById('conn-text');
+        const textFull = document.getElementById('conn-text-full');
+        const textShort = document.getElementById('conn-text-short');
         const icon = document.getElementById('conn-icon');
         if (wrap) wrap.classList.toggle('disconnected', !connected);
-        if (text) text.textContent = connected ? 'AVSS connected' : 'Reconnecting…';
+        if (textFull) textFull.textContent = connected ? 'AVSS connected' : 'Reconnecting…';
+        if (textShort) textShort.textContent = connected ? 'Connected' : 'Reconnecting…';
         if (icon) icon.className = 'ti ' + (connected ? 'ti-wifi' : 'ti-wifi-off');
         if (!connected) setMachineState('offline', 'Offline');
         setOfflineRefreshState(!connected);
