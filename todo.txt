@@ -4,7 +4,6 @@ PRIORITY
 - Don't re-home on manual mode every time
 - The user will have to put the phone down when testing themselves
 - Ready icon is not synced when clicking emergency stop
-- Sensor misaligned
 - Sometimes can't change machine position
 
 AESTHETIC
