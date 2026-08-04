@@ -105,6 +105,7 @@
         return /Linux/.test(ua) && !/Android/.test(ua);
       }
       const SHOW_QR_ON_START = isLinuxDevice(); // set to true/false to force QR code overlay on any device
+      let startupHomingPromptPending = true;
       window.addEventListener('load', () => {
         preloadAlignImages();
         if (isLinuxDevice()) {
@@ -113,6 +114,8 @@
         }
         if (SHOW_QR_ON_START) {
           requestAnimationFrame(() => requestAnimationFrame(openQrModal));
+        } else {
+          requestAnimationFrame(() => requestAnimationFrame(promptStartupHoming));
         }
       });
 
@@ -298,6 +301,7 @@
 
       function closeQrModal() {
         document.getElementById('qr-modal').classList.remove('open');
+        if (SHOW_QR_ON_START) promptStartupHoming();
       }
 
       function handleQrOverlayClick(e) {
@@ -428,6 +432,10 @@
 
         // ---- Server shutdown ----
         machineSocket.on('server-shutdown', () => { showShuttingDown(); });
+        machineSocket.on('server-shutdown-failed', (message) => {
+          document.getElementById('shutdown-overlay')?.remove();
+          alert(message || 'Board shutdown failed.');
+        });
       }
 
       // Update the connection indicator. Socket.IO reconnects automatically, so
@@ -572,6 +580,12 @@
         setMachineState('homing');
         setHomingButtonState(true, 'Homing...');
         emitMachine('homing-sequence');
+      }
+
+      function promptStartupHoming() {
+        if (!startupHomingPromptPending) return;
+        startupHomingPromptPending = false;
+        runHomingSequence();
       }
 
       function showHomingPopup() {
@@ -980,12 +994,11 @@
       }
 
       function powerOff() {
-        if (!confirm('Power off the launcher? The web app will stop and all motors will be stopped and freed. The program must be restarted on the device.')) return;
+        if (!confirm('Power off the launcher and BeagleY-AI board? All motors will be stopped before the board shuts down.')) return;
         // Trigger the software interrupt (emergency abort) first so any in-progress
-        // motor operation stops immediately and the motors are freed, then ask the
-        // server to shut down. Show a shutting-down overlay while it exits.
+        // motor operation stops immediately, then request an orderly board shutdown.
         emitMachine('requestInterrupt');
-        emitMachine('quit-server');
+        emitMachine('power-off-board');
         showShuttingDown();
       }
 
@@ -994,7 +1007,7 @@
         const overlay = document.createElement('div');
         overlay.id = 'shutdown-overlay';
         overlay.className = 'shutdown-overlay';
-        overlay.innerHTML = '<div class="shutdown-box"><i class="ti ti-power" aria-hidden="true"></i><div>Server is shutting down\u2026</div></div>';
+        overlay.innerHTML = '<div class="shutdown-box"><i class="ti ti-power" aria-hidden="true"></i><div>BeagleY-AI is shutting down\u2026</div></div>';
         document.body.appendChild(overlay);
       }
 

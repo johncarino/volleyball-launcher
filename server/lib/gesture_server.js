@@ -79,6 +79,7 @@ var M2DEMO_RUNFILES_DIR = process.env.M2DEMO_RUNFILES_DIR ||
 
 var io;
 var recognizer = null;   // current child_process, or null
+var boardPowerOffRequested = false;
 var operationInitAttempted = false;
 var operationReady = false;
 var currentNetHeight = 2.43;
@@ -386,15 +387,13 @@ function handleCommand(socket) {
 		}
 	});
 
-	// Allow the web UI to cleanly terminate the whole server process (in place
-	// of Ctrl+C in the terminal). Request the software interrupt first so any
-	// in-progress motor operation stops immediately, then run operation
-	// cleanup right away (releasing the GPIO/I2C motor handles) rather than
-	// waiting on the process 'exit' handler, then broadcast so every
-	// connected browser (not just the one that clicked Quit) can show a
-	// "shutting down" state, then exit.
-	socket.on('quit-server', function() {
-		console.log("Got quit-server command. Shutting down server...");
+	// Safely stop the launcher hardware, then ask systemd to power off the
+	// BeagleY-AI. sudo runs non-interactively so a missing sudoers permission
+	// fails visibly instead of leaving the server blocked on a password prompt.
+	socket.on('power-off-board', function() {
+		if (boardPowerOffRequested) return;
+		boardPowerOffRequested = true;
+		console.log("Got power-off-board command. Shutting down BeagleY-AI...");
 		try {
 			if (typeof operation.requestInterrupt === 'function') {
 				operation.requestInterrupt();
@@ -403,10 +402,33 @@ function handleCommand(socket) {
 		} catch (e) {
 			console.log('[operation] requestInterrupt failed: ' + e.message);
 		}
-		cleanupOperation(null, 'quit-server');
-		if (io) io.sockets.emit('server-shutdown', 'Server is shutting down...');
+		cleanupOperation(null, 'power-off-board');
+		if (io) io.sockets.emit('server-shutdown', 'BeagleY-AI is shutting down...');
 		setTimeout(function() {
-			process.exit(0);
+			var poweroff = spawn(
+				'sudo',
+				['-n', '/usr/bin/systemctl', 'poweroff'],
+				{ stdio: ['ignore', 'ignore', 'pipe'] }
+			);
+			var poweroffError = '';
+			var poweroffFailed = false;
+
+			poweroff.stderr.on('data', function(data) {
+				poweroffError += data.toString();
+			});
+			poweroff.on('error', function(err) {
+				poweroffFailed = true;
+				boardPowerOffRequested = false;
+				console.log('[poweroff] failed to start: ' + err.message);
+				if (io) io.sockets.emit('server-shutdown-failed', 'Unable to start the board shutdown command.');
+			});
+			poweroff.on('close', function(code) {
+				if (code === 0 || poweroffFailed) return;
+				boardPowerOffRequested = false;
+				var detail = poweroffError.trim() || ('systemctl exited with code ' + code);
+				console.log('[poweroff] failed: ' + detail);
+				if (io) io.sockets.emit('server-shutdown-failed', 'Board shutdown failed: ' + detail);
+			});
 		}, 250);
 	});
 

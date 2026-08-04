@@ -150,6 +150,17 @@ ways to get local changes onto it:
    - `make m2demo` (when recogniser sources changed)
    - `make run`
 
+## Power-off Button Permission
+
+The web UI's **Power Off** button stops the launcher hardware and then runs
+`sudo -n /usr/bin/systemctl poweroff` to shut down the BeagleY-AI. The account
+running the Node server must be allowed to run that command without a password.
+For the `john` account, add this rule using `sudo visudo`:
+
+```text
+john ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff
+```
+
 ## Gesture Data Path
 
 `m2demo` emits lines like:
