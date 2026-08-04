@@ -1,2 +1,0 @@
-/usr/bin/ar qc libhal.a CMakeFiles/hal.dir/src/bts7960.c.o CMakeFiles/hal.dir/src/mcp4725.c.o CMakeFiles/hal.dir/src/mpu6050.c.o CMakeFiles/hal.dir/src/pwm.c.o CMakeFiles/hal.dir/src/tachometer.c.o CMakeFiles/hal.dir/src/tb6600.c.o
-/usr/bin/ranlib libhal.a

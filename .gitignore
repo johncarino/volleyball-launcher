@@ -4,3 +4,14 @@ mediapipe/
 
 # Compiled hardware-free gesture source (build artifact)
 server/fake_gesture_udp
+
+# Build outputs (regenerated per-machine; tracking these caused every board
+# pull to conflict with the board's own local rebuild artifacts).
+build/
+server/build/
+*.o
+*.o.d
+*.node
+
+# Node dependencies (installed per-machine via npm install).
+server/node_modules/

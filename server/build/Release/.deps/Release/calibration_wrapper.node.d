@@ -1,1 +1,0 @@
-cmd_Release/calibration_wrapper.node := ln -f "Release/obj.target/calibration_wrapper.node" "Release/calibration_wrapper.node" 2>/dev/null || (rm -rf "Release/calibration_wrapper.node" && cp -af "Release/obj.target/calibration_wrapper.node" "Release/calibration_wrapper.node")
