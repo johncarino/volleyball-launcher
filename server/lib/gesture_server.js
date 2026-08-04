@@ -433,6 +433,24 @@ function handleCommand(socket) {
 		}
 	});
 
+	// Stop the launcher application and release its hardware without powering
+	// off the BeagleY-AI itself.
+	socket.on('quit-server', function() {
+		console.log("Got quit-server command. Shutting down launcher server...");
+		try {
+			if (typeof operation.requestInterrupt === 'function') {
+				operation.requestInterrupt();
+			}
+		} catch (e) {
+			console.log('[operation] requestInterrupt failed: ' + e.message);
+		}
+		cleanupOperation(null, 'quit-server');
+		if (io) io.sockets.emit('server-shutdown', 'Launcher server is shutting down...');
+		setTimeout(function() {
+			process.exit(0);
+		}, 250);
+	});
+
 	// Safely stop the launcher hardware, then ask systemd to power off the
 	// BeagleY-AI. sudo runs non-interactively so a missing sudoers permission
 	// fails visibly instead of leaving the server blocked on a password prompt.

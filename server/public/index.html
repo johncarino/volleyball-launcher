@@ -433,7 +433,9 @@
         machineSocket.on('component-status', (data) => { renderComponentStatus(data); });
 
         // ---- Server shutdown ----
-        machineSocket.on('server-shutdown', () => { showShuttingDown(); });
+        machineSocket.on('server-shutdown', (message) => {
+          showShuttingDown(typeof message === 'string' && message.includes('BeagleY-AI'));
+        });
         machineSocket.on('server-shutdown-failed', (message) => {
           document.getElementById('shutdown-overlay')?.remove();
           alert(message || 'Board shutdown failed.');
@@ -1023,20 +1025,24 @@
       }
 
       function powerOff() {
-        if (!confirm('Power off the launcher and BeagleY-AI board? All motors will be stopped before the board shuts down.')) return;
+        if (!confirm('Power off the launcher? The web app will stop and all motors will be stopped safely.')) return;
+        const turnOffBoard = confirm('Would you also like to turn off the BeagleY-AI board?');
         // Trigger the software interrupt (emergency abort) first so any in-progress
-        // motor operation stops immediately, then request an orderly board shutdown.
+        // motor operation stops immediately, then perform the selected shutdown.
         emitMachine('requestInterrupt');
-        emitMachine('power-off-board');
-        showShuttingDown();
+        emitMachine(turnOffBoard ? 'power-off-board' : 'quit-server');
+        showShuttingDown(turnOffBoard);
       }
 
-      function showShuttingDown() {
+      function showShuttingDown(turnOffBoard = true) {
         if (document.getElementById('shutdown-overlay')) return;
         const overlay = document.createElement('div');
         overlay.id = 'shutdown-overlay';
         overlay.className = 'shutdown-overlay';
-        overlay.innerHTML = '<div class="shutdown-box"><i class="ti ti-power" aria-hidden="true"></i><div>BeagleY-AI is shutting down\u2026</div></div>';
+        const message = turnOffBoard
+          ? 'BeagleY-AI is shutting down\u2026'
+          : 'Launcher server is shutting down\u2026';
+        overlay.innerHTML = `<div class="shutdown-box"><i class="ti ti-power" aria-hidden="true"></i><div>${message}</div></div>`;
         document.body.appendChild(overlay);
       }
 
