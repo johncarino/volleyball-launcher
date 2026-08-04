@@ -964,7 +964,11 @@
       // Camera health: if the recogniser never streams a frame/pose shortly after
       // arming (camera busy/unplugged, or m2demo exited), fall back to manual so
       // the user isn't stuck waiting on a gesture that can't be detected.
-      const CAM_HEALTH_TIMEOUT_MS = 5000;
+      // Needs to cover m2demo's own cold-start cost (loading the pose model /
+      // creating the XNNPACK delegate / opening the camera) on top of network
+      // latency, or this fires before the recogniser ever gets a frame out and
+      // kills a perfectly healthy process (was 5000ms; too tight on the board).
+      const CAM_HEALTH_TIMEOUT_MS = 12000;
       function startCameraHealthTimer() {
         clearTimeout(window._camHealthTimer);
         window._camHealthTimer = setTimeout(() => {
