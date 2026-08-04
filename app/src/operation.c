@@ -1022,10 +1022,15 @@ int hopper_pulse(void) {
         hopper_stop();
     }
 
-    // Sound the warning once, before the feeder moves to launch the first
-    // ball. This blocks: the feeder does not move until the beeps finish.
-    printf("Sounding %d warning beeps before feeding ball...\n", LAUNCH_BEEP_COUNT);
-    play_launch_warning();
+    // Check for a ball before every launch attempt, including the second and
+    // later launches in a sequence. Only warn when a ball is actually ready.
+    if (hcsr04_ball_present_debounced()) {
+        printf("Ball detected; sounding %d warning beeps before feeding ball...\n",
+               LAUNCH_BEEP_COUNT);
+        play_launch_warning();
+    } else {
+        printf("No ball detected before hopper pulse; skipping warning beeps.\n");
+    }
 
     int attempt;
     int fed_ball = 0;
@@ -1060,8 +1065,8 @@ int hopper_pulse(void) {
         printf("Pulsing hopper (attempt %d/%d)...\n",
                attempt, HOPPER_PULSE_MAX_ATTEMPTS);
 
-        // The warning beeps above are the pre-launch warning; push the ball as
-        // soon as they finish rather than waiting out an extra settle delay.
+        // If a ball was present, the warning beeps above are the pre-launch
+        // warning. Push the ball without an additional settle delay.
         tb6600_enable(&motor, 1);
         hopper_pulse_running = 1;
         tb6600_step_accel_interruptible(
