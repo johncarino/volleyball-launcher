@@ -44,7 +44,7 @@
 
     <button class="emergency-stop" id="emergency-stop" onclick="emergencyStop()" aria-label="Emergency stop — halt all motors">
       <i class="ti ti-hand-stop" aria-hidden="true"></i>
-      <span>STOP</span>
+      <span>EMERGENCY STOP</span>
     </button>
 
     <div class="modal-overlay" id="align-modal" onclick="handleAlignOverlayClick(event)">
@@ -1186,7 +1186,7 @@
           const badge = done[s.key] ? '<i class="ti ti-check" aria-hidden="true"></i>' : s.n;
           return `<div class="step-item ${cls}"><span class="step-badge">${badge}</span><span class="step-label">${s.label}</span></div>`;
         }).join('');
-        const hint = active ? STEP_HINTS[active] : 'Set saved — add more, or tap “Continue to Launch”.';
+        const hint = active ? STEP_HINTS[active] : 'Set saved — Add more, or tap “Continue to Launch”.';
         return `<div class="step-indicator">${items}</div><div class="step-hint">${hint}</div>`;
       }
       function refreshStepIndicator() {

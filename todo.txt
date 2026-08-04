@@ -3,6 +3,9 @@ PRIORITY
     - Add "Busy" overlay instead of "Ready" icon
     - User confirms homing machine before automatic homing
 - Align the speaker timing
+- Make sure icons load
+- Don't re-home on manual mode every timer
+- Set slot presets
 
 AESTHETIC
 - Change background colours to be better
