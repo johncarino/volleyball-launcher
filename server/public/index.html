@@ -814,7 +814,7 @@
         window._launchGestureCameraReady = true;
         window._camConfirmed = true;
         resetLaunchGestureHolds();
-        setLaunchPreviewVisible(window._activeMode !== 'single_shot');
+        setLaunchPreviewVisible(false);
         updateLaunchStatus('ready');
         return true;
       }
@@ -835,14 +835,16 @@
           const wrap = document.getElementById('gesture-preview-wrap');
           if (wrap) wrap.classList.remove('signal-lost', 'expanded', 'holding');
         }
-        updateSingleShotCameraToggle();
+        updateLaunchCameraToggle();
       }
 
-      function updateSingleShotCameraToggle() {
-        const btn = document.getElementById('single-shot-camera-toggle');
+      function updateLaunchCameraToggle() {
+        const btn = document.getElementById('launch-camera-toggle');
         if (!btn) return;
 
-        const cameraAvailable = window._activeMode === 'single_shot' &&
+        const cameraMode = window._activeMode === 'launch' ||
+          window._activeMode === 'single_shot';
+        const cameraAvailable = cameraMode &&
           window._launchCameraConfirmedForMode &&
           !isRunning &&
           (window._launchGestureArmed || window._launchGestureCameraReady);
@@ -855,8 +857,8 @@
           : '<i class="ti ti-video" aria-hidden="true"></i> Show Camera';
       }
 
-      function toggleSingleShotCamera() {
-        if (window._activeMode !== 'single_shot' ||
+      function toggleLaunchCameraPreview() {
+        if ((window._activeMode !== 'launch' && window._activeMode !== 'single_shot') ||
             !window._launchGestureArmed ||
             !window._launchGestureCameraReady ||
             isRunning) return;
@@ -1511,7 +1513,22 @@
 
         launch: () => `
           <div class="section" style="margin-top:8px">
-            <div id="launch-court-picker-wrap">${courtPickerHTML(true)}</div>
+            <div id="launch-court-picker-wrap" class="launch-camera-stage">
+              <div id="launch-court-picker-content">${courtPickerHTML(true)}</div>
+              <div class="launch-camera-overlay" id="gesture-preview-section" style="display:none">
+                <div class="gesture-preview-wrap" id="gesture-preview-wrap">
+                  <img id="gesture-preview" alt="Camera view" />
+                  <span class="cam-live"><span class="cam-live-dot"></span>LIVE</span>
+                  <div class="cam-ring" id="cam-ring">
+                    <svg viewBox="0 0 120 120" width="120" height="120"><circle class="cam-ring-track" cx="60" cy="60" r="52" stroke-width="8"></circle><circle class="cam-ring-fill" id="cam-ring-fill" cx="60" cy="60" r="52" stroke-width="8"></circle></svg>
+                    <span class="cam-ring-num" id="cam-ring-num"></span>
+                  </div>
+                  <div class="cam-status" id="cam-status"><span class="cam-status-dot"></span><span id="cam-status-text">No person detected</span></div>
+                  <div class="cam-signal-lost"><i class="ti ti-video-off" aria-hidden="true"></i><div>Camera signal lost</div></div>
+                </div>
+              </div>
+            </div>
+            <button class="camera-view-toggle" id="launch-camera-toggle" style="display:none" onclick="toggleLaunchCameraPreview()"><i class="ti ti-video" aria-hidden="true"></i> Show Camera</button>
             <div class="court-summary-card">
               <div class="court-summary-rows">
                 <div class="summary-row"><span class="summary-val" id="sum-court">${courtSummaryHTML()}</span></div>
@@ -1530,29 +1547,15 @@
             <div class="launch-status" id="launch-status"><span class="ls-icon"><i class="ti ti-info-circle" aria-hidden="true"></i></span><span id="launch-status-text">Tap Confirm to arm the camera, then raise your arm to launch.</span></div>
             <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
           </div>
-          <div class="section" id="gesture-preview-section" style="display:none">
-            <div class="section-label">Camera</div>
-            <div class="gesture-preview-wrap" id="gesture-preview-wrap">
-              <img id="gesture-preview" alt="Camera view" />
-              <span class="cam-live"><span class="cam-live-dot"></span>LIVE</span>
-              <button class="cam-expand" onclick="toggleCameraExpand()" aria-label="Expand camera"><i class="ti ti-arrows-maximize" aria-hidden="true"></i></button>
-              <div class="cam-ring" id="cam-ring">
-                <svg viewBox="0 0 120 120" width="120" height="120"><circle class="cam-ring-track" cx="60" cy="60" r="52" stroke-width="8"></circle><circle class="cam-ring-fill" id="cam-ring-fill" cx="60" cy="60" r="52" stroke-width="8"></circle></svg>
-                <span class="cam-ring-num" id="cam-ring-num"></span>
-              </div>
-              <div class="cam-status" id="cam-status"><span class="cam-status-dot"></span><span id="cam-status-text">No person detected</span></div>
-              <div class="cam-signal-lost"><i class="ti ti-video-off" aria-hidden="true"></i><div>Camera signal lost</div></div>
-            </div>
-          </div>
           <div class="section" id="gesture-error-box" style="display:none">
             <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
           </div>`,
 
         single_shot: () => `
           <div class="section" style="margin-top:8px">
-            <div id="launch-court-picker-wrap" class="single-shot-camera-stage">
+            <div id="launch-court-picker-wrap" class="launch-camera-stage">
               <div id="launch-court-picker-content">${courtPickerHTML(true)}</div>
-              <div class="single-shot-camera-overlay" id="gesture-preview-section" style="display:none">
+              <div class="launch-camera-overlay" id="gesture-preview-section" style="display:none">
                 <div class="gesture-preview-wrap" id="gesture-preview-wrap">
                   <img id="gesture-preview" alt="Camera view" />
                   <span class="cam-live"><span class="cam-live-dot"></span>LIVE</span>
@@ -1565,6 +1568,7 @@
                 </div>
               </div>
             </div>
+            <button class="camera-view-toggle" id="launch-camera-toggle" style="display:none" onclick="toggleLaunchCameraPreview()"><i class="ti ti-video" aria-hidden="true"></i> Show Camera</button>
             <div class="court-summary-card">
               <div class="court-summary-rows">
                 <div class="summary-row"><span class="summary-val" id="sum-court">${courtSummaryHTML()}</span></div>
@@ -1579,7 +1583,6 @@
             <div class="section-label">Launch</div>
             <div class="launch-status" id="launch-status"><span class="ls-icon"><i class="ti ti-info-circle" aria-hidden="true"></i></span><span id="launch-status-text">Tap Confirm to arm the camera, then raise your arm to launch.</span></div>
             <button class="op-btn confirm" id="launch-main-btn" onclick="confirmRun(this)"><i class="ti ti-check" aria-hidden="true"></i> Confirm</button>
-            <button class="camera-view-toggle" id="single-shot-camera-toggle" style="display:none" onclick="toggleSingleShotCamera()"><i class="ti ti-video" aria-hidden="true"></i> Show Camera</button>
           </div>
           <div class="section" id="gesture-error-box" style="display:none">
             <div class="card" style="background:var(--bg-danger);color:var(--text-danger)" id="gesture-error-text"></div>
