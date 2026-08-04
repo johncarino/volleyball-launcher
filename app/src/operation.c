@@ -1064,7 +1064,7 @@ int hopper_pulse(void) {
 
         // Only start the settle countdown once a ball is actually seated, so an
         // empty/misfed hopper doesn't burn the delay before retrying.
-        if (hcsr04_ball_present_debounced()) {
+        if (attempt == 1 || ll_present_debounced()) {
             uint32_t waited_us = 0;
             while (waited_us < HOPPER_PRELAUNCH_DELAY_US) {
                 if (operation_interrupt_pending()) {
