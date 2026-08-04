@@ -42,10 +42,6 @@
 
     <div class="content" id="main-content"></div>
 
-    <button class="emergency-stop" id="emergency-stop" onclick="emergencyStop()" aria-label="Emergency stop — halt all motors">
-      <span>EMERGENCY STOP</span>
-    </button>
-
     <div class="modal-overlay" id="align-modal" onclick="handleAlignOverlayClick(event)">
       <div class="modal-sheet">
         <div class="modal-handle"></div>
@@ -91,6 +87,10 @@
 		<div class="homing-popup-hint">Use the red STOP button to cancel.</div>
 	  </div>
 	</div>
+
+  <button class="emergency-stop" id="emergency-stop" onclick="emergencyStop()" aria-label="Emergency stop — halt all motors">
+    <span>EMERGENCY STOP</span>
+  </button>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
