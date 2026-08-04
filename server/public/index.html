@@ -91,9 +91,9 @@
       </div>
     </div>
 
-    <button class="emergency-stop" id="emergency-stop" onclick="emergencyStop()"
-      aria-label="Emergency stop — halt all motors">
-      <span>EMERGENCY STOP</span>
+    <button class="operating-stop" id="operating-stop" onclick="stopCurrentMode()"
+      aria-label="Stop">
+      <span>STOP</span>
     </button>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -477,19 +477,23 @@
         if (text) text.textContent = label || MACHINE_STATE_LABELS[state] || state;
       }
 
-      // Emergency stop: halt motors + hopper immediately from any operating mode.
-      function emergencyStop() {
-        emitMachine('force-stop');
-        hideHomingPopup();
-        if (isRunning) stopRunSequence();
-        hopperOn = false;
-        const hopperBtn = document.getElementById('hopper-toggle-btn');
-        if (hopperBtn) { hopperBtn.textContent = 'Feeder Off'; hopperBtn.classList.remove('active'); }
-        setMachineState('error', 'Stopped');
-        const btn = document.getElementById('emergency-stop');
-        if (btn) { btn.classList.remove('activated'); void btn.offsetWidth; btn.classList.add('activated'); }
-        window._suppressModeLeaveCleanup = true;
-        goBackToConfigure();
+      // Use the same stop path as each operating mode's normal Stop button.
+      function stopCurrentMode() {
+        if (window._homingInProgress) {
+          emitMachine('force-stop');
+          hideHomingPopup();
+          return;
+        }
+
+        if (window._activeMode === 'launch' || window._activeMode === 'single_shot') {
+          if (isRunning) stopRunSequence();
+          return;
+        }
+
+        if (window._activeMode === 'advanced') {
+          const btn = document.getElementById('launch-main-btn');
+          if (btn && btn.classList.contains('stop')) toggleLaunch(btn);
+        }
       }
 
       function onAdvancedAngleInput(value) {

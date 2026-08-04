@@ -420,8 +420,8 @@ body {
 .launch-status.firing  { color: var(--green); background: #e9f5ed; border-color: rgba(26,122,58,0.35); }
 .launch-status.camerafail { color: var(--red); background: var(--bg-danger); border-color: rgba(181,42,42,0.4); animation: op-shake 0.4s ease-in-out; }
 
-/* Persistent Emergency STOP — shown only in operating modes */
-.emergency-stop {
+/* Persistent STOP — shown only in operating modes */
+.operating-stop {
   display: none;
   position: fixed; right: 16px; bottom: 16px; z-index: 1100;
   align-items: center; justify-content: center; gap: 8px;
@@ -430,17 +430,15 @@ body {
   font-family: inherit; font-size: 17px; font-weight: 700; letter-spacing: 0.05em;
   box-shadow: 0 4px 14px rgba(0,0,0,0.3);
 }
-.emergency-stop i { font-size: 24px; }
-.emergency-stop:active { background: #8f1f1f; }
-.emergency-stop.activated { animation: estop-flash 0.3s ease-in-out 2; }
-@keyframes estop-flash { 0%,100% { background: var(--red); color: #fff; } 50% { background: #fff; color: var(--red); } }
-.app.mode-advanced .emergency-stop,
-.app.mode-launch .emergency-stop,
-.app.mode-single_shot .emergency-stop { display: flex; }
-.homing-overlay.open ~ .emergency-stop {
+.operating-stop i { font-size: 24px; }
+.operating-stop:active { background: #8f1f1f; }
+.app.mode-advanced .operating-stop,
+.app.mode-launch .operating-stop,
+.app.mode-single_shot .operating-stop { display: flex; }
+.homing-overlay.open ~ .operating-stop {
   display: flex;
 }
-/* Keep scrollable content clear of the fixed Emergency STOP button. */
+/* Keep scrollable content clear of the fixed STOP button. */
 .app.mode-advanced .content,
 .app.mode-launch .content,
 .app.mode-single_shot .content { padding-bottom: 92px; }
