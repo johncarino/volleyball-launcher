@@ -683,7 +683,7 @@
       // processing frames (a software gate) to avoid false positives, then
       // re-arm once the shot (Single Shot) or the whole sequence completes.
       // There is no stop gesture — use the on-screen Stop button.
-      const LAUNCH_GESTURE_HOLD_MS = 3000;  // hold a raised arm this long to confirm
+      const LAUNCH_GESTURE_HOLD_MS = 1500;  // hold a raised arm this long to confirm
       const LAUNCH_BUFFER_SECONDS = 5;     // countdown before the camera turns on
 
       // How long the "Select a set first" warning stays on the Start button.
@@ -742,18 +742,28 @@
         }, 1000);
       }
 
-      function disarmLaunchGesture() {
+      // Fully shut the gesture camera down: stop the recogniser child process,
+      // hide the preview, and clear the armed/buffer state. Does NOT touch the
+      // launch-status banner, so callers can show their own state (e.g. a run in
+      // progress). Used when a run starts (camera no longer needed) and when a
+      // run stops (we don't auto re-arm).
+      function stopLaunchCamera() {
         window._launchGestureArmed = false;
         window._launchGestureCameraReady = false;
         window._stopRequested = false;
         clearInterval(window._launchBufferTimer);
         window._launchBufferTimer = null;
+        clearTimeout(window._camHealthTimer);
         setLaunchPreviewVisible(false);
-        updateLaunchStatus('idle');
         if (window._launchGestureAutoStarted) {
           emitMachine('stop');
           window._launchGestureAutoStarted = false;
         }
+      }
+
+      function disarmLaunchGesture() {
+        stopLaunchCamera();
+        updateLaunchStatus('idle');
       }
 
       // Camera preview shown once the camera is actually looking for hands
@@ -1795,6 +1805,10 @@
         }
         runIndex = 0;
         isRunning = true;
+        // The camera is only needed to detect the raise-arm start gesture; once
+        // the run is firing it's no longer needed, so shut it down.
+        stopLaunchCamera();
+        updateLaunchStatus('firing');
         // Set/tilt/speed feedback runs during this window. The first hopper
         // pulse starts when both feedback and this three-second delay finish.
         window._runStartReadyAt = Date.now() + START_DELAY_MS;
@@ -1925,21 +1939,19 @@
         refreshSlots();
         emitMachine('stopMotors');
 
+        // Camera stays off after a run ends (it was shut down when the run
+        // began); make sure gesture state is fully cleared and don't auto
+        // re-arm. Reset the button back to Confirm so the user can re-arm the
+        // camera for the next launch.
+        stopLaunchCamera();
+        updateLaunchStatus('idle');
+
         const btn = document.getElementById('launch-main-btn');
         if (btn) {
-          btn.classList.remove('stop'); btn.classList.add('start');
-          btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
-        }
-
-        // Single Shot restarts gesture watching for the next start signal; a
-        // Sequence run does the same once it finishes. If the user has left the
-        // mode, disarmLaunchGesture already cleared _launchGestureArmed, so this
-        // stays off.
-        if (window._launchGestureArmed) {
-          resetLaunchGestureHolds();
-          window._launchGestureCameraReady = true;
-          updateLaunchStatus('ready');
-          updateCameraStatus(false, false);
+          btn.classList.remove('stop', 'start');
+          btn.classList.add('confirm');
+          btn.setAttribute('onclick', 'confirmRun(this)');
+          btn.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i> Confirm';
         }
       }
 
