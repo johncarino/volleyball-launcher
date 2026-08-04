@@ -555,9 +555,12 @@
       }
 
       function runHomingSequence() {
+        if (!confirm('Home the machine? This will move the tilt and feeder back to their reference positions. Use the red STOP button to cancel.')) {
+          return;
+        }
         window._homingInProgress = true;
-		showHomingPopup();
-		setManualAngleControlsDisabled(true);
+        showHomingPopup();
+        setManualAngleControlsDisabled(true);
         setMachineState('homing');
         setHomingButtonState(true, 'Homing...');
         emitMachine('homing-sequence');
