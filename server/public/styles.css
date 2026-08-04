@@ -125,6 +125,14 @@ body {
   border-radius: 4px;
 }
 @keyframes conn-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.conn-text-short { display: none; }
+@media (max-width: 400px) {
+  .conn-text-full { display: none; }
+  .conn-text-short { display: inline; }
+}
+@media (max-width: 370px) {
+  .conn-text-short { display: none; }
+}
 
 /* Glanceable machine-state chip */
 .mstate {
