@@ -117,6 +117,16 @@ ABSL_FLAG(double, zoom, 1.0,
           "session -- there is no adaptive/auto zoom (it made gesture reads "
           "unreliable by cycling the crop in and out as the tracked hand's "
           "apparent size fluctuated).");
+ABSL_FLAG(bool, roi_enabled, false,
+          "Gate launches by position: only accept a pose whose shoulder "
+          "midpoint lies inside the [roi_x_min,roi_x_max]x[roi_y_min,roi_y_max] "
+          "normalised box. Lets the launcher ignore bystanders (e.g. a hitting "
+          "line) standing outside the on-court launch spot. Default off (whole "
+          "frame).");
+ABSL_FLAG(double, roi_x_min, 0.30, "ROI left edge, normalised 0..1 (from left).");
+ABSL_FLAG(double, roi_x_max, 0.70, "ROI right edge, normalised 0..1 (from left).");
+ABSL_FLAG(double, roi_y_min, 0.00, "ROI top edge, normalised 0..1 (from top).");
+ABSL_FLAG(double, roi_y_max, 1.00, "ROI bottom edge, normalised 0..1 (from top).");
 ABSL_FLAG(std::string, udp_host, "127.0.0.1",
           "Host to send gesture summaries to.");
 ABSL_FLAG(int, udp_port, 12345, "UDP port to send gesture summaries to.");
@@ -417,6 +427,14 @@ absl::Status RunMPPGraph() {
   // Static digital zoom (see --zoom): fixed for the whole session, read once.
   const double zoom_value = std::max(1.0, absl::GetFlag(FLAGS_zoom));
 
+  // Static launch-spot region of interest (see --roi_enabled): read once.
+  gesture::PoseRoi pose_roi;
+  pose_roi.enabled = absl::GetFlag(FLAGS_roi_enabled);
+  pose_roi.x_min = static_cast<float>(absl::GetFlag(FLAGS_roi_x_min));
+  pose_roi.x_max = static_cast<float>(absl::GetFlag(FLAGS_roi_x_max));
+  pose_roi.y_min = static_cast<float>(absl::GetFlag(FLAGS_roi_y_min));
+  pose_roi.y_max = static_cast<float>(absl::GetFlag(FLAGS_roi_y_max));
+
   // 3. Observe the pose landmarks stream. BlazePose emits a single landmark
   //    list (one person) per frame; we analyse it into a "start" signal
   //    (a raised arm) and send "pose <present> <arm_raised>", throttled to
@@ -425,7 +443,7 @@ absl::Status RunMPPGraph() {
   MP_RETURN_IF_ERROR(graph.ObserveOutputStream(
       kLandmarksStream, [&](const mediapipe::Packet& packet) -> absl::Status {
         const auto& lm = packet.Get<mediapipe::NormalizedLandmarkList>();
-        const gesture::PoseSummary s = gesture::AnalyzePose(lm);
+        const gesture::PoseSummary s = gesture::AnalyzePose(lm, pose_roi);
         {
           std::lock_guard<std::mutex> slock(summary_mutex);
           latest_summary = s;
@@ -653,6 +671,19 @@ absl::Status RunMPPGraph() {
                   1.0, cv::Scalar(0, 0, 0), 4, cv::LINE_AA);
       cv::putText(preview, label, cv::Point(12, 34), cv::FONT_HERSHEY_SIMPLEX,
                   1.0, cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
+
+      // Draw the launch-spot box so the user can see where to stand. Green when
+      // the tracked person is inside it (present), amber otherwise.
+      if (pose_roi.enabled) {
+        const int rx0 = static_cast<int>(pose_roi.x_min * preview.cols);
+        const int ry0 = static_cast<int>(pose_roi.y_min * preview.rows);
+        const int rx1 = static_cast<int>(pose_roi.x_max * preview.cols);
+        const int ry1 = static_cast<int>(pose_roi.y_max * preview.rows);
+        const cv::Scalar roi_color =
+            snap.present ? cv::Scalar(0, 255, 0) : cv::Scalar(0, 200, 255);
+        cv::rectangle(preview, cv::Point(rx0, ry0), cv::Point(rx1, ry1),
+                      roi_color, 2, cv::LINE_AA);
+      }
 
       // Zoom readout, only shown when a non-default --zoom is configured
       // (fixed for the session; there is no more adaptive auto-zoom).

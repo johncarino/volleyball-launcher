@@ -20,10 +20,28 @@ struct PoseSummary {
   bool arm_raised = false;  // a wrist is above its shoulder
 };
 
+// Region of interest (normalised image coords, 0..1, y grows downward). When
+// enabled, a pose only counts as present if its anchor (the midpoint of the
+// visible shoulders) lies inside [x_min,x_max]x[y_min,y_max]. This lets the
+// launcher ignore bystanders standing outside the on-court launch spot -- e.g.
+// people waiting in a hitting line off to the sides of the frame.
+struct PoseRoi {
+  float x_min = 0.0f;
+  float x_max = 1.0f;
+  float y_min = 0.0f;
+  float y_max = 1.0f;
+  bool enabled = false;  // false accepts the whole frame (no gating)
+};
+
 // Analyse one BlazePose landmark list (33 normalised landmarks, image coords,
 // y grows downward). "Arm raised" means either wrist is above (smaller y than)
 // its shoulder by a small margin, with both landmarks sufficiently visible.
 PoseSummary AnalyzePose(const mediapipe::NormalizedLandmarkList& landmarks);
+
+// As above, but report the pose as absent when its shoulder-midpoint anchor
+// falls outside the region of interest.
+PoseSummary AnalyzePose(const mediapipe::NormalizedLandmarkList& landmarks,
+                        const PoseRoi& roi);
 
 // A "no person present" summary.
 PoseSummary NoPose();

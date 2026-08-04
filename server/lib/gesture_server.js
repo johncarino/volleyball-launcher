@@ -57,6 +57,16 @@ var PREVIEW_PORT    = parseInt(process.env.GESTURE_PREVIEW_PORT || '12346', 10);
 var PREVIEW_FPS     = process.env.GESTURE_PREVIEW_FPS || '12';
 var PREVIEW_QUALITY = process.env.GESTURE_PREVIEW_QUALITY || '45';
 
+// Gesture region-of-interest ("launch spot"): only a person whose shoulders sit
+// inside this normalised box can trigger a launch, so bystanders in a hitting
+// line off to the sides are ignored. Enabled by default; disable with
+// GESTURE_ROI=0. Edges are normalised 0..1 (x from left, y from top).
+var ROI_ENABLED = process.env.GESTURE_ROI !== '0';
+var ROI_X_MIN   = process.env.GESTURE_ROI_X_MIN || '0.30';
+var ROI_X_MAX   = process.env.GESTURE_ROI_X_MAX || '0.70';
+var ROI_Y_MIN   = process.env.GESTURE_ROI_Y_MIN || '0.00';
+var ROI_Y_MAX   = process.env.GESTURE_ROI_Y_MAX || '1.00';
+
 // Bazel-built binaries resolve MediaPipe resource paths (e.g.
 // "mediapipe/modules/palm_detection/palm_detection_full.tflite") relative to
 // the process's working directory, expecting to be launched the way
@@ -928,6 +938,16 @@ function startRecognizer(socket) {
 		args.push('--preview_udp_port=' + PREVIEW_PORT);
 		args.push('--preview_fps=' + PREVIEW_FPS);
 		args.push('--preview_quality=' + PREVIEW_QUALITY);
+	}
+
+	if (ROI_ENABLED) {
+		// Ignore anyone standing outside the central "launch spot" so bystanders
+		// (e.g. a hitting line) can't trigger a launch.
+		args.push('--roi_enabled=true');
+		args.push('--roi_x_min=' + ROI_X_MIN);
+		args.push('--roi_x_max=' + ROI_X_MAX);
+		args.push('--roi_y_min=' + ROI_Y_MIN);
+		args.push('--roi_y_max=' + ROI_Y_MAX);
 	}
 
 	var spawnOptions = {

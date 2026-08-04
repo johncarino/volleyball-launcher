@@ -36,6 +36,11 @@ bool Visible(const mediapipe::NormalizedLandmark& p) {
 PoseSummary NoPose() { return PoseSummary{}; }
 
 PoseSummary AnalyzePose(const mediapipe::NormalizedLandmarkList& lm) {
+  return AnalyzePose(lm, PoseRoi{});
+}
+
+PoseSummary AnalyzePose(const mediapipe::NormalizedLandmarkList& lm,
+                        const PoseRoi& roi) {
   PoseSummary s;
   if (lm.landmark_size() < 33) {
     return s;  // not a full pose; treat as absent
@@ -46,14 +51,37 @@ PoseSummary AnalyzePose(const mediapipe::NormalizedLandmarkList& lm) {
   const mediapipe::NormalizedLandmark& lw = lm.landmark(kLeftWrist);
   const mediapipe::NormalizedLandmark& rw = lm.landmark(kRightWrist);
 
-  s.present = Visible(ls) || Visible(rs);
-  if (!s.present) return s;
+  const bool ls_ok = Visible(ls);
+  const bool rs_ok = Visible(rs);
+  if (!ls_ok && !rs_ok) return s;  // no usable shoulders; treat as absent
+
+  // Anchor = midpoint of the visible shoulders (a stable body centre). If a
+  // region of interest is active and the anchor lies outside it, ignore this
+  // person entirely so bystanders off to the sides can't trigger a launch.
+  if (roi.enabled) {
+    float ax, ay;
+    if (ls_ok && rs_ok) {
+      ax = 0.5f * (ls.x() + rs.x());
+      ay = 0.5f * (ls.y() + rs.y());
+    } else if (ls_ok) {
+      ax = ls.x();
+      ay = ls.y();
+    } else {
+      ax = rs.x();
+      ay = rs.y();
+    }
+    if (ax < roi.x_min || ax > roi.x_max || ay < roi.y_min || ay > roi.y_max) {
+      return s;  // outside the launch spot
+    }
+  }
+
+  s.present = true;
 
   // y grows downward, so "above" means a smaller y than the shoulder.
   const bool left_up =
-      Visible(lw) && Visible(ls) && lw.y() < ls.y() - kRaiseMargin;
+      Visible(lw) && ls_ok && lw.y() < ls.y() - kRaiseMargin;
   const bool right_up =
-      Visible(rw) && Visible(rs) && rw.y() < rs.y() - kRaiseMargin;
+      Visible(rw) && rs_ok && rw.y() < rs.y() - kRaiseMargin;
   s.arm_raised = left_up || right_up;
   return s;
 }
