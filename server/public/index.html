@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DimeTime</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="css/tabler-icons.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -581,7 +581,7 @@
 
       function resetManualVisuals() {
         if (window._activeMode !== 'advanced') return;
-        
+
         const angle = document.getElementById('dev-ang-range');
         const angleLabel = document.getElementById('dev-ang-val');
         const speed = document.getElementById('dev-spd-range');
@@ -1336,7 +1336,6 @@
                 <input type="range" min="220" max="260" value="${courtSettings.net}" step="1" style="width:100%"
                   oninput="document.getElementById('net-val').textContent=this.value+' cm'; updateCourtBtn(); markCourtCustom(); saveCourtSettings()">
               </div>
-              <div style="margin-top:4px;font-size:11px;color:var(--text-tertiary)">Standard men's: 243 cm · Women's: 224 cm</div>
             </div>
           </div>
           <div class="section" style="margin-bottom:0">
