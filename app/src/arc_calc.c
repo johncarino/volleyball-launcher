@@ -50,6 +50,22 @@ float rpm_output
 
 
 /*
+ * Compensates for weak launches at the low end of the calculated RPM range.
+ */
+static float apply_low_rpm_offset(float rpm)
+{
+    const float low_rpm_threshold = 850.0f;
+    const float low_rpm_offset = 200.0f;
+
+    if (rpm < low_rpm_threshold) {
+        return rpm + low_rpm_offset;
+    }
+
+    return rpm;
+}
+
+
+/*
  * Marks all calculated trajectory values as invalid.
  */
 static void invalidate_arc_results(void)
@@ -417,7 +433,7 @@ void calculation(void)
                 /*
                  * Convert linear launch speed to wheel revolutions per minute.
                  */
-                const float rpm =
+                const float calculated_rpm =
                     v0
                     / (
                         2.0f
@@ -426,6 +442,9 @@ void calculation(void)
                     )
                     * 60.0f
                     / EFF_K;
+
+                const float rpm =
+                    apply_low_rpm_offset(calculated_rpm);
 
                 if (!isfinite(rpm)) {
                     fprintf(
