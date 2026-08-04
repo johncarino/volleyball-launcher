@@ -1,11 +1,8 @@
 PRIORITY
-- Add homing overlay with prompt
-    - Add "Busy" overlay instead of "Ready" icon
-    - User confirms homing machine before automatic homing
+- Make user confirm in homing overlay before homing
 - Align the speaker timing
 - Make sure icons load
 - Don't re-home on manual mode every timer
-- Set slot presets
 
 AESTHETIC
 - Change background colours to be better
@@ -18,6 +15,7 @@ CONSIDERATION
 - Change tabs to sync?
 - Change target zone names based off side
 - Machine position appears after selecting set in center
+- Set slot presets
 
 CLEANUP
 - Remove any unused code
