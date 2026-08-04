@@ -61,11 +61,61 @@ node {
 
 # Renders the landmarks onto the frame. Produces output_video, which is used as
 # the FlowLimiter FINISHED signal (and the optional preview) when headless.
+#
+# NOTE: we deliberately do NOT use the stock PoseRendererCpu subgraph here. That
+# subgraph runs a RecolorCalculator that colours the segmentation mask and reads
+# a "MASK" input every frame. Segmentation is disabled above, so that mask
+# stream is empty and RecolorCalculator CHECK-fails at runtime ("Failed to get
+# tag MASK index 0" -> SIGABRT). We inline the renderer here instead and feed
+# AnnotationOverlayCalculator the raw frame directly, so no mask is ever needed.
 node {
-  calculator: "PoseRendererCpu"
+  calculator: "ImagePropertiesCalculator"
   input_stream: "IMAGE:throttled_input_video"
+  output_stream: "SIZE:image_size"
+}
+
+# Detection box -> render primitives.
+node {
+  calculator: "DetectionsToRenderDataCalculator"
+  input_stream: "DETECTION:pose_detection"
+  output_stream: "RENDER_DATA:detection_render_data"
+  node_options: {
+    [type.googleapis.com/mediapipe.DetectionsToRenderDataCalculatorOptions] {
+      thickness: 4.0
+      color { r: 0 g: 255 b: 0 }
+    }
+  }
+}
+
+# Landmarks -> render primitives (skeleton + points).
+node {
+  calculator: "PoseLandmarksToRenderData"
   input_stream: "LANDMARKS:pose_landmarks"
   input_stream: "ROI:roi_from_landmarks"
-  input_stream: "DETECTION:pose_detection"
+  input_stream: "IMAGE_SIZE:image_size"
+  output_stream: "RENDER_DATA:landmarks_render_data"
+}
+
+# ROI rectangle -> render primitives.
+node {
+  calculator: "RectToRenderDataCalculator"
+  input_stream: "NORM_RECT:roi_from_landmarks"
+  output_stream: "RENDER_DATA:roi_render_data"
+  node_options: {
+    [type.googleapis.com/mediapipe.RectToRenderDataCalculatorOptions] {
+      filled: false
+      color { r: 255 g: 0 b: 0 }
+      thickness: 4.0
+    }
+  }
+}
+
+# Draws all render data straight onto the camera frame (no segmentation recolor).
+node {
+  calculator: "AnnotationOverlayCalculator"
+  input_stream: "IMAGE:throttled_input_video"
+  input_stream: "detection_render_data"
+  input_stream: "VECTOR:landmarks_render_data"
+  input_stream: "roi_render_data"
   output_stream: "IMAGE:output_video"
 }
