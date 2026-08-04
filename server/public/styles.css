@@ -437,6 +437,9 @@ body {
 .app.mode-advanced .emergency-stop,
 .app.mode-launch .emergency-stop,
 .app.mode-single_shot .emergency-stop { display: flex; }
+.homing-overlay.open ~ .emergency-stop {
+  display: flex;
+}
 /* Keep scrollable content clear of the fixed Emergency STOP button. */
 .app.mode-advanced .content,
 .app.mode-launch .content,
