@@ -82,7 +82,8 @@ static int speed_cache_valid = 0;
 static float speed_cache_rpm = 0.0f;
 static float speed_cache_mv = 0.0f;
 
-static void hopper_reset_with_min_run(long min_run_us);
+static void hopper_reset_with_min_run(long min_run_us,
+                                      int stop_when_ball_ready);
 
 void operation_clear_feedback_fault(void) {
     feedback_sensor_fault = 0;
@@ -1213,7 +1214,7 @@ int hopper_pulse(void) {
         fprintf(stderr,
                 "Hopper pulse: no ball detected after %d attempts; resetting hopper with the magnet sensor.\n",
                 HOPPER_PULSE_MAX_ATTEMPTS);
-        hopper_reset_with_min_run(0);
+        hopper_reset_with_min_run(0, 1);
         if (!hopper_alignment_required) {
             hopper_pulse_count = 0;
         }
@@ -1222,8 +1223,10 @@ int hopper_pulse(void) {
     return 0;
 }
 
-static void hopper_reset_with_min_run(long min_run_us) {
+static void hopper_reset_with_min_run(long min_run_us,
+                                      int stop_when_ball_ready) {
     int sensor_aligned = 0;
+    int ball_ready = 0;
 
     if (!motor.request) {
         hopper_alignment_required = 1;
@@ -1276,6 +1279,31 @@ static void hopper_reset_with_min_run(long min_run_us) {
         long elapsed_us = (now.tv_sec - reset_started.tv_sec) * 1000000L +
             (now.tv_nsec - reset_started.tv_nsec) / 1000L;
 
+        if (stop_when_ball_ready &&
+            (component_status_mask & COMPONENT_BALL_SENSOR) &&
+            hcsr04_ball_present_debounced()) {
+            printf("Fallback reset: ball detected at the ready sensor; continuing hopper for %.1f seconds.\n",
+                   HOPPER_BALL_DETECT_RUN_ON_US / 1000000.0);
+
+            int run_on_elapsed_us = 0;
+            while (hopper_running && !operation_interrupt_pending() &&
+                   run_on_elapsed_us < HOPPER_BALL_DETECT_RUN_ON_US) {
+                usleep(HOPPER_BALL_SEEK_POLL_DELAY_US);
+                run_on_elapsed_us += HOPPER_BALL_SEEK_POLL_DELAY_US;
+            }
+
+            if (run_on_elapsed_us >= HOPPER_BALL_DETECT_RUN_ON_US &&
+                !operation_interrupt_pending()) {
+                ball_ready = 1;
+                printf("Fallback reset: ball-detector run-on complete; stopping with the ball ready.\n");
+            } else if (operation_interrupt_pending()) {
+                fprintf(stderr,
+                        "Fallback reset interrupted during ball-detector run-on.\n");
+                operation_clear_interrupt();
+            }
+            break;
+        }
+
         if (tach_gate_consume_signal()) {
             printf("Hopper reset: magnet detected after %.3f seconds.\n",
                    elapsed_us / 1000000.0);
@@ -1321,11 +1349,15 @@ static void hopper_reset_with_min_run(long min_run_us) {
 
     hopper_stop();
     hopper_alignment_required = sensor_aligned ? 0 : 1;
-    printf("Hopper reset complete.\n");
+    if (ball_ready) {
+        printf("Hopper fallback reset stopped at the ball-ready position.\n");
+    } else {
+        printf("Hopper reset complete.\n");
+    }
 }
 
 void hopper_reset() {
-    hopper_reset_with_min_run(HOPPER_RESET_MIN_RUN_US);
+    hopper_reset_with_min_run(HOPPER_RESET_MIN_RUN_US, 0);
 }
 
 void hopper_mark_misaligned(void) {
