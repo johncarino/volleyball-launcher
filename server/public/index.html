@@ -2461,8 +2461,6 @@
           btn.classList.remove('stop'); btn.classList.add('start');
           btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
           clearInterval(window._telem);
-          clearTimeout(window._manualStartTimer);
-          window._manualStartTimer = null;
           if (window._activeMode === 'advanced') {
             emitMachine('stopMotors');
             // Stopping the launcher must also stop the hopper -- it must never
@@ -2482,15 +2480,7 @@
           btn.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
           startTelemetry();
           if (window._activeMode === 'advanced') {
-            clearTimeout(window._manualStartTimer);
-            window._manualStartTimer = setTimeout(() => {
-              window._manualStartTimer = null;
-              const currentBtn = document.getElementById('launch-main-btn');
-              if (window._activeMode === 'advanced' && currentBtn &&
-                currentBtn.classList.contains('stop')) {
-                emitMachine('resumeMotors');
-              }
-            }, START_DELAY_MS);
+            emitMachine('resumeMotors');
           }
         }
       }
@@ -2571,24 +2561,12 @@
         const previousMode = window._activeMode || 'configure';
         const suppressLeaveCleanup = !!window._suppressModeLeaveCleanup;
         window._suppressModeLeaveCleanup = false;
-        const leavingLaunchModes =
-          (previousMode === 'launch' || previousMode === 'single_shot') &&
-          mode !== 'launch' && mode !== 'single_shot';
-        const leavingManual = previousMode === 'advanced' && mode !== 'advanced';
-
         if (mode !== 'advanced' && mode !== 'launch' && mode !== 'single_shot') {
           hideBallLoadPopup();
         }
 
         if ((previousMode === 'launch' || previousMode === 'single_shot') && mode !== previousMode && isRunning) {
           stopRunSequence();
-        }
-        // Homing no longer runs on tab switches — the machine homes once at
-        // startup (server-side). Just cancel any pending manual-start timer when
-        // leaving an operating mode; use the "Home machine" button to re-home.
-        if (leavingLaunchModes || leavingManual) {
-          clearTimeout(window._manualStartTimer);
-          window._manualStartTimer = null;
         }
         if (!suppressLeaveCleanup && previousMode === 'advanced' && mode !== 'advanced') {
           emitMachine('advanced-leave');

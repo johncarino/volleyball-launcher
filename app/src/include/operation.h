@@ -60,8 +60,7 @@ float get_yaw_angle();
 int get_speed();
 int get_rpm();
 
-/* Number of hopper pulses since the last re-home (mirrors the counter that
- * triggers a reset every HOPPER_RESET_INTERVAL_PULSES). */
+/* Number of hopper pulses since the last homing sequence. */
 int get_hopper_pulse_count();
 
 /* Per-HAL-component init results as a bitmask (see COMPONENT_* below); a set

@@ -100,10 +100,9 @@ private:
 };
 
 // --- hopper_pulse() worker -------------------------------------------------
-// hopper_pulse() blocks: each pulse steps the feeder, and every few pulses it
-// runs hopper_reset(), which can wait up to 30 s for the ball sensor. Running
-// it on a worker thread keeps Node's event loop (telemetry, sockets, the whole
-// UI) responsive instead of freezing until the pulse/reset returns.
+// hopper_pulse() blocks while it steps the feeder and monitors its sensors.
+// Running it on a worker thread keeps Node's event loop (telemetry, sockets,
+// the whole UI) responsive until the pulse returns.
 class HopperPulseWorker : public AsyncWorker {
 public:
     HopperPulseWorker(const Napi::Function& callback)
