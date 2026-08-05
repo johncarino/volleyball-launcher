@@ -1051,6 +1051,14 @@ int hopper_seek_ball(void) {
         return -1;
     }
 
+    // Manual and launch modes both call this on entry. If a ball is already
+    // staged, do not move the hopper and risk feeding an extra ball.
+    if ((component_status_mask & COMPONENT_BALL_SENSOR) &&
+        hcsr04_ball_present_debounced()) {
+        printf("Ball already detected at the ready position; skipping hopper search.\n");
+        return 0;
+    }
+
     time_t started = time(NULL);
     hopper_start_internal();
     if (!hopper_running) return -1;
