@@ -848,9 +848,9 @@ function handleCommand(socket) {
 		}
 		console.log("Got hopper-pulse command.");
 		socket.emit('machine-ready', false);
-		// hopperPulse now runs on a worker thread (it can block up to 30 s on the
-		// every-few-pulses sensor reset); completion is reported via the callback
-		// so the event loop stays responsive meanwhile.
+		// hopperPulse runs on a worker thread while it advances the current ball
+		// and positions the next one at the ready sensor. Completion is reported
+		// via the callback so the event loop stays responsive meanwhile.
 		var accepted = operation.hopperPulse(function(err, pulsed) {
 			socket.emit('machine-ready', true);
 			if (err) {

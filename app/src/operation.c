@@ -56,7 +56,6 @@ volatile int launcher_running = 0;
 #define HOPPER_PULSE_END_DELAY_US 500
 #define HOPPER_PULSE_ACCEL_STEPS 400
 #define HOPPER_PULSE_MAX_ATTEMPTS 4 // How many tries when no ball is detected after a pulse
-#define HOPPER_PULSE_HOME_ARM_DELAY_US 250000
 #define HOPPER_CONTINUOUS_DELAY_US 500
 #define HOPPER_SENSOR_RUN_ON_US 1000000
 #define HOPPER_SENSOR_RUN_ON_SLICE_US 10000
@@ -66,7 +65,8 @@ volatile int launcher_running = 0;
 #define HOPPER_RESET_POLL_DELAY_US 10000
 #define HOPPER_BALL_SEEK_TIMEOUT_SEC 30
 #define HOPPER_BALL_SEEK_POLL_DELAY_US 10000
-#define HOPPER_BALL_DETECT_RUN_ON_US 300000
+#define HOPPER_BALL_DETECT_RUN_ON_US 500000
+#define HOPPER_BALL_CLEAR_HOLD_COUNT 3
 
 volatile float tilt_angle_w = 0;
 
@@ -81,6 +81,8 @@ static volatile int feedback_sensor_fault = 0;
 static int speed_cache_valid = 0;
 static float speed_cache_rpm = 0.0f;
 static float speed_cache_mv = 0.0f;
+
+static void hopper_reset_with_min_run(long min_run_us);
 
 void operation_clear_feedback_fault(void) {
     feedback_sensor_fault = 0;
@@ -971,39 +973,44 @@ int hopper_start(void) {
     return hopper_running ? 0 : -1;
 }
 
-// Every feed remains a normal finite pulse, but also watches for the
-// hopper-home magnet. Detection is armed shortly after motion starts so a
-// magnet already resting on the sensor cannot immediately end the pulse.
-static void *hopper_pulse_home_monitor(void *arg) {
+// A Single Ball pulse starts with one ball already at the ready sensor. Wait
+// for that ball to leave before treating a later detection as the next ball.
+// Stop the finite pulse after the configured run-on once that next ball arrives.
+static void *hopper_pulse_ball_monitor(void *arg) {
     (void)arg;
-
-    usleep(HOPPER_PULSE_HOME_ARM_DELAY_US);
-    if (!hopper_pulse_running || operation_interrupt_pending()) {
-        return NULL;
-    }
-
-    tach_gate_prepare_for_reset();
+    int consecutive_clear_samples = 0;
+    int ready_ball_cleared = 0;
 
     while (hopper_pulse_running && !operation_interrupt_pending()) {
-        if (tach_gate_consume_signal()) {
-            printf("Hopper pulse detected home sensor; stopping in 1 second.\n");
+        int ball_present = hcsr04_ball_present();
+
+        if (!ready_ball_cleared) {
+            if (ball_present) {
+                consecutive_clear_samples = 0;
+            } else if (++consecutive_clear_samples >= HOPPER_BALL_CLEAR_HOLD_COUNT) {
+                ready_ball_cleared = 1;
+                printf("Ready ball launched; waiting for the next ball to reach the ready sensor.\n");
+            }
+        } else if (ball_present) {
+            printf("Next ball detected at the ready sensor: continuing hopper for %.1f seconds.\n",
+                   HOPPER_BALL_DETECT_RUN_ON_US / 1000000.0);
 
             int run_on_elapsed_us = 0;
             while (hopper_pulse_running && !operation_interrupt_pending() &&
-                   run_on_elapsed_us < HOPPER_SENSOR_RUN_ON_US) {
-                usleep(HOPPER_SENSOR_RUN_ON_SLICE_US);
-                run_on_elapsed_us += HOPPER_SENSOR_RUN_ON_SLICE_US;
+                   run_on_elapsed_us < HOPPER_BALL_DETECT_RUN_ON_US) {
+                usleep(HOPPER_BALL_SEEK_POLL_DELAY_US);
+                run_on_elapsed_us += HOPPER_BALL_SEEK_POLL_DELAY_US;
             }
 
-            if (run_on_elapsed_us >= HOPPER_SENSOR_RUN_ON_US &&
+            if (run_on_elapsed_us >= HOPPER_BALL_DETECT_RUN_ON_US &&
                 !operation_interrupt_pending()) {
-                hopper_alignment_required = 0;
+                printf("Ball-detector run-on complete: stopping with the next ball ready.\n");
                 hopper_pulse_running = 0;
             }
             return NULL;
         }
 
-        usleep(HOPPER_RESET_POLL_DELAY_US);
+        usleep(HOPPER_BALL_SEEK_POLL_DELAY_US);
     }
 
     return NULL;
@@ -1148,14 +1155,14 @@ int hopper_pulse(void) {
         tb6600_enable(&motor, 1);
         hopper_pulse_running = 1;
 
-        pthread_t home_monitor_thread;
-        int home_monitor_started = 0;
-        if (tach_running) {
-            if (pthread_create(&home_monitor_thread, NULL,
-                               hopper_pulse_home_monitor, NULL) == 0) {
-                home_monitor_started = 1;
+        pthread_t ball_monitor_thread;
+        int ball_monitor_started = 0;
+        if (component_status_mask & COMPONENT_BALL_SENSOR) {
+            if (pthread_create(&ball_monitor_thread, NULL,
+                               hopper_pulse_ball_monitor, NULL) == 0) {
+                ball_monitor_started = 1;
             } else {
-                perror("Failed to start hopper home sensor monitor");
+                perror("Failed to start hopper ball sensor monitor");
             }
         }
 
@@ -1165,8 +1172,8 @@ int hopper_pulse(void) {
             &hopper_pulse_running);
         hopper_pulse_running = 0;
 
-        if (home_monitor_started) {
-            pthread_join(home_monitor_thread, NULL);
+        if (ball_monitor_started) {
+            pthread_join(ball_monitor_thread, NULL);
         }
 
         tb6600_enable(&motor, 0);
@@ -1195,13 +1202,19 @@ int hopper_pulse(void) {
     }
 
     if (!fed_ball) {
-        fprintf(stderr, "Hopper pulse: no ball detected after %d attempts.\n", HOPPER_PULSE_MAX_ATTEMPTS);
+        fprintf(stderr,
+                "Hopper pulse: no ball detected after %d attempts; resetting hopper with the magnet sensor.\n",
+                HOPPER_PULSE_MAX_ATTEMPTS);
+        hopper_reset_with_min_run(0);
+        if (!hopper_alignment_required) {
+            hopper_pulse_count = 0;
+        }
     }
 
     return 0;
 }
 
-void hopper_reset() {
+static void hopper_reset_with_min_run(long min_run_us) {
     int sensor_aligned = 0;
 
     if (!motor.request) {
@@ -1255,7 +1268,7 @@ void hopper_reset() {
             clock_gettime(CLOCK_MONOTONIC, &now);
             long elapsed_us = (now.tv_sec - reset_started.tv_sec) * 1000000L +
                 (now.tv_nsec - reset_started.tv_nsec) / 1000L;
-            if (elapsed_us < HOPPER_RESET_MIN_RUN_US) {
+            if (elapsed_us < min_run_us) {
                 fprintf(stderr,
                         "Hopper reset: ignored immediate sensor trigger after %ld us.\n",
                         elapsed_us);
@@ -1297,6 +1310,10 @@ void hopper_reset() {
     hopper_stop();
     hopper_alignment_required = sensor_aligned ? 0 : 1;
     printf("Hopper reset complete.\n");
+}
+
+void hopper_reset() {
+    hopper_reset_with_min_run(HOPPER_RESET_MIN_RUN_US);
 }
 
 void hopper_mark_misaligned(void) {
