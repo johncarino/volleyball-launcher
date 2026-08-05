@@ -1154,6 +1154,14 @@ int hopper_pulse(void) {
             return -1;
         }
 
+        // The hopper must never feed balls into a flywheel that isn't
+        // spinning -- if Stop was pressed (launcher_running cleared), abort
+        // the whole pulse rather than retrying.
+        if (!launcher_running) {
+            fprintf(stderr, "Hopper pulse aborted: machine was stopped.\n");
+            return -1;
+        }
+
         hopper_pulse_count++;
 
         printf("Pulsing hopper (attempt %d/%d)...\n",
@@ -1187,13 +1195,14 @@ int hopper_pulse(void) {
 
         tb6600_enable(&motor, 0);
 
-        //if (warning_thread_started) {
-        //    pthread_join(warning_thread, NULL);
-        //}
-
         if (operation_interrupt_pending()) {
             fprintf(stderr, "Hopper pulse interrupted during stepping.\n");
             operation_clear_interrupt();
+            return -1;
+        }
+
+        if (!launcher_running) {
+            fprintf(stderr, "Hopper pulse aborted: machine was stopped during stepping.\n");
             return -1;
         }
 
@@ -1394,6 +1403,7 @@ void pause_machine() {
     mcp4725_set_raw(&dac1, 0);
 
     launcher_running = 0;
+    hopper_pulse_running = 0;
     hopper_stop();
 
     return;
