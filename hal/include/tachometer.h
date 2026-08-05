@@ -121,9 +121,13 @@ void tach_cleanup(void);
 // Returns 0.0 if the motor is stopped or tach_init() has not been called.
 float get_tach_rpm(void);
 
-// Clear old gate state and accept only sensor edges occurring after this call.
-// Call immediately before starting hopper reset motion.
+// Clear old gate state and begin looking for the magnet. If the sensor is
+// already active, its current level is qualified as a detection.
 void tach_gate_prepare_for_reset(void);
+
+// Re-arm after deliberately ignoring a detection. If the magnet is still at
+// the sensor, wait for it to leave before accepting the next approach.
+void tach_gate_prepare_for_next_approach(void);
 
 // Returns 1 exactly once per magnet approach on TACH_GATE_LINE, then resets
 // to 0 until the magnet leaves (rising edge) and approaches again.

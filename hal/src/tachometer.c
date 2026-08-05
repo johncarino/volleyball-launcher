@@ -497,7 +497,7 @@ float get_tach_rpm(void)
     return rpm;
 }
 
-void tach_gate_prepare_for_reset(void)
+static void tach_gate_prepare(int accept_active_level)
 {
 #if TACH_GATE_LINE >= 0
     if (!tach_gate_request) {
@@ -520,16 +520,32 @@ void tach_gate_prepare_for_reset(void)
     // current level instead of forcing the hopper through another revolution
     // before a new falling edge can occur.
     tach_gate_candidate_since_ns =
-        (value == GPIOD_LINE_VALUE_INACTIVE) ? now_ns : 0;
+        (accept_active_level && value == GPIOD_LINE_VALUE_INACTIVE)
+            ? now_ns
+            : 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     if (value == GPIOD_LINE_VALUE_ERROR) {
         fprintf(stderr, "Tach gate: failed to read level before reset\n");
-    } else if (value == GPIOD_LINE_VALUE_INACTIVE) {
+    } else if (accept_active_level &&
+               value == GPIOD_LINE_VALUE_INACTIVE) {
         fprintf(stderr,
                 "Tach gate: magnet is already active; qualifying the current detection.\n");
+    } else if (value == GPIOD_LINE_VALUE_INACTIVE) {
+        fprintf(stderr,
+                "Tach gate: waiting for the current magnet to release before looking for the next approach.\n");
     }
 #endif
+}
+
+void tach_gate_prepare_for_reset(void)
+{
+    tach_gate_prepare(1);
+}
+
+void tach_gate_prepare_for_next_approach(void)
+{
+    tach_gate_prepare(0);
 }
 
 int tach_gate_consume_signal(void)

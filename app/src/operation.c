@@ -1253,13 +1253,8 @@ static void hopper_reset_with_min_run(long min_run_us) {
     time_t start_time = time(NULL);
     struct timespec reset_started;
     clock_gettime(CLOCK_MONOTONIC, &reset_started);
-    int sensor_detection_armed = min_run_us <= 0;
-    if (sensor_detection_armed) {
-        tach_gate_prepare_for_reset();
-    } else {
-        printf("Hopper reset: magnet detection will arm after %.1f seconds.\n",
-               min_run_us / 1000000.0);
-    }
+    tach_gate_prepare_for_reset();
+    printf("Hopper reset: magnet sensor armed; looking for the reset magnet.\n");
 
     while (hopper_running) {
         if (operation_interrupt_pending()) {
@@ -1273,13 +1268,17 @@ static void hopper_reset_with_min_run(long min_run_us) {
         long elapsed_us = (now.tv_sec - reset_started.tv_sec) * 1000000L +
             (now.tv_nsec - reset_started.tv_nsec) / 1000L;
 
-        if (!sensor_detection_armed && elapsed_us >= min_run_us) {
-            tach_gate_prepare_for_reset();
-            sensor_detection_armed = 1;
-            printf("Hopper reset: magnet detection armed.\n");
-        }
+        if (tach_gate_consume_signal()) {
+            printf("Hopper reset: magnet detected after %.3f seconds.\n",
+                   elapsed_us / 1000000.0);
 
-        if (sensor_detection_armed && tach_gate_consume_signal()) {
+            if (elapsed_us < min_run_us) {
+                printf("Hopper reset: ignoring this magnet detection; %.3f seconds remain in the detection-ignore window.\n",
+                       (min_run_us - elapsed_us) / 1000000.0);
+                tach_gate_prepare_for_next_approach();
+                printf("Hopper reset: magnet sensor re-armed; looking for the next magnet approach.\n");
+                continue;
+            }
 
             printf("Hopper reset sensor triggered; stopping in 1 second.\n");
 
