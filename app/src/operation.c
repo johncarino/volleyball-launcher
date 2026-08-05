@@ -1240,8 +1240,6 @@ static void hopper_reset_with_min_run(long min_run_us) {
         hopper_stop();
     }
 
-    tach_gate_prepare_for_reset();
-
     printf("Resetting hopper: stepping until sensor trigger...\n");
     // Ungated: a reset (e.g. from homing_sequence()) must be able to run the
     // hopper stepper even if the launcher flywheel isn't running.
@@ -1255,6 +1253,13 @@ static void hopper_reset_with_min_run(long min_run_us) {
     time_t start_time = time(NULL);
     struct timespec reset_started;
     clock_gettime(CLOCK_MONOTONIC, &reset_started);
+    int sensor_detection_armed = min_run_us <= 0;
+    if (sensor_detection_armed) {
+        tach_gate_prepare_for_reset();
+    } else {
+        printf("Hopper reset: magnet detection will arm after %.1f seconds.\n",
+               min_run_us / 1000000.0);
+    }
 
     while (hopper_running) {
         if (operation_interrupt_pending()) {
@@ -1263,18 +1268,18 @@ static void hopper_reset_with_min_run(long min_run_us) {
             break;
         }
 
-        if (tach_gate_consume_signal()) {
-            struct timespec now;
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            long elapsed_us = (now.tv_sec - reset_started.tv_sec) * 1000000L +
-                (now.tv_nsec - reset_started.tv_nsec) / 1000L;
-            if (elapsed_us < min_run_us) {
-                fprintf(stderr,
-                        "Hopper reset: ignored immediate sensor trigger after %ld us.\n",
-                        elapsed_us);
-                tach_gate_prepare_for_reset();
-                continue;
-            }
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long elapsed_us = (now.tv_sec - reset_started.tv_sec) * 1000000L +
+            (now.tv_nsec - reset_started.tv_nsec) / 1000L;
+
+        if (!sensor_detection_armed && elapsed_us >= min_run_us) {
+            tach_gate_prepare_for_reset();
+            sensor_detection_armed = 1;
+            printf("Hopper reset: magnet detection armed.\n");
+        }
+
+        if (sensor_detection_armed && tach_gate_consume_signal()) {
 
             printf("Hopper reset sensor triggered; stopping in 1 second.\n");
 

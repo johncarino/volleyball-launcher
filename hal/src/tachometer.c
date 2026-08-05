@@ -516,14 +516,18 @@ void tach_gate_prepare_for_reset(void)
     tach_gate_armed = (value == GPIOD_LINE_VALUE_ACTIVE);
     tach_gate_accepting = (value != GPIOD_LINE_VALUE_ERROR);
     tach_gate_accept_after_ns = now_ns;
-    tach_gate_candidate_since_ns = 0;
+    // If the magnet is already holding the active-low line LOW, qualify that
+    // current level instead of forcing the hopper through another revolution
+    // before a new falling edge can occur.
+    tach_gate_candidate_since_ns =
+        (value == GPIOD_LINE_VALUE_INACTIVE) ? now_ns : 0;
     pthread_mutex_unlock(&tach_gate_mutex);
 
     if (value == GPIOD_LINE_VALUE_ERROR) {
         fprintf(stderr, "Tach gate: failed to read level before reset\n");
     } else if (value == GPIOD_LINE_VALUE_INACTIVE) {
         fprintf(stderr,
-                "Tach gate: line is LOW before reset; waiting for it to release HIGH before accepting a magnet trigger.\n");
+                "Tach gate: magnet is already active; qualifying the current detection.\n");
     }
 #endif
 }
