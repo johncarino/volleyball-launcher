@@ -3,6 +3,7 @@ PRIORITY
 - The user will have to put the phone down when testing themselves
 - Ready icon is not synced when clicking emergency stop
 - Sometimes can't change machine position
+- Also grey out feeder buttons
 
 AESTHETIC
 - Change background colours to be better
