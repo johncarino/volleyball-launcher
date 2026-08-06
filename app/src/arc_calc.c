@@ -66,6 +66,35 @@ static float apply_low_rpm_offset(float rpm)
 
 
 /*
+ * Linearly increases the upper end of the calculated RPM range while leaving
+ * the measured low-speed reference unchanged. The two calibration anchors are
+ * based on observed outputs: 974.10 RPM remains 974.10 RPM, and 1869.45 RPM
+ * becomes 3000 RPM.
+ */
+static float apply_high_rpm_scaling(float rpm)
+{
+    const float input_low = 974.10f;
+    const float output_low = 974.10f;
+    const float input_high = 1869.45f;
+    const float output_high = 3000.0f;
+
+    if (rpm <= input_low) {
+        return rpm;
+    }
+
+    if (rpm >= input_high) {
+        return output_high;
+    }
+
+    const float scale =
+        (output_high - output_low)
+        / (input_high - input_low);
+
+    return output_low + (rpm - input_low) * scale;
+}
+
+
+/*
  * Marks all calculated trajectory values as invalid.
  */
 static void invalidate_arc_results(void)
@@ -444,7 +473,9 @@ void calculation(void)
                     / EFF_K;
 
                 const float rpm =
-                    apply_low_rpm_offset(calculated_rpm);
+                    apply_high_rpm_scaling(
+                        apply_low_rpm_offset(calculated_rpm)
+                    );
 
                 if (!isfinite(rpm)) {
                     fprintf(
