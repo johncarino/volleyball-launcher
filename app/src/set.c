@@ -30,8 +30,8 @@ int save_set(int set_index, int mp, int tl, int t) {
     }
 
     float rpm = rpm_output[mp][tl-1][t-1];
-    if (rpm > 3000.0) {
-        fprintf(stderr, "Invalid RPM output for set %d: %.2f (must be 3000 or less).\n", set_index, rpm);
+    if (rpm > 2000.0) {
+        fprintf(stderr, "Invalid RPM output for set %d: %.2f (must be 2000 or less).\n", set_index, rpm);
         return 0;
     }
 
