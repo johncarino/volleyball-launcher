@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
   <title>DimeTime</title>
   <link rel="stylesheet" href="css/tabler-icons.min.css">
   <link rel="stylesheet" href="styles.css">
@@ -109,6 +109,16 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
+
+      // Block zoom via pinch (Safari gesture events), ctrl+wheel (trackpad
+      // pinch on Chrome/desktop), and rapid double-tap, in addition to the
+      // user-scalable=no viewport setting above.
+      ['gesturestart', 'gesturechange', 'gestureend'].forEach(evt => {
+        document.addEventListener(evt, (e) => e.preventDefault());
+      });
+      document.addEventListener('wheel', (e) => {
+        if (e.ctrlKey) e.preventDefault();
+      }, { passive: false });
 
       function isLinuxDevice() {
         const ua = navigator.userAgent || '';
@@ -678,7 +688,8 @@
       function setManualAngleControlsDisabled(disabled) {
         const angleControls = document.getElementById('manual-angle-controls');
         const speedControls = document.getElementById('manual-speed-controls');
-        [angleControls, speedControls].forEach(controls => {
+        const hopperControls = document.getElementById('manual-hopper-controls');
+        [angleControls, speedControls, hopperControls].forEach(controls => {
           if (!controls) return;
           controls.classList.toggle('controls-disabled', disabled);
           controls.querySelectorAll('input, button').forEach(control => {
@@ -1524,7 +1535,7 @@
           </div>
           <div class="section">
             <div class="section-label">Feeder</div>
-            <div class="hopper-controls">
+            <div class="hopper-controls" id="manual-hopper-controls">
               <button class="hopper-btn" id="hopper-toggle-btn" onclick="toggleHopper()">Feeder Off</button>
               <button class="hopper-btn" id="hopper-pulse-btn" onclick="pulseHopper(this)">Single Ball</button>
             </div>

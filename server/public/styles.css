@@ -19,6 +19,10 @@
   --amber: #c98a00;
 }
 
+html, body {
+  touch-action: manipulation;
+}
+
 /*
 @media (prefers-color-scheme: dark) {
   :root {
