@@ -31,7 +31,7 @@
 #define GRAVITY 9.81f
 
 #define WHEEL_R 0.075f
-#define EFF_K 0.7f
+#define EFF_K 0.56f
 
 #define ARC_PI 3.14159265358979323846f
 
